@@ -260,7 +260,125 @@ def markov_rouwenhorst(rho, sigma, N=7):
     return y, pi, Pi
 
 
-'''Part 4: Other utilities'''
+'''Part 4: topological sort'''
+
+
+class SetStack:
+    """Stack implemented with list but tests membership with set to be efficient in big cases"""
+
+    def __init__(self):
+        self.myset = set()
+        self.mylist = []
+
+    def add(self, x):
+        self.myset.add(x)
+        self.mylist.append(x)
+
+    def pop(self):
+        x = self.mylist.pop()
+        self.myset.remove(x)
+        return x
+
+    def top(self):
+        return self.mylist[-1]
+
+    def index(self, x):
+        return self.mylist.index(x)
+
+    def __contains__(self, x):
+        return x in self.myset
+
+    def __len__(self):
+        return len(self.mylist)
+
+    def __getitem__(self, i):
+        return self.mylist.__getitem__(i)
+
+    def __repr__(self):
+        return self.mylist.__repr__()
+
+
+def complete_reverse_graph(gph):
+    """Given directed graph represented as a dict from nodes to iterables of nodes, return representation of graph that
+    is complete (i.e. has each vertex pointing to some iterable, even if empty), and a complete version of reversed too.
+    Have returns be sets, for easy removal"""
+
+    revgph = {n: set() for n in gph}
+    for n, e in gph.items():
+        for n2 in e:
+            n2_edges = revgph.setdefault(n2, set())
+            n2_edges.add(n)
+
+    gph_missing_n = revgph.keys() - gph.keys()
+    gph = {**{k: set(v) for k, v in gph.items()}, **{n: set() for n in gph_missing_n}}
+    return gph, revgph
+
+
+def find_cycle(dep, onlyset=None):
+    """Return list giving cycle if there is one, otherwise None"""
+
+    # supposed to look only within 'onlyset', so filter out everything else
+    if onlyset is not None:
+        dep = {k: (set(v) & set(onlyset)) for k, v in dep.items() if k in onlyset}
+
+    tovisit = set(dep.keys())
+    stack = SetStack()
+    while tovisit or stack:
+        if stack:
+            # if stack has something, still need to proceed with DFS
+            n = stack.top()
+            if dep[n]:
+                # if there are any dependencies left, let's look at them
+                n2 = dep[n].pop()
+                if n2 in stack:
+                    # we have a cycle, since this is already in our stack
+                    i2loc = stack.index(n2)
+                    return stack[i2loc:] + [stack[i2loc]]
+                else:
+                    # no cycle, visit this node only if we haven't already visited it
+                    if n2 in tovisit:
+                        tovisit.remove(n2)
+                        stack.add(n2)
+            else:
+                # if no dependencies left, then we're done with this node, so let's forget about it
+                stack.pop(n)
+        else:
+            # nothing left on stack, let's start the DFS from something new
+            n = tovisit.pop()
+            stack.add(n)
+
+    # if we never find a cycle, we're done
+    return None
+
+
+def topological_sort(dep, names=None):
+    """Given directed graph pointing from each node to the nodes it depends on, topologically sort nodes"""
+
+    # get complete set version of dep, and its reversal, and build initial stack of nodes with no dependencies
+    dep, revdep = complete_reverse_graph(dep)
+    nodeps = [n for n in dep if not dep[n]]
+    topsorted = []
+
+    # Kahn's algorithm: find something with no dependency, delete its edges and update
+    while nodeps:
+        n = nodeps.pop()
+        topsorted.append(n)
+        for n2 in revdep[n]:
+            dep[n2].remove(n)
+            if not dep[n2]:
+                nodeps.append(n2)
+
+    # should be done: topsorted should be topologically sorted with same # of elements as original graphs!
+    if len(topsorted) != len(dep):
+        cycle_ints = find_cycle(dep, dep.keys() - set(topsorted))
+        assert cycle_ints is not None, 'topological sort failed but no cycle, THIS SHOULD NEVER EVER HAPPEN'
+        cycle = [names[i] for i in cycle_ints] if names else cycle_ints
+        raise Exception(f'Topological sort failed: cyclic dependency {" -> ".join(cycle)}')
+
+    return topsorted
+
+
+'''Part 5: Other utilities'''
 
 
 @njit
