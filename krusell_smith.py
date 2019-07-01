@@ -2,8 +2,8 @@ import numpy as np
 import scipy.optimize as opt
 import utils
 import het_block as het
-import rec_block as rec
-from rec_block import recursive
+import simple_block as sim
+from simple_block import simple
 
 
 '''Part 1: Steady state'''
@@ -119,7 +119,7 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
 '''Part 2: linearized transition dynamics'''
 
 
-@recursive
+@simple
 def firm(K, L, Z, alpha, delta):
     r = alpha * Z * (K(-1) / L) ** (alpha-1) - delta
     w = (1 - alpha) * Z * (K(-1) / L) ** alpha
@@ -131,7 +131,7 @@ def get_J(ss, T):
     """Compute Jacobians along computational graph: for r, w, curlyK as functions of Z and K."""
 
     # firm Jacobian: r and w as functions of Z and K
-    J_firm = rec.all_Js(firm, ss, T, ['K', 'Z'])
+    J_firm = sim.all_Js(firm, ss, T, ['K', 'Z'])
 
     # household Jacobian: curlyK (called 'a' for assets by J_ha) as function of r and w
     J_ha = het.all_Js(backward_iterate, ss, T, {'r': {'r': 1}, 'w': {'w': 1}})

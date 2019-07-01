@@ -4,8 +4,8 @@ from numba import vectorize, njit
 import utils
 import solvers
 import het_block as het
-import rec_block as rec
-from rec_block import recursive
+import simple_block as sim
+from simple_block import simple
 import jacobian as jac
 
 """Part 1: static problem at the boundary"""
@@ -191,33 +191,33 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
 '''Part 3: linearized transition dynamics'''
 
 
-@recursive
+@simple
 def firm(Y, w, Z, pi, mu, kappa):
     L = Y / Z
     Div = Y - w * L - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
     return L, Div
 
 
-@recursive
+@simple
 def monetary(pi, rstar, phi):
     # i = rstar + phi * pi
     r = (1 + rstar(-1) + phi * pi(-1)) / (1 + pi) - 1
     return r
 
 
-@recursive
+@simple
 def fiscal(r, B):
     Tax = r * B
     return Tax
 
 
-@recursive
+@simple
 def nkpc(pi, w, Z, Y, r, mu, kappa):
     nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - np.log(1 + pi)
     return nkpc_res
 
 
-@recursive
+@simple
 def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
     asset_mkt = A - B
     labor_mkt = NS - L
@@ -229,11 +229,11 @@ def get_J(ss, T):
     """Compute Jacobians along computational graph: for r, w, curlyK as functions of Z and K."""
 
     # jacobians for simple blocks
-    J_firm = rec.all_Js(firm, ss, T)
-    J_monetary = rec.all_Js(monetary, ss, T, ['pi', 'rstar'])
-    J_fiscal = rec.all_Js(fiscal, ss, T, ['r'])
-    J_nkpc = rec.all_Js(nkpc, ss, T, ['pi', 'w', 'Z', 'Y', 'r'])
-    J_mkt = rec.all_Js(mkt_clearing, ss, T, ['A', 'NS', 'C', 'L', 'Y'])
+    J_firm = sim.all_Js(firm, ss, T)
+    J_monetary = sim.all_Js(monetary, ss, T, ['pi', 'rstar'])
+    J_fiscal = sim.all_Js(fiscal, ss, T, ['r'])
+    J_nkpc = sim.all_Js(nkpc, ss, T, ['pi', 'w', 'Z', 'Y', 'r'])
+    J_mkt = sim.all_Js(mkt_clearing, ss, T, ['A', 'NS', 'C', 'L', 'Y'])
 
     # jacobian of HA block
     T_div = ss['div_rule'] / np.sum(ss['pi_s'] * ss['div_rule'])

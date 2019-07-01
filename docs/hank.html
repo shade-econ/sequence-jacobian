@@ -11850,7 +11850,7 @@ $$</p>
 <span class="kn">import</span> <span class="nn">utils</span>
 <span class="kn">import</span> <span class="nn">het_block</span> <span class="k">as</span> <span class="nn">het</span>
 <span class="kn">import</span> <span class="nn">rec_block</span> <span class="k">as</span> <span class="nn">rec</span>
-<span class="kn">from</span> <span class="nn">rec_block</span> <span class="k">import</span> <span class="n">recursive</span>
+<span class="kn">from</span> <span class="nn">rec_block</span> <span class="k">import</span> <span class="n">simple</span>
 <span class="kn">import</span> <span class="nn">jacobian</span> <span class="k">as</span> <span class="nn">jac</span>
 <span class="kn">import</span> <span class="nn">solvers</span>
 <span class="kn">import</span> <span class="nn">hank</span>
@@ -12146,8 +12146,8 @@ $$
 \end{pmatrix}
 $$
 evaluated at the steady state.</p>
-<h3 id="3.1-Recursive-blocks">3.1 Recursive blocks<a class="anchor-link" href="#3.1-Recursive-blocks">&#182;</a></h3><p>Recursive blocks are specified as regular python functions with the decorator <code>@recursive</code>. In the body of the function, we simply implement the corresponding equilibrium conditions. The decorator turns the function into an instance of <code>RecursiveBlock</code>, a simple class with methods to evaluate itself in steady state and along a transition path. Notice that one can write x(-k) and x(+k) to denote k-period lags and leads of some variable x.</p>
-<p>The DAG above has 6 recursive nodes. But it makes sense to consolidate all market clearing conditions in a single block. This leaves us with the following five blocks.</p>
+<h3 id="3.1-Recursive-blocks">3.1 Recursive blocks<a class="anchor-link" href="#3.1-Recursive-blocks">&#182;</a></h3><p>Recursive blocks are specified as regular python functions with the decorator <code>@simple</code>. In the body of the function, we simply implement the corresponding equilibrium conditions. The decorator turns the function into an instance of <code>RecursiveBlock</code>, a simple class with methods to evaluate itself in steady state and along a transition path. Notice that one can write x(-k) and x(+k) to denote k-period lags and leads of some variable x.</p>
+<p>The DAG above has 6 simple nodes. But it makes sense to consolidate all market clearing conditions in a single block. This leaves us with the following five blocks.</p>
 
 </div>
 </div>
@@ -12157,28 +12157,28 @@ evaluated at the steady state.</p>
 <div class="prompt input_prompt">In&nbsp;[7]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="nd">@recursive</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nd">@simple</span>
 <span class="k">def</span> <span class="nf">firm</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">pi</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">kappa</span><span class="p">):</span>
     <span class="n">L</span> <span class="o">=</span> <span class="n">Y</span> <span class="o">/</span> <span class="n">Z</span>
     <span class="n">Div</span> <span class="o">=</span> <span class="n">Y</span> <span class="o">-</span> <span class="n">w</span> <span class="o">*</span> <span class="n">L</span> <span class="o">-</span> <span class="n">mu</span><span class="o">/</span><span class="p">(</span><span class="n">mu</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">kappa</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="n">pi</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">Y</span>
     <span class="k">return</span> <span class="n">L</span><span class="p">,</span> <span class="n">Div</span>
 
-<span class="nd">@recursive</span>
+<span class="nd">@simple</span>
 <span class="k">def</span> <span class="nf">monetary</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span> <span class="n">rstar</span><span class="p">,</span> <span class="n">phi</span><span class="p">):</span>
     <span class="n">r</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">rstar</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">phi</span> <span class="o">*</span> <span class="n">pi</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">pi</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
     <span class="k">return</span> <span class="n">r</span>
 
-<span class="nd">@recursive</span>
+<span class="nd">@simple</span>
 <span class="k">def</span> <span class="nf">fiscal</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">B</span><span class="p">):</span>
     <span class="n">Tax</span> <span class="o">=</span> <span class="n">r</span> <span class="o">*</span> <span class="n">B</span>
     <span class="k">return</span> <span class="n">Tax</span>
 
-<span class="nd">@recursive</span>
+<span class="nd">@simple</span>
 <span class="k">def</span> <span class="nf">nkpc</span><span class="p">(</span><span class="n">pi</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">kappa</span><span class="p">):</span>
     <span class="n">nkpc_res</span> <span class="o">=</span> <span class="n">kappa</span> <span class="o">*</span> <span class="p">(</span><span class="n">w</span> <span class="o">/</span> <span class="n">Z</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">mu</span><span class="p">)</span> <span class="o">+</span> <span class="n">Y</span><span class="p">(</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">Y</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">pi</span><span class="p">(</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">r</span><span class="p">(</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">pi</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">nkpc_res</span>
 
-<span class="nd">@recursive</span>
+<span class="nd">@simple</span>
 <span class="k">def</span> <span class="nf">mkt_clearing</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">NS</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">L</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">pi</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">kappa</span><span class="p">):</span>
     <span class="n">asset_mkt</span> <span class="o">=</span> <span class="n">A</span> <span class="o">-</span> <span class="n">B</span>
     <span class="n">labor_mkt</span> <span class="o">=</span> <span class="n">NS</span> <span class="o">-</span> <span class="n">L</span>
@@ -12251,7 +12251,7 @@ dict_keys([&#39;pi&#39;, &#39;w&#39;, &#39;Z&#39;])
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="3.2-HA-blocks">3.2 HA blocks<a class="anchor-link" href="#3.2-HA-blocks">&#182;</a></h3><p>The Jacobians of HA blocks are analogous objects to the Jacobians of recursive blocks we just saw. They are $T \times T$ matrices linking aggregate inputs to aggregate outputs. We propose an efficient algorithm to compute them. See the Beamer slides and the <code>het_jacobian.ipynb</code> notebook for details.</p>
+<h3 id="3.2-HA-blocks">3.2 HA blocks<a class="anchor-link" href="#3.2-HA-blocks">&#182;</a></h3><p>The Jacobians of HA blocks are analogous objects to the Jacobians of simple blocks we just saw. They are $T \times T$ matrices linking aggregate inputs to aggregate outputs. We propose an efficient algorithm to compute them. See the Beamer slides and the <code>het_jacobian.ipynb</code> notebook for details.</p>
 <p>The algorithm is implemented in <code>het_block.py</code>. At the end of the day, we'll be able to call a single function, much like <code>rec_block.own_jac</code> above.  The difference is that the shocked inputs have to be specified as a nested dict. This may look like an unnecessarily complicated formulation, but it allows us to use the same, concise <code>backward_iteration_labor</code> function in any macro model. From the households' perspective, all that matters is what $(r, w, T)$ are. They just take this given, irrespective of how they are determined in the GE.</p>
 <p>So we proceed in two steps. First, compute the derivative of the state-specific transfer income with respect to aggregate dividends and taxes. Second, call <code>het.all_Js</code> that we used for Krusell-Smith model as well.</p>
 
@@ -12330,7 +12330,7 @@ dC = \underbrace{\frac{\partial C}{\partial r^*} d r^* + \frac{\partial C}{\part
 $$</p>
 <h3 id="4.1-Algorithm">4.1 Algorithm<a class="anchor-link" href="#4.1-Algorithm">&#182;</a></h3><p>We will obtain a linear characterization of all impulse responses that parallels the four-part procedure on page 13 of the beamer slides. In contrast to the simpler Krusell-Smith model, we'll rely more on convenience functions to manipulate Jacobians. This is to simplify the code and minimize errors.</p>
 <p>Recall that we already solved for a steady state and stored is as <code>ss</code>. Furthermore, we will use a 300-period truncation horizon.</p>
-<h4 id="Step-1:-For-each-block,-obtain-Jacobians-of-outputs-with-respect-to-inputs">Step 1: For each block, obtain Jacobians of outputs with respect to inputs<a class="anchor-link" href="#Step-1:-For-each-block,-obtain-Jacobians-of-outputs-with-respect-to-inputs">&#182;</a></h4><p>Here, we have six blocks: five recursive blocks and the heterogeneous household block. First, let's define lists with the names of exogenous inputs, endogenous inputs (unknowns), and targets. These will be useful later. Second, let's use <code>rec.all_Js</code> to differentiate the 5 recursive blocks with respect to their inputs that can change (so not the parameters). Third, we calculate the Jacobians of the HA household block in two steps as discussed in section 3.</p>
+<h4 id="Step-1:-For-each-block,-obtain-Jacobians-of-outputs-with-respect-to-inputs">Step 1: For each block, obtain Jacobians of outputs with respect to inputs<a class="anchor-link" href="#Step-1:-For-each-block,-obtain-Jacobians-of-outputs-with-respect-to-inputs">&#182;</a></h4><p>Here, we have six blocks: five simple blocks and the heterogeneous household block. First, let's define lists with the names of exogenous inputs, endogenous inputs (unknowns), and targets. These will be useful later. Second, let's use <code>rec.all_Js</code> to differentiate the 5 simple blocks with respect to their inputs that can change (so not the parameters). Third, we calculate the Jacobians of the HA household block in two steps as discussed in section 3.</p>
 
 </div>
 </div>

@@ -12147,7 +12147,7 @@ Wall time: 490 ms
 <p>$$D_{t+1} = \Lambda_{t}'D_{t}$$</p>
 <p>where $\Lambda_{t}$ is the $n\times n$ Markov transition probability matrix between states in $t$ and $t+1$. To first order, we have the decomposition:</p>
 <p>$$dD_{t+1} = d\Lambda_t'D_{ss} + \Lambda_{ss}'dD_{t} \tag{3}$$</p>
-<p>This is a recursive equation in $dD_t$. Since the change in transition probabilities $d\Lambda_t$ results from changes in individual policies in response to shocks in $t$ and later, it can be obtained from backward iteration too, and there is a time symmetry exactly like in 2.1, where we can define</p>
+<p>This is a simple equation in $dD_t$. Since the change in transition probabilities $d\Lambda_t$ results from changes in individual policies in response to shocks in $t$ and later, it can be obtained from backward iteration too, and there is a time symmetry exactly like in 2.1, where we can define</p>
 <p>$$\mathcal{D}_{s-t}^{i} \equiv d\Lambda_t'D_{ss} \tag{4}$$</p>
 <p>for a given shocked input $i$ in a way that depends only on $s-t$. Of course, $d\Lambda_t=0$ for all $s&lt;t$.</p>
 <p>How do we calculate the $\mathcal{D}$ in response to the same input shocks we've considered so far, $w$ and $r$? First, we obtain shocks to the asset policy $a$ of households at each horizon. These shocks determine the change $d\Lambda$ in the Markov matrix.</p>
