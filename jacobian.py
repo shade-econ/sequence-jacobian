@@ -54,7 +54,7 @@ class IdentityMatrix:
         return 'IdentityMatrix'
 
 
-def chain_jacobians(jacdicts, inputs, T):
+def chain_jacobians(jacdicts, inputs):
     """Obtain complete Jacobian of every output in jacdicts with respect to inputs, by applying chain rule."""
     cumulative_jacdict = {i: {i: IdentityMatrix()} for i in inputs}
     for jacdict in jacdicts:
@@ -269,3 +269,119 @@ def forward_accumulate(curlyJs, inputs, outputs=None, required=None):
             return {k: v for k, v in out.items() if k not in inputs}
         else:
             return out
+
+
+'''Part 2: Convenience routines'''
+
+
+def impulse_response(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None):
+    """Get a single impulse response.
+
+    Parameters
+    ----------
+    block_list : list, simple blocks or jacdicts
+    dZ         : dict, path of an exogenous variable
+    unknowns   : list of str, names of unknowns in DAG
+    targets    : list of str, names of targets in DAG
+    T          : [optional] int, truncation horizon
+    ss         : [optional] dict, steady state required if block_list contains simple blocks
+    outputs    : [optional] list of str, variables we want impulse responses for
+
+    Returns
+    -------
+    out : dict of dict, impulse responses to shock dZ
+    """
+    # step 0 (preliminaries): infer T, do topological sort and get curlyJs
+    if T is None:
+        for x in dZ.values():
+            T = len(x)
+            break
+
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss)
+
+    # step 1: do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
+    H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
+
+    # step 2: do (vector) forward accumulation to get J^(o, curlyZ)dZ for all o in
+    # 'alloutputs', the combination of outputs (if specified) and targets
+    alloutputs = None
+    if outputs is not None:
+        alloutputs = set(outputs) | set(targets)
+
+    J_curlyZ_dZ = forward_accumulate(curlyJs, dZ, alloutputs, required)
+
+    # step 3: solve H_UdU = -H_ZdZ for dU
+    H_U_packed = pack_jacobians(H_U_unpacked, unknowns, targets, T)
+    dU_packed = - np.linalg.solve(H_U_packed, pack_vectors(J_curlyZ_dZ, targets, T))
+    dU = unpack_vectors(dU_packed, unknowns, T)
+
+    # step 4: do (vector) forward accumulation to get J^(o, curlyU)dU
+    # then sum together with J^(o, curlyZ)dZ to get all output impulse responses
+    J_curlyU_dU = forward_accumulate(curlyJs, dU, outputs, required)
+    if outputs is None:
+        outputs = J_curlyZ_dZ.keys() | J_curlyU_dU.keys()
+    return {o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}
+
+
+def prepare_impulses(block_list, exogenous, unknowns, targets, T, ss=None):
+    """Prepare ground for many impulse responses by getting sorted curlyJs and unpacked H_U^(-1)."""
+    # step 0 (preliminaries): do topological sort and get curlyJs
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss)
+
+    # step 1: do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
+    H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
+    H_U_packed = pack_jacobians(H_U_unpacked, unknowns, targets, T)
+
+    # step 2: invert H_U and unpack to jac dict form
+    U_H_unpacked = unpack_jacobians(- np.linalg.inv(H_U_packed), targets, unknowns, T)
+    return curlyJs, U_H_unpacked, required
+
+
+def get_impulses(curlyJs, U_H_unpacked, dZ, outputs=None, required=None):
+    """Use curlyJs and unpacked inverted H_U to solve for a single impulse response."""
+    # step 0 (preliminaries): infer T and targets
+    for x in dZ.values():
+        T = len(x)
+        break
+
+    for x in U_H_unpacked.values():
+        targets = x.keys()
+        break
+
+    # step 1: do (vector) forward accumulation to get J^(o, curlyZ)dZ for all o in
+    # 'alloutputs', the combination of outputs (if specified) and targets
+    alloutputs = None
+    if outputs is not None:
+        alloutputs = set(outputs) | set(targets)
+
+    J_curlyZ_dZ = forward_accumulate(curlyJs, dZ, alloutputs, required)
+
+    # step 2: get dU from H_U^(-1)*J^(o, curlyZ)dZ, using precalc H_U^(-1)
+    dU = apply_jacobians(U_H_unpacked, J_curlyZ_dZ)
+
+    # step 3: do (vector) forward accumulation to get J^(o, curlyU)dU
+    # then sum together with J^(o, curlyZ)dZ to get all output impulse responses
+    J_curlyU_dU = forward_accumulate(curlyJs, dU, outputs, required)
+    return {o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}
+
+
+def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None):
+    """Compute full general equilibrium Jacobian."""
+    # step 0 (preliminaries): do topological sort and get curlyJs
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss)
+
+    # step 1: do (matrix) forward accumulation to get
+    # H_U = J^(curlyH, curlyU), H_Z = J^(curlyH, curlyZ)
+    J_curlyH = forward_accumulate(curlyJs, unknowns + exogenous, targets, required)
+
+    # step 2: solve for G^U, unpack
+    H_U_packed = pack_jacobians(J_curlyH, unknowns, targets, T)
+    H_Z_packed = pack_jacobians(J_curlyH, exogenous, targets, T)
+    G_U = unpack_jacobians(-np.linalg.solve(H_U_packed, H_Z_packed), exogenous, unknowns, T)
+
+    # step 3: forward accumulation to get all outputs starting with G_U
+    # by default, don't calculate targets!
+    curlyJs = [G_U] + curlyJs
+    if outputs is None:
+        outputs = set().union(*(curlyJ.keys() for curlyJ in curlyJs)) - set(targets)
+    return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))

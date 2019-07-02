@@ -195,23 +195,6 @@ class AsymptoticToeplitz:
     def __neg__(self):
         return AsymptoticToeplitz(-self.M, -self.asymp)
 
-    # def __matmul__(self, other):
-    #     if isinstance(other, AsymptoticToeplitz):
-    #         newself = self
-    #         if other.tau
-
-    #     if isinstance(other, AsymptoticVector):
-    #         newself = self
-    #         if other.tau < self.tau:
-    #             other = other.changetau(self.tau)
-    #         elif other.tau > self.tau:
-    #             newself = self.changetau(other.tau)
-    #         return irfft(newself.vfft*other.vfft)[newself.tau:-newself.tau]
-    #     elif hasattr(other, 'asymptotic_vector'):
-    #         return self @ other.asymptotic_vector
-    #     else:
-    #         return NotImplemented
-
 
 def correction(av, bv, av_rz_fft, bv_lz_fft, T):
     """Correction matrix for right (tau-1)*(tau-1) submatrix of T*T matrix, possibly entire thing,
