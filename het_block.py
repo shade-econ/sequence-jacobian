@@ -30,7 +30,7 @@ def extract_info(back_step_fun, ss):
     V_name, *outcome_list = re.findall('return (.*?)\n',
                                        inspect.getsource(back_step_fun))[-1].replace(' ', '').split(',')
 
-    ssy_list = [ss[k] for k in [V_name] + outcome_list]
+    #ssy_list = [ss[k] for k in [V_name] + outcome_list]
 
     input_names = inspect.getfullargspec(back_step_fun).args
     ssinput_dict = {}
@@ -39,6 +39,10 @@ def extract_info(back_step_fun, ss):
             ssinput_dict[k] = ss[k[:-2]]
         else:
             ssinput_dict[k] = ss[k]
+
+    # want numerical differentiation to subtract against this for greater accuracy,
+    # since steady state is not *exactly* a fixed point of back_step_fun
+    ssy_list = back_step_fun(**ssinput_dict)
 
     return ssinput_dict, ssy_list, outcome_list, V_name
 
