@@ -48,8 +48,11 @@ def interpolate_coord(x, xq, xqi, xqpi):
     ----------
     x    : array (n), ascending data points
     xq   : array (nq), ascending query points
-    xqi  : array (nq), empty to be filled with indices of lower bracketing gridpoints
-    xqpi : array (nq), empty to be filled with weights on lower bracketing gridpoints
+
+    Returns
+    ----------
+    xqi  : array (nq), indices of lower bracketing gridpoints
+    xqpi : array (nq), weights on lower bracketing gridpoints
     """
     nxq, nx = xq.shape[0], x.shape[0]
 
@@ -68,9 +71,73 @@ def interpolate_coord(x, xq, xqi, xqpi):
         xqpi[xqi_cur] = (x_high - xq_cur) / (x_high - x_low)
         xqi[xqi_cur] = xi
 
+def interpolate_coord_robust(x, xq, check_increasing=False):
+    """Wrapper for interpolate_coord_robust_vector that works if xq not vector,
+    but still require x to be a vector"""
+    if x.ndim != 1:
+        raise ValueError('Data input to interpolate_coord_robust must have exactly one dimension')
+
+    if check_increasing and np.any(x[:-1] >= x[1:]):
+        raise ValueError('Data input to interpolate_coord_robust must be strictly increasing')
+
+    if xq.ndim == 1:
+        return interpolate_coord_robust_vector(x, xq)
+    else:
+        i, pi = interpolate_coord_robust_vector(x, xq.ravel())
+        return i.reshape(xq.shape), pi.reshape(xq.shape)
+
+@njit
+def interpolate_coord_robust_vector(x, xq):
+    """
+    Linear interpolation exploiting monotonicity ONLY in data x, not in query points xq.
+    Simple binary search, LESS EFFICIENT but more robust.
+    xq = xqpi * x[xqi] + (1-xqpi) * x[xqi+1]
+
+    Not guvectorized, so x and xq must have a single dimension (if x has more, just use ravel/reshape),
+    main application intended to be universally-valid interpolation of SS policy rules.
+
+    Parameters
+    ----------
+    x    : array (n), ascending data points
+    xq   : array (nq), query points (in any order)
+
+    Returns
+    ----------
+    xqi  : array (nq), indices of lower bracketing gridpoints
+    xqpi : array (nq), weights on lower bracketing gridpoints
+    """
+
+    n = len(x)
+    nq = len(xq)
+    xqi = np.empty(nq, dtype=np.uint32)
+    xqpi = np.empty(nq)
+
+    for iq in range(nq):
+        if xq[iq] < x[0]:
+            ilow = 0
+        elif xq[iq] > x[-2]:
+            ilow = n-2
+        else:
+            # start binary search
+            # should end with ilow and ihigh exactly 1 apart, bracketing variable
+            ihigh = n-1
+            ilow = 0
+            while ihigh - ilow > 1:
+                imid = (ihigh + ilow) // 2
+                if xq[iq] > x[imid]:
+                    ilow = imid
+                else:
+                    ihigh = imid
+         
+        xqi[iq] = ilow
+        xqpi[iq] = (x[ilow+1] - xq[iq]) / (x[ilow+1] - x[ilow])
+
+    return xqi, xqpi
+
 
 '''Part 2: Operations on the discretized distribution'''
 
+"""OLD STUFF HERE"""
 
 @njit
 def forward_step(D, Pi_T, a_pol_i, a_pol_pi):
@@ -105,7 +172,6 @@ def forward_step(D, Pi_T, a_pol_i, a_pol_pi):
 
     return Dnew
 
-
 @njit
 def forward_step_transpose(D, Pi, a_pol_i, a_pol_pi):
     """Efficient implementation of D_t =  Lam_{t-1} @ D_{t-1}' using sparsity of Lam_{t-1}."""
@@ -132,6 +198,133 @@ def forward_step_policy_shock(Dss, Pi_T, a_pol_i_ss, a_pol_pi_shock):
     Dnew = Pi_T @ Dnew
     return Dnew
 
+"""BEGIN NEW STUFF HERE"""
+
+@njit
+def forward_step_endo_1d(D, x_i, x_pi):
+    """Forward iterate endogenous states: D(z, x) to D(z, x')"""
+    nZ, nX = D.shape
+    Dnew = np.zeros_like(D)
+    for iz in range(nZ):
+        for ix in range(nX):
+            i = x_i[iz, ix]
+            pi = x_pi[iz, ix]
+            d = D[iz, ix]
+            Dnew[iz, i] += d * pi
+            Dnew[iz, i+1] += d * (1 - pi)
+    return Dnew
+
+
+@njit
+def forward_step_endo_2d(D, x_i, y_i, x_pi, y_pi):
+    """Forward iterate endogenous states: D(z, x, y) to D(z, x, y)"""
+    nZ, nX, nY = D.shape
+    Dnew = np.zeros_like(D)
+    for iz in range(nZ):
+        for ix in range(nX):
+            for iy in range(nY):
+                ixp = x_i[iz, ix, iy]
+                iyp = y_i[iz, ix, iy]
+                beta = x_pi[iz, ix, iy]
+                alpha = y_pi[iz, ix, iy]
+
+                Dnew[iz, ixp, iyp] += alpha * beta * D[iz, ix, iy]
+                Dnew[iz, ixp+1, iyp] += alpha * (1 - beta) * D[iz, ix, iy]
+                Dnew[iz, ixp, iyp+1] += (1 - alpha) * beta * D[iz, ix, iy]
+                Dnew[iz, ixp+1, iyp+1] += (1 - alpha) * (1 - beta) * D[iz, ix, iy]
+    return Dnew
+
+
+@njit
+def forward_step_endo_transpose_1d(D, a_pol_i, a_pol_pi):
+    """Transpose of forward_step_endo_1d"""
+    nZ, nX = D.shape
+    Dnew = np.zeros_like(D)
+    for iz in range(nZ):
+        for ix in range(nX):
+            i = a_pol_i[iz, ix]
+            pi = a_pol_pi[iz, ix]
+            Dnew[iz, ix] = pi * D[iz, i] + (1-pi) * D[iz, i+1]
+    return Dnew
+
+@njit
+def forward_step_endo_transpose_2d(D, x_i, y_i, x_pi, y_pi):
+    """Transpose of forward_step_endo_2d."""
+    nZ, nX, nY = D.shape
+    Dnew = np.empty_like(D)
+    for iz in range(nZ):
+        for ix in range(nX):
+            for iy in range(nY):
+                ixp = x_i[iz, ix, iy]
+                iyp = y_i[iz, ix, iy]
+                alpha = x_pi[iz, ix, iy]
+                beta = y_pi[iz, ix, iy]
+
+                Dnew[iz, ix, iy] = (alpha * beta * D[iz, ixp, iyp] + alpha * (1-beta) * D[iz, ixp, iyp+1] + 
+                                    (1-alpha) * beta * D[iz, ixp+1, iyp] +
+                                    (1-alpha) * (1-beta) * D[iz, ixp+1, iyp+1])
+    return Dnew
+
+@njit
+def forward_step_policy_shock(Dss, Pi_T, a_pol_i_ss, a_pol_pi_shock):
+    """Update distribution of agents with policy function perturbed around ss."""
+    Dnew = np.zeros_like(Dss)
+    for s in range(Dss.shape[0]):
+        for i in range(Dss.shape[1]):
+            apol = a_pol_i_ss[s, i]
+            dshock = a_pol_pi_shock[s, i] * Dss[s, i]
+            Dnew[s, apol] += dshock
+            Dnew[s, apol + 1] -= dshock
+    Dnew = Pi_T @ Dnew
+    return Dnew
+
+@njit
+def forward_step_endo_shock_1d(Dss, x_i_ss, x_pi_shock):
+    """forward_step_endo_1d linearized wrt x_pi"""
+    nZ, nX = Dss.shape
+    Dshock = np.zeros_like(Dss)
+    for iz in range(nZ):
+        for ix in range(nX):
+            i = x_i_ss[iz, ix]
+            dshock = x_pi_shock[iz, ix] * Dss[iz, ix]
+            Dshock[iz, i] += dshock
+            Dshock[iz, i + 1] -= dshock
+    return Dshock
+
+@njit
+def forward_step_endo_shock_2d(Dss, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shock, y_pi_shock):
+    """forward_step_endo_2d linearized wrt x_pi and y_pi"""
+    nZ, nX, nY = Dss.shape
+    Dshock = np.zeros_like(Dss)
+    for iz in range(nZ):
+        for ix in range(nX):
+            for iy in range(nY):
+                ixp = x_i_ss[iz, ix, iy]
+                iyp = y_i_ss[iz, ix, iy]
+                alpha = x_pi_ss[iz, ix, iy]
+                beta = y_pi_ss[iz, ix, iy]
+
+                dalpha = x_pi_shock[iz, ix, iy] * Dss[iz, ix, iy]
+                dbeta = y_pi_shock[iz, ix, iy] * Dss[iz, ix, iy]
+
+                Dshock[iz, ixp, iyp] += dalpha * beta + alpha * dbeta
+                Dshock[iz, ixp+1, iyp] += dbeta * (1-alpha) - beta * dalpha
+                Dshock[iz, ixp, iyp+1] += dalpha * (1-beta) - alpha * dbeta
+                Dshock[iz, ixp+1, iyp+1] -= dalpha * (1-beta) + dbeta * (1-alpha)
+    return Dshock
+
+def flat_apply(f, n, *args):
+    """Apply f to arrays in args, which are all of same dimension, flattening all but last n dims,
+    then unflattening the result"""
+    dims = args[0].shape
+    if len(dims) <= n+1:
+        return f(*args)
+    else:
+        flatdims = (-1,) + dims[-n:]
+        return f(*(arg.reshape(flatdims) for arg in args)).reshape(dims)
+
+def make_tuple(x):
+    return (x,) if isinstance(x, str) else x
 
 def dist_ss(a_pol, Pi, a_grid, D_seed=None, pi_seed=None, tol=1E-10, maxit=100_000):
     """Iterate to find steady-state distribution."""
@@ -152,7 +345,7 @@ def dist_ss(a_pol, Pi, a_grid, D_seed=None, pi_seed=None, tol=1E-10, maxit=100_0
     for it in range(maxit):
         Dnew = forward_step(D, Pi_T, a_pol_i, a_pol_pi)
 
-        # only check convergence every 10 iterations for efficiency
+        # only check convergence every 10 2iterations for efficiency
         if it % 10 == 0 and within_tolerance(D, Dnew, tol):
             break
         D = Dnew
