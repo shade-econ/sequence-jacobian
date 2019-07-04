@@ -377,7 +377,7 @@ class HetBlock:
         # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = dict()
         for o in desired_outputs:
-            curlyPs[o] = forward_iteration_transpose(ss[o], markov, sspol_i, sspol_pi, T)
+            curlyPs[o] = self.forward_iteration_fakenews(ss[o], markov, sspol_i, sspol_pi, T)
 
         # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
         J = {o.upper(): {} for o in desired_outputs}
