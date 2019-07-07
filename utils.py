@@ -201,8 +201,30 @@ def forward_step_policy_shock(Dss, Pi_T, a_pol_i_ss, a_pol_pi_shock):
 """BEGIN NEW STUFF HERE"""
 
 @njit
-def forward_step_endo_1d(D, x_i, x_pi):
-    """Forward iterate endogenous states: D(z, x) to D(z, x')"""
+def forward_step_1d(D, Pi_T, x_i, x_pi):
+    """Single forward step to update distribution using exogenous Markov transition Pi and
+    policy x_i and x_pi for one-dimensional endogenous state.
+
+    Efficient implementation of D_t = Lam_{t-1}' @ D_{t-1} using sparsity of the endogenous
+    part of Lam_{t-1}'.
+
+    Note that it takes Pi_T, the transpose of Pi, as input rather than transposing itself;
+    this is so that when it is applied repeatedly, we can precalculate a transpose stored in
+    correct order rather than a view.
+
+    Parameters
+    ----------
+    D : array (S*X), beginning-of-period distribution over s_t, x_(t-1)
+    Pi_T : array (S*S), transpose Markov matrix that maps s_t to s_(t+1)
+    x_i : int array (S*X), left gridpoint of endogenous policy
+    x_pi : array (S*X), weight on left gridpoint of endogenous policy
+
+    Returns
+    ----------
+    Dnew : array (S*X), beginning-of-next-period dist s_(t+1), x_t
+    """
+
+    # first update using endogenous policy
     nZ, nX = D.shape
     Dnew = np.zeros_like(D)
     for iz in range(nZ):
@@ -212,12 +234,16 @@ def forward_step_endo_1d(D, x_i, x_pi):
             d = D[iz, ix]
             Dnew[iz, i] += d * pi
             Dnew[iz, i+1] += d * (1 - pi)
-    return Dnew
+
+    # then using exogenous transition matrix
+    return Pi_T @ Dnew
 
 
 @njit
-def forward_step_endo_2d(D, x_i, y_i, x_pi, y_pi):
-    """Forward iterate endogenous states: D(z, x, y) to D(z, x, y)"""
+def forward_step_2d(D, Pi_T, x_i, y_i, x_pi, y_pi):
+    """Like forward_step_1d but with two-dimensional endogenous state, policies given by x and y"""
+
+    # first update using endogenous policy
     nZ, nX, nY = D.shape
     Dnew = np.zeros_like(D)
     for iz in range(nZ):
@@ -232,25 +258,36 @@ def forward_step_endo_2d(D, x_i, y_i, x_pi, y_pi):
                 Dnew[iz, ixp+1, iyp] += alpha * (1 - beta) * D[iz, ix, iy]
                 Dnew[iz, ixp, iyp+1] += (1 - alpha) * beta * D[iz, ix, iy]
                 Dnew[iz, ixp+1, iyp+1] += (1 - alpha) * (1 - beta) * D[iz, ix, iy]
-    return Dnew
+
+    # then using exogenous transition matrix 
+    return (Pi_T @ Dnew.reshape(nZ, -1)).reshape(nZ, nX, nY)
 
 
 @njit
-def forward_step_endo_transpose_1d(D, a_pol_i, a_pol_pi):
-    """Transpose of forward_step_endo_1d"""
+def forward_step_transpose_1d(D, Pi, x_i, x_pi):
+    """Transpose of forward_step_1d"""
+    # first update using exogenous transition matrix
+    D = Pi @ D
+
+    # then update using (transpose) endogenous policy
     nZ, nX = D.shape
     Dnew = np.zeros_like(D)
     for iz in range(nZ):
         for ix in range(nX):
-            i = a_pol_i[iz, ix]
-            pi = a_pol_pi[iz, ix]
+            i = x_i[iz, ix]
+            pi = x_pi[iz, ix]
             Dnew[iz, ix] = pi * D[iz, i] + (1-pi) * D[iz, i+1]
     return Dnew
 
+
 @njit
-def forward_step_endo_transpose_2d(D, x_i, y_i, x_pi, y_pi):
-    """Transpose of forward_step_endo_2d."""
+def forward_step_transpose_2d(D, Pi, x_i, y_i, x_pi, y_pi):
+    """Transpose of forward_step_2d."""
+    # first update using exogenous transition matrix
     nZ, nX, nY = D.shape
+    D = (Pi @ D.reshape(nZ, -1)).reshape(nZ, nX, nY)
+
+    # then update using (transpose) endogenous policy
     Dnew = np.empty_like(D)
     for iz in range(nZ):
         for ix in range(nX):
@@ -265,22 +302,11 @@ def forward_step_endo_transpose_2d(D, x_i, y_i, x_pi, y_pi):
                                     (1-alpha) * (1-beta) * D[iz, ixp+1, iyp+1])
     return Dnew
 
-@njit
-def forward_step_policy_shock(Dss, Pi_T, a_pol_i_ss, a_pol_pi_shock):
-    """Update distribution of agents with policy function perturbed around ss."""
-    Dnew = np.zeros_like(Dss)
-    for s in range(Dss.shape[0]):
-        for i in range(Dss.shape[1]):
-            apol = a_pol_i_ss[s, i]
-            dshock = a_pol_pi_shock[s, i] * Dss[s, i]
-            Dnew[s, apol] += dshock
-            Dnew[s, apol + 1] -= dshock
-    Dnew = Pi_T @ Dnew
-    return Dnew
 
 @njit
-def forward_step_endo_shock_1d(Dss, x_i_ss, x_pi_shock):
-    """forward_step_endo_1d linearized wrt x_pi"""
+def forward_step_shock_1d(Dss, Pi_T, x_i_ss, x_pi_shock):
+    """forward_step_1d linearized wrt x_pi"""
+    # first find effect of shock to endogenous policy
     nZ, nX = Dss.shape
     Dshock = np.zeros_like(Dss)
     for iz in range(nZ):
@@ -289,11 +315,15 @@ def forward_step_endo_shock_1d(Dss, x_i_ss, x_pi_shock):
             dshock = x_pi_shock[iz, ix] * Dss[iz, ix]
             Dshock[iz, i] += dshock
             Dshock[iz, i + 1] -= dshock
-    return Dshock
+
+    # then apply exogenous transition matrix to update
+    return Pi_T @ Dshock
+
 
 @njit
-def forward_step_endo_shock_2d(Dss, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shock, y_pi_shock):
-    """forward_step_endo_2d linearized wrt x_pi and y_pi"""
+def forward_step_shock_2d(Dss, Pi_T, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shock, y_pi_shock):
+    """forward_step_2d linearized wrt x_pi and y_pi"""
+    # first find effect of shock to endogenous policy
     nZ, nX, nY = Dss.shape
     Dshock = np.zeros_like(Dss)
     for iz in range(nZ):
@@ -311,17 +341,10 @@ def forward_step_endo_shock_2d(Dss, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shock
                 Dshock[iz, ixp+1, iyp] += dbeta * (1-alpha) - beta * dalpha
                 Dshock[iz, ixp, iyp+1] += dalpha * (1-beta) - alpha * dbeta
                 Dshock[iz, ixp+1, iyp+1] -= dalpha * (1-beta) + dbeta * (1-alpha)
-    return Dshock
 
-def flat_apply(f, n, *args):
-    """Apply f to arrays in args, which are all of same dimension, flattening all but last n dims,
-    then unflattening the result"""
-    dims = args[0].shape
-    if len(dims) <= n+1:
-        return f(*args)
-    else:
-        flatdims = (-1,) + dims[-n:]
-        return f(*(arg.reshape(flatdims) for arg in args)).reshape(dims)
+    # then apply exogenous transition matrix to update
+    return (Pi_T @ Dshock.reshape(nZ, -1)).reshape(nZ, nX, nY)
+
 
 def make_tuple(x):
     return (x,) if isinstance(x, str) else x
