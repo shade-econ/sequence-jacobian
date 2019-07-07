@@ -335,6 +335,11 @@ class HetBlock:
         return J
 
 
+def het(exogenous, policy, backward):
+    def decorator(back_step_fun):
+        return HetBlock(back_step_fun, exogenous, policy, backward)
+    return decorator
+
 """OLD JACOBIAN CODE BEGINS HERE"""
 
 '''Part 0: Set up the stage for general HA jacobian code.'''
