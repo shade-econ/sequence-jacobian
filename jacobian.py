@@ -172,40 +172,10 @@ def curlyJ_sorted(block_list, inputs, ss=None):
     required : list, outputs of some blocks that are needed as inputs by others
     """
 
-    # step 1: map outputs to blocks for topological sort
-    outmap = dict()
-    for num, block in enumerate(block_list):
-        if isinstance(block, sim.SimpleBlock):
-            output_list = block.output_list
-        elif isinstance(block, dict):
-            output_list = list(block.keys())
-        else:
-            raise ValueError(f'{block} is not recognized as block')
+    # step 1: get topological sort and required
+    topsorted, required = utils.block_sort(block_list, findrequired=True)
 
-        for o in output_list:
-            if o in outmap:
-                raise ValueError(f'{o} is output twice')
-            outmap[o] = num
-
-    # step 2: dependency graph for topological sort and input list
-    dep = {num: set() for num in range(len(block_list))}
-    required = set()
-    for num, block in enumerate(block_list):
-        if isinstance(block, sim.SimpleBlock):
-            input_list = block.input_list
-        else:
-            input_list = [i for o in block for i in block[o]]
-            input_list = list(set(input_list))
-
-        for i in input_list:
-            if i in outmap:
-                dep[num].add(outmap[i])
-                required.add(i)
-
-    # step 3: topological sort
-    topsorted = utils.topological_sort(dep)
-
-    # step 4: compute Jacobians and put them in right order
+    # step 2: compute Jacobians and put them in right order
     curlyJs = []
     shocks = set(inputs) | required
     for num in topsorted:
