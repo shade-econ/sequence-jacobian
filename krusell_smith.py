@@ -51,7 +51,9 @@ def backward_iterate(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
     Va = (1 + r) * c ** (-1 / eis)
     return Va, a, c
 
+
 household = het.HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
+
 
 def pol_ss(Pi, e_grid, a_grid, r, w, beta, eis, Va_seed=None, tol=1E-8, maxit=5000):
     """Find steady state policy functions."""
@@ -108,17 +110,14 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
     # solve for beta consistent with this
     beta_min = lb / (1 + r)
     beta_max = ub / (1 + r)
-    beta, sol = opt.brentq(lambda bet: household.ss(Pi=Pi, a_grid=a_grid, e_grid=e_grid, r=r, w=w, beta=bet, eis=eis, Va=Va)['A']
-                              - K, beta_min, beta_max, full_output=True)
-    # beta, sol = opt.brentq(lambda bet: household_ss(Pi, a_grid, e_grid, r, w, bet, eis)['A']
-    #                           - K, beta_min, beta_max, full_output=True)
+    beta, sol = opt.brentq(lambda bet: household.ss(Pi=Pi, a_grid=a_grid, e_grid=e_grid, r=r, w=w, beta=bet, eis=eis,
+                                                    Va=Va)['A'] - K, beta_min, beta_max, full_output=True)
     if not sol.converged:
         raise ValueError('Steady-state solver did not converge.')
 
     # extra evaluation to report variables
     ss = household_ss(Pi, a_grid, e_grid, r, w, beta, eis)
-    ss.update({'w': w, 'Z': Z, 'K': K, 'L': 1, 'Y': Y, 'alpha': alpha, 'delta': delta,
-               'goods_mkt': Y - ss['C'] - delta * K})
+    ss.update({'Z': Z, 'K': K, 'L': 1, 'Y': Y, 'alpha': alpha, 'delta': delta, 'goods_mkt': Y - ss['C'] - delta * K})
 
     return ss
 

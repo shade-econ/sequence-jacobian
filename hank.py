@@ -2,13 +2,13 @@ import numpy as np
 from numba import vectorize, njit
 
 import utils
-import solvers
 import het_block as het
 import simple_block as sim
 from simple_block import simple
 import jacobian as jac
 
-"""Part 1: static problem at the boundary"""
+
+"""Part 1: NEW STREAMLINED CODE"""
 
 
 @njit
@@ -58,7 +58,7 @@ def solve_cn(w, T, eis, frisch, vphi, uc_seed):
 """Part 2: Steady state"""
 
 
-def backward_iterate_labor(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag):
+def backward_iterate(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag):
     """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility.
 
     Order of returns matters! backward_var, assets, others
@@ -103,6 +103,46 @@ def backward_iterate_labor(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisc
     return Va, a, c, n, ns
 
 
+household = het.HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
+
+
+@simple
+def firm(Y, w, Z, pi, mu, kappa):
+    L = Y / Z
+    Div = Y - w * L - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
+    return L, Div
+
+
+@simple
+def monetary(pi, rstar, phi):
+    # i = rstar + phi * pi
+    r = (1 + rstar(-1) + phi * pi(-1)) / (1 + pi) - 1
+    return r
+
+
+@simple
+def fiscal(r, B):
+    Tax = r * B
+    return Tax
+
+
+@simple
+def nkpc(pi, w, Z, Y, r, mu, kappa):
+    nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - np.log(1 + pi)
+    return nkpc_res
+
+
+@simple
+def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
+    asset_mkt = A - B
+    labor_mkt = NS - L
+    goods_mkt = Y - C - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
+    return asset_mkt, labor_mkt, goods_mkt
+
+
+"""Part 2: OLD CODE"""
+
+
 def pol_labor_ss(Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, Va_seed=None, tol=1E-8, maxit=5000):
     if Va_seed is None:
         coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis] + T[:, np.newaxis]
@@ -117,8 +157,8 @@ def pol_labor_ss(Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, Va_seed=N
     # iterate until convergence of a policy by tol or reach max number of iterations
     a = np.empty_like(Va)
     for it in range(maxit):
-        Va, anew, c, n, ns = backward_iterate_labor(Va, Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi,
-                                                    c_const, n_const, ssflag=True)
+        Va, anew, c, n, ns = backward_iterate(Va, Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi,
+                                              c_const, n_const, ssflag=True)
 
         if it % 10 == 1 and utils.within_tolerance(a, anew, tol):
             break
@@ -178,7 +218,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         return np.array([out['A'] - B, out['NS'] - 1])
 
     # solve for beta, vphi
-    (beta, vphi), _ = solvers.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
+    (beta, vphi), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
 
     # extra evaluation to report variables
     ss = household_labor_ss(Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi)
@@ -187,42 +227,6 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
                'goods_mkt': 1 - ss['C'], 'ssflag': False})
     return ss
 
-
-'''Part 3: linearized transition dynamics'''
-
-
-@simple
-def firm(Y, w, Z, pi, mu, kappa):
-    L = Y / Z
-    Div = Y - w * L - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
-    return L, Div
-
-
-@simple
-def monetary(pi, rstar, phi):
-    # i = rstar + phi * pi
-    r = (1 + rstar(-1) + phi * pi(-1)) / (1 + pi) - 1
-    return r
-
-
-@simple
-def fiscal(r, B):
-    Tax = r * B
-    return Tax
-
-
-@simple
-def nkpc(pi, w, Z, Y, r, mu, kappa):
-    nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - np.log(1 + pi)
-    return nkpc_res
-
-
-@simple
-def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
-    asset_mkt = A - B
-    labor_mkt = NS - L
-    goods_mkt = Y - C - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
-    return asset_mkt, labor_mkt, goods_mkt
 
 
 def get_J(ss, T):
@@ -238,14 +242,14 @@ def get_J(ss, T):
     # jacobian of HA block
     T_div = ss['div_rule'] / np.sum(ss['pi_s'] * ss['div_rule'])
     T_tax = -ss['tax_rule'] / np.sum(ss['pi_s'] * ss['tax_rule'])
-    J_ha = het.all_Js(backward_iterate_labor, ss, T, {'r': {'r': 1},
-                                                      'w': {'w': 1},
-                                                      'Div': {'T': T_div},
-                                                      'Tax': {'T': T_tax}})
+    J_ha = het.all_Js(backward_iterate, ss, T, {'r': {'r': 1},
+                                                'w': {'w': 1},
+                                                'Div': {'T': T_div},
+                                                'Tax': {'T': T_tax}})
 
     # now combine all into a single jacobian, ORDER OF JACDICTS MATTERS
     J = jac.chain_jacobians(jacdicts=[J_firm, J_monetary, J_fiscal, J_ha, J_mkt, J_nkpc],
-                            inputs=['w', 'Y', 'pi', 'rstar', 'Z'], T=T)
+                            inputs=['w', 'Y', 'pi', 'rstar', 'Z'])
 
     return J
 
@@ -263,7 +267,7 @@ def get_G(J, T):
 
     # get G for X by chaining this together with J's targets
     J_targets = {k: v for k, v in J.items() if k in targets}
-    G = jac.chain_jacobians(jacdicts=[J_targets, J_unknowns, J], inputs=exogenous, T=T)
+    G = jac.chain_jacobians(jacdicts=[J_targets, J_unknowns, J], inputs=exogenous)
 
     return G
 
@@ -305,7 +309,7 @@ def household_td(back_it_fun, ss, **kwargs):
             Va_p = Va_path[t + 1, ...]
 
         backward_inputs = {**fixed_inputs, **{k: v[t, ...] for k, v in kwargs.items()}, 'Va_p': Va_p}  # order matters
-        Va_path[t, ...], a_path[t, ...], c_path[t, ...], n_path[t, ...], ns_path[t, ...] = backward_iterate_labor(
+        Va_path[t, ...], a_path[t, ...], c_path[t, ...], n_path[t, ...], ns_path[t, ...] = backward_iterate(
             **backward_inputs)
 
     # forward iteration
@@ -331,7 +335,7 @@ def td_map(ss, pi, w, Y, rstar, Z):
     tax = Tax[:, np.newaxis] / np.sum(ss['pi_s'] * ss['tax_rule']) * ss['tax_rule']
 
     # ha block
-    td = household_td(backward_iterate_labor, ss, T=div-tax, w=w, r=r)
+    td = household_td(backward_iterate, ss, T=div - tax, w=w, r=r)
     td.update({'pi': pi, 'w': w, 'Y': Y, 'L': L, 'r': r, 'Div': Div, 'Tax': Tax, 'rstar': rstar, 'Z': Z})
 
     # nkpc and market clearing

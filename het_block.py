@@ -3,6 +3,7 @@ import inspect
 import re
 import utils
 
+
 class HetBlock:
     def __init__(self, back_step_fun, exogenous, policy, backward):
         """Construct HetBlock from backward iteration function.
@@ -15,7 +16,7 @@ class HetBlock:
             names of Markov transition matrix for exogenous variable
             (now only single allowed for simplicity; use Kronecker product for more)
         policy : str or sequence of str
-            names of endogenous (continuous) policy variables,
+            names of policy variables of endogenous, continuous state variables
             e.g. assets 'a', must be returned by function
         backward : str or sequence of str
             variables that together comprise the 'v' that we use for iterating backward
@@ -31,7 +32,7 @@ class HetBlock:
         self.back_step_fun = back_step_fun
 
         self.all_outputs_order = re.findall('return (.*?)\n',
-                                       inspect.getsource(back_step_fun))[-1].replace(' ', '').split(',')
+                                            inspect.getsource(back_step_fun))[-1].replace(' ', '').split(',')
         all_outputs = set(self.all_outputs_order)
         self.all_inputs = set(inspect.getfullargspec(back_step_fun).args)
 
@@ -197,7 +198,10 @@ class HetBlock:
         # aggregate all outputs other than backward variables on grid, capitalize
         aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_outputs}
 
-        return {**sspol, 'D':D, **aggs}
+        # report all other inputs as well
+        report = {k: kwargs[k] for k in self.all_inputs - self.inputs_p if k in kwargs}
+
+        return {**sspol, **aggs, **report, 'Pi': kwargs[self.exogenous].copy(), 'D': D}
 
     def forward_step(self, D, Pi_T, pol_i, pol_pi):
         """Update distribution, calling on 1d and 2d-specific compiled routines.
@@ -241,15 +245,16 @@ class HetBlock:
         elif len(self.policy) == 2:
             p1, p2 = self.policy
             return utils.forward_step_shock_2d(Dss, Pi_T, pol_i_ss[p1], pol_i_ss[p2],
-                                       pol_pi_ss[p1], pol_pi_ss[p2], pol_pi_shock[p1], pol_pi_shock[p2])
+                                               pol_pi_ss[p1], pol_pi_ss[p2], pol_pi_shock[p1], pol_pi_shock[p2])
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
 
     def backward_step_fakenews(self, din_dict, desired_outputs, ssin_dict, ssout_list, 
-                                    Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h=1E-4):
+                               Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h=1E-4):
         # shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.all_outputs_order,
-                            utils.numerical_diff(self.back_step_fun, ssin_dict, din_dict, h, ssout_list))}
+                                                utils.numerical_diff(self.back_step_fun, ssin_dict, din_dict, h,
+                                                                     ssout_list))}
         curlyV = {k: shocked_outputs[k] for k in self.backward}
 
         # which affects the distribution tomorrow
@@ -262,12 +267,12 @@ class HetBlock:
         return curlyV, curlyD, curlyY
 
     def backward_iteration_fakenews(self, din_dict, desired_outputs, ssin_dict, ssout_list,
-                                        Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, T, h=1E-4):
+                                    Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, T, h=1E-4):
         """Iterate policy steps backward T times for a single shock."""
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, desired_outputs, ssin_dict, ssout_list, 
-                                                                Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h)
+                                                             Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h)
         
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -297,7 +302,7 @@ class HetBlock:
         return curlyPs
 
     def all_Js(self, ss, T, shock_dict, desired_outputs, h=1E-4):
-        # preliminary a: obtain steady-state inputs and other info, run once to get baseline for numerical differentiation
+        # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_ss_inputs(ss)
         Pi = ss[self.exogenous]
         Pi_T = Pi.T.copy()
@@ -363,7 +368,7 @@ def extract_info(back_step_fun, ss):
     V_name, *outcome_list = re.findall('return (.*?)\n',
                                        inspect.getsource(back_step_fun))[-1].replace(' ', '').split(',')
 
-    #ssy_list = [ss[k] for k in [V_name] + outcome_list]
+    # ssy_list = [ss[k] for k in [V_name] + outcome_list]
 
     input_names = inspect.getfullargspec(back_step_fun).args
     ssinput_dict = {}
