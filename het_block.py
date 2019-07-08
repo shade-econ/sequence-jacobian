@@ -67,13 +67,13 @@ class HetBlock:
 
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
-    def make_ss_inputs(self, ssin):
+    def make_inputs(self, indict):
         """Extract from ssin exactly the inputs needed for self.back_step_fun"""
-        ssin_new = {k: ssin[k] for k in self.all_inputs - self.inputs_p if k in ssin}
+        indict_new = {k: indict[k] for k in self.all_inputs - self.inputs_p if k in indict}
         try:
-            return {**ssin_new, **{k + '_p': ssin[k] for k in self.inputs_p}}
+            return {**indict_new, **{k + '_p': indict[k] for k in self.inputs_p}}
         except KeyError as e:
-            print(f'Missing backward variable initializer or Markov matrix {e} for {self.back_step_fun.__name__}!')
+            print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
             raise
 
     def policy_ss(self, ssin, tol=1E-8, maxit=5000):
@@ -94,7 +94,7 @@ class HetBlock:
             all steady-state outputs of backward iteration
         """
 
-        ssin = self.make_ss_inputs(ssin)
+        ssin = self.make_inputs(ssin)
         
         old = {}
         for it in range(maxit):
@@ -162,8 +162,9 @@ class HetBlock:
             sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], sspol[pol])
 
         # iterate until convergence by tol, or maxit
+        Pi_T = Pi.T.copy()
         for it in range(maxit):
-            Dnew = self.forward_step(D, Pi, sspol_i, sspol_pi)
+            Dnew = self.forward_step(D, Pi_T, sspol_i, sspol_pi)
 
             # only check convergence every 10 iterations for efficiency
             if it % 10 == 0 and utils.within_tolerance(D, Dnew, tol):
@@ -183,7 +184,7 @@ class HetBlock:
         If 'D' included, will be treated as seed. Seed for dist for exog Markov Pi is Pi_seed"""
 
         # extract information from kwargs
-        Pi_T = kwargs[self.exogenous].T.copy()
+        Pi = kwargs[self.exogenous]
         grid = {k: kwargs[k+'_grid'] for k in self.policy}
         D_seed = kwargs.get('D', None)
         pi_seed = kwargs.get(self.exogenous + '_seed', None)
@@ -192,12 +193,73 @@ class HetBlock:
         sspol = self.policy_ss(kwargs, backward_tol, backward_maxit)
 
         # run forward iteration
-        D = self.dist_ss(Pi_T, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
+        D = self.dist_ss(Pi, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
 
         # aggregate all outputs other than backward variables on grid, capitalize
         aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_outputs}
 
         return {**sspol, 'D':D, **aggs}
+
+    def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
+        """Evaluate dynamics for hetblock given dynamic paths for inputs in kwargs,
+        starting and ending in steady state ss (assume everything not given in kwargs
+        is constant at ss value).
+
+        If monotonic=True, use faster interpolation method for policies against grid,
+        otherwise use slower interpolation. 
+
+        Do not return full individual outputs and distribution unless returnindividual=True.
+        
+        Cannot alter Markov transition matrix or grid for now."""
+
+        # infer T from kwargs, check that all shocks have same length
+        shock_lengths = [x.shape[0] for x in kwargs.values()]
+        if shock_lengths[1:] != shock_lengths[:-1]:
+            raise ValueError('Not all shocks in kwargs are same length!')
+        T = shock_lengths[0]
+
+        # copy from ss info
+        Pi_T = ss[self.exogenous].T.copy()
+        grid = {k: ss[k+'_grid'] for k in self.policy}
+        D = ss['D']
+
+        # allocate empty arrays to store result, assume all like D
+        individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_outputs}
+
+        # backward iteration
+        backdict = ss.copy()
+        for t in reversed(range(T)):
+            # be careful: if you include vars from self.backward variables in kwargs, agents will use them!
+            backdict.update({k: v[t,...] for k, v in kwargs.items()})
+            individual = {k: v for k, v in zip(self.all_outputs_order, 
+                                    self.back_step_fun(**self.make_inputs(backdict)))}
+            backdict.update({k: individual[k] for k in self.backward})
+            for k in self.non_back_outputs:
+                individual_paths[k][t, ...] = individual[k]
+
+        D_path = np.empty((T,) + D.shape)
+        D_path[0, ...] = D
+        for t in range(T-1):
+            # have to interpolate policy separately for each t to get sparse transition matrices
+            sspol_i = {}
+            sspol_pi = {}
+            for pol in self.policy:
+                if monotonic:
+                    sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord(grid[pol], individual_paths[pol][t, ...])
+                else:
+                    sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], individual_paths[pol][t, ...])
+
+            # step forward
+            D_path[t+1, ...]= self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
+        
+        # obtain aggregates of all outputs, made uppercase
+        aggregates = {k.upper(): utils.fast_aggregate(D_path, individual_paths[k]) for k in self.non_back_outputs}
+
+        # return either this, or also include distributional information
+        if returnindividual:
+            return {**aggregates, **individual, 'D' : D_path}
+        else:
+            return aggregates
 
     def forward_step(self, D, Pi_T, pol_i, pol_pi):
         """Update distribution, calling on 1d and 2d-specific compiled routines.
@@ -298,7 +360,7 @@ class HetBlock:
 
     def all_Js(self, ss, T, shock_dict, desired_outputs, h=1E-4):
         # preliminary a: obtain steady-state inputs and other info, run once to get baseline for numerical differentiation
-        ssin_dict = self.make_ss_inputs(ss)
+        ssin_dict = self.make_inputs(ss)
         Pi = ss[self.exogenous]
         Pi_T = Pi.T.copy()
         grid = {k: ss[k+'_grid'] for k in self.policy}

@@ -345,6 +345,17 @@ def forward_step_shock_2d(Dss, Pi_T, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shoc
     # then apply exogenous transition matrix to update
     return (Pi_T @ Dshock.reshape(nZ, -1)).reshape(nZ, nX, nY)
 
+@njit
+def fast_aggregate(X, Y):
+    """If X has dims (T, ...) and Y has dims (T, ...), do dot product T-by-T to get length-T vector,
+    avoids costly creation of intermediates with np.sum(X*Y, axis=(...)) pattern for aggregation in td"""
+    T = X.shape[0]
+    Xnew = X.reshape(T, -1)
+    Ynew = Y.reshape(T, -1)
+    Z = np.empty(T)
+    for t in range(T):
+        Z[t] = Xnew[t, :] @ Ynew[t, :]
+    return Z
 
 def make_tuple(x):
     return (x,) if isinstance(x, str) else x
