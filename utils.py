@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import norm
 from numba import njit, guvectorize
-
+import scipy.linalg
 
 '''Part 1: Efficient interpolation'''
 
@@ -358,7 +358,7 @@ def fast_aggregate(X, Y):
     return Z
 
 def make_tuple(x):
-    return (x,) if isinstance(x, str) else x
+    return (x,) if not (isinstance(x, tuple) or isinstance(x, list)) else x
 
 def dist_ss(a_pol, Pi, a_grid, D_seed=None, pi_seed=None, tol=1E-10, maxit=100_000):
     """Iterate to find steady-state distribution."""
@@ -487,7 +487,7 @@ def markov_rouwenhorst(rho, sigma, N=7):
     return y, pi, Pi
 
 
-'''Part 4: topological sort'''
+'''Part 4: topological sort and related code'''
 
 
 class SetStack:
@@ -603,6 +603,50 @@ def topological_sort(dep, names=None):
         raise Exception(f'Topological sort failed: cyclic dependency {" -> ".join(cycle)}')
 
     return topsorted
+
+
+def block_sort(block_list, findrequired=False):
+    """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
+    optionally return which outputs must be computed as inputs of later blocks.
+    
+    Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
+    inferred) that indicate their aggregate inputs and outputs"""
+    # step 1: map outputs to blocks for topological sort
+    outmap = dict()
+    for num, block in enumerate(block_list):
+        if hasattr(block, 'outputs'):
+            outputs = block.outputs
+        elif isinstance(block, dict):
+            outputs = block.keys()
+        else:
+            raise ValueError(f'{block} is not recognized as block or does not provide outputs')
+
+        for o in outputs:
+            if o in outmap:
+                raise ValueError(f'{o} is output twice')
+            outmap[o] = num
+
+    # step 2: dependency graph for topological sort and input list
+    dep = {num: set() for num in range(len(block_list))}
+    if findrequired:
+        required = set()
+    for num, block in enumerate(block_list):
+        if hasattr(block, 'inputs'):
+            inputs = block.inputs
+        else:
+            inputs = set(i for o in block for i in block[o])
+
+        for i in inputs:
+            if i in outmap:
+                dep[num].add(outmap[i])
+                if findrequired:
+                    required.add(i)
+
+    # step 3: return topological sort, also 'required' if wanted
+    if findrequired:
+        return topological_sort(dep), required
+    else:
+        return topological_sort(dep)
 
 
 '''Part 5: nonlinear solvers'''
@@ -756,3 +800,10 @@ def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
     dy_list = [(y - y_ss) / h for y, y_ss in zip(y_list, y_ss_list)]
 
     return dy_list
+
+
+def factor(X):
+    return scipy.linalg.lu_factor(X)
+
+def factored_solve(Z, y):
+    return scipy.linalg.lu_solve(Z, y)

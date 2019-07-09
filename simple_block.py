@@ -3,6 +3,7 @@ import inspect
 import re
 from numba import njit
 import toeplitz
+import utils
 
 
 class SimpleSparse:
@@ -222,6 +223,8 @@ class SimpleBlock:
         self.f = f
         self.input_list = inspect.getfullargspec(f).args
         self.output_list = re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
+        self.inputs = set(self.input_list)
+        self.outputs = set(self.output_list)
 
     def __repr__(self):
         return f"<SimpleBlock '{self.f.__name__}'>"
@@ -242,7 +245,7 @@ class SimpleBlock:
             if k not in kwargs_new:
                 kwargs_new[k] = Ignore(ss[k])
 
-        return self.f(**kwargs_new)
+        return dict(zip(self.output_list, utils.make_tuple(self.f(**kwargs_new))))
 
     def __call__(self, *args, **kwargs):
         return self.f(*args, **kwargs)

@@ -66,7 +66,17 @@ class HetBlock:
 
         self.non_back_inputs = self.all_inputs - set(self.backward)
 
+        # aggregate outputs and inputs
+        self.inputs = self.non_back_inputs.copy()
+        self.inputs.remove(exogenous + '_p')
+        self.inputs.add(exogenous)
+        
+        self.outputs = {k.upper() for k in self.non_back_outputs}
+
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
+
+    def __repr__(self):
+        return f"<HetBlock '{self.back_step_fun.__name__}'>"
 
     def make_inputs(self, indict):
         """Extract from ssin exactly the inputs needed for self.back_step_fun"""
@@ -249,6 +259,7 @@ class HetBlock:
             sspol_pi = {}
             for pol in self.policy:
                 if monotonic:
+                    # TODO: change for two-asset case so assumption is monotonicity in own asset, not anything else
                     sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord(grid[pol], individual_paths[pol][t, ...])
                 else:
                     sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], individual_paths[pol][t, ...])
