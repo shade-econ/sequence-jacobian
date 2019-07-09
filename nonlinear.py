@@ -3,11 +3,12 @@ import utils
 import jacobian as jac
 import het_block as het
 
+
 def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, **kwargs):
     """Goes through block_list, topologically sorts the implied DAG, and evaluates non-SS paths in kwargs on it,
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
 
-    hetoptions = {'monotonic' : monotonic, 'returnindividual' : returnindividual}
+    hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual}
 
     # first get topological sort if none already provided
     if sort is None:
@@ -30,7 +31,8 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, *
     return results
 
 
-def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False, returnindividual=False, tol=1E-8, maxit=30, noisy=True, **kwargs):
+def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False, returnindividual=False,
+             tol=1E-8, maxit=30, noisy=True, **kwargs):
     # check to make sure that kwargs are valid shocks
     for x in unknowns + targets:
         if x in kwargs:

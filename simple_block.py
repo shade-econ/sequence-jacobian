@@ -300,7 +300,7 @@ def convert_tuple(x):
         return x
 
 
-def all_Js(f, ss, T=None, shock_list=None, h=1E-5):
+def jac(f, ss, T=None, shock_list=None, h=1E-5):
     """
     Assemble nested dict of Jacobians
 

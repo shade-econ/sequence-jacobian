@@ -182,7 +182,7 @@ def curlyJ_sorted(block_list, inputs, ss=None):
     for num in topsorted:
         block = block_list[num]
         if isinstance(block, sim.SimpleBlock):
-            jac = sim.all_Js(block, ss, shock_list=[i for i in block.input_list if i in shocks])
+            jac = sim.jac(block, ss, shock_list=[i for i in block.input_list if i in shocks])
         else:
             jac = block
         curlyJs.append(jac)
