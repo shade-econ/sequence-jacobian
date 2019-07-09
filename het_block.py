@@ -272,7 +272,7 @@ class HetBlock:
 
         # return either this, or also include distributional information
         if returnindividual:
-            return {**aggregates, **individual, 'D' : D_path}
+            return {**aggregates, **individual, 'D': D_path}
         else:
             return aggregates
 
