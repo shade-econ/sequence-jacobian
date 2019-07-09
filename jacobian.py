@@ -99,7 +99,8 @@ def pack_jacobians(jacdict, inputs, outputs, T):
     for iO in range(nO):
         subdict = jacdict.get(outputs[iO], {})
         for iI in range(nI):
-            outjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = subdict.get(inputs[iI], np.zeros((T, T)))
+            outjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = make_matrix(subdict.get(inputs[iI],
+                                                                                               np.zeros((T, T))), T)
     return outjac
 
 

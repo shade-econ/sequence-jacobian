@@ -8,7 +8,7 @@ from simple_block import simple
 import jacobian as jac
 
 
-"""Part 1: NEW STREAMLINED CODE"""
+'''Part 1: HA block'''
 
 
 @njit
@@ -55,10 +55,7 @@ def solve_cn(w, T, eis, frisch, vphi, uc_seed):
     return cn(uc, w, eis, frisch, vphi)
 
 
-"""Part 2: Steady state"""
-
-
-def backward_iterate(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag):
+def backward_iterate(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag=False):
     """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility.
 
     Order of returns matters! backward_var, assets, others
@@ -106,6 +103,9 @@ def backward_iterate(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vph
 household = het.HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
 
 
+'''Part 2: simple blocks'''
+
+
 @simple
 def firm(Y, w, Z, pi, mu, kappa):
     L = Y / Z
@@ -140,7 +140,65 @@ def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
     return asset_mkt, labor_mkt, goods_mkt
 
 
-"""Part 2: OLD CODE"""
+'''Part 3: Steady state'''
+
+
+def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1.2, B_Y=5.6, rho_s=0.966, sigma_s=0.5,
+            kappa=0.1, phi=1.5, nS=7, amax=150, nA=500, tax_rule=None, div_rule=None):
+    """Solve steady state of full GE model. Calibrate (beta, vphi) to hit target for interest rate and Y."""
+
+    # set up grid
+    a_grid = utils.agrid(amax=amax, n=nA)
+    e_grid, pi_s, Pi = utils.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
+
+    # default incidence rule is proportional to skill
+    if tax_rule is None:
+        tax_rule = e_grid  # scale does not matter, will be normalized anyway
+    if div_rule is None:
+        div_rule = e_grid
+
+    assert tax_rule.shape[0] == div_rule.shape[0] == nS, 'Incidence rules are inconsistent with income grid.'
+
+    # solve analitically what we can
+    B = B_Y
+    w = 1 / mu
+    Div = (1 - w)
+    Tax = r * B
+    div = Div / np.sum(pi_s * div_rule) * div_rule
+    tax = Tax / np.sum(pi_s * tax_rule) * tax_rule
+    T = div - tax
+
+    # figure out initializer
+    fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
+    coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis] + T[:, np.newaxis]
+    Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
+
+    # residual function
+    def res(x):
+        beta_loc, vphi_loc = x
+        # precompute constrained c and n which don't depend on Va
+        c_const_loc, n_const_loc = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi_loc, Va)
+        if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
+            raise ValueError('Clearly invalid inputs')
+        # out = household_labor_ss(Pi, a_grid, e_grid, T, w, r, beta_loc, eis, frisch, vphi_loc)
+        out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta_loc, eis=eis,
+                           frisch=frisch, vphi=vphi_loc, c_const=c_const_loc, n_const=n_const_loc, ssflag=True)
+        return np.array([out['A'] - B, out['NS'] - 1])
+
+    # solve for beta, vphi
+    (beta, vphi), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
+
+    # extra evaluation to report variables
+    c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
+    ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta, eis=eis,
+                      frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const, ssflag=True)
+    ss.update({'pi_s': pi_s, 'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
+               'Div': Div, 'Tax': Tax, 'div': div, 'tax': tax, 'div_rule': div_rule, 'tax_rule': tax_rule,
+               'goods_mkt': 1 - ss['C'], 'ssflag': False})
+    return ss
+
+
+"""OLD CODE"""
 
 
 def pol_labor_ss(Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, Va_seed=None, tol=1E-8, maxit=5000):
@@ -182,51 +240,6 @@ def household_labor_ss(Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, Va_
                'A': np.vdot(D, a), 'C': np.vdot(D, c), 'N': np.vdot(D, n), 'NS': np.vdot(D, ns)}
 
     return {**inputs, **results}
-
-
-def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1.2, B_Y=5.6, rho_s=0.966, sigma_s=0.5,
-            kappa=0.1, phi=1.5, nS=7, amax=150, nA=500, tax_rule=None, div_rule=None):
-    """Solve steady state of full GE model. Calibrate (beta, vphi) to hit target for interest rate and Y."""
-
-    # set up grid
-    a_grid = utils.agrid(amax=amax, n=nA)
-    e_grid, pi_s, Pi = utils.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
-
-    # default incidence rule is proportional to skill
-    if tax_rule is None:
-        tax_rule = e_grid  # scale does not matter, will be normalized anyway
-    if div_rule is None:
-        div_rule = e_grid
-
-    assert tax_rule.shape[0] == div_rule.shape[0] == nS, 'Incidence rules are inconsistent with income grid.'
-
-    # solve analitically what we can
-    B = B_Y
-    w = 1 / mu
-    Div = (1 - w)
-    Tax = r * B
-    div = Div / np.sum(pi_s * div_rule) * div_rule
-    tax = Tax / np.sum(pi_s * tax_rule) * tax_rule
-    T = div - tax
-
-    # residual function
-    def res(x):
-        beta_loc, vphi_loc = x
-        if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
-            raise ValueError('Clearly invalid inputs')
-        out = household_labor_ss(Pi, a_grid, e_grid, T, w, r, beta_loc, eis, frisch, vphi_loc)
-        return np.array([out['A'] - B, out['NS'] - 1])
-
-    # solve for beta, vphi
-    (beta, vphi), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
-
-    # extra evaluation to report variables
-    ss = household_labor_ss(Pi, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi)
-    ss.update({'pi_s': pi_s, 'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
-               'Div': Div, 'Tax': Tax, 'div': div, 'tax': tax, 'div_rule': div_rule, 'tax_rule': tax_rule,
-               'goods_mkt': 1 - ss['C'], 'ssflag': False})
-    return ss
-
 
 
 def get_J(ss, T):
