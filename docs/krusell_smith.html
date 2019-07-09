@@ -12259,8 +12259,8 @@ $$</p>
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Let's take a look at the Jacobian $dY/dZ$, which the <code>rec.all_Js</code> function computes numerically via symmetric differencing.</p>
-<p><code>rec.all_Js</code> reports the Jacobians it calculates as a nested Python dictionary ("dict"), where the first level is the output variable and the second level is the input variable.</p>
+<p>Let's take a look at the Jacobian $dY/dZ$, which the <code>rec.jac</code> function computes numerically via symmetric differencing.</p>
+<p><code>rec.jac</code> reports the Jacobians it calculates as a nested Python dictionary ("dict"), where the first level is the output variable and the second level is the input variable.</p>
 
 </div>
 </div>
@@ -12270,7 +12270,7 @@ $$</p>
 <div class="prompt input_prompt">In&nbsp;[11]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">J_firm</span> <span class="o">=</span> <span class="n">rec</span><span class="o">.</span><span class="n">all_Js</span><span class="p">(</span><span class="n">firm</span><span class="p">,</span> <span class="n">ss</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">shock_list</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;K&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">])</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">J_firm</span> <span class="o">=</span> <span class="n">rec</span><span class="o">.</span><span class="n">jac</span><span class="p">(</span><span class="n">firm</span><span class="p">,</span> <span class="n">ss</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">shock_list</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;K&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">J_firm</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">][</span><span class="s1">&#39;Z&#39;</span><span class="p">])</span>
 </pre></div>
 
@@ -12308,7 +12308,7 @@ $$</p>
 <p>The Jacobian is diagonal because the production function does not depend on leads or lags of productivity. Such sparsity is of course very common for simple blocks, and we wrote <code>rec_block.py</code> to take advantage of it.</p>
 <p>In principle, one could calculate a Jacobian between each input-output pair. In practice, it only makes sense to do so with respect to endogenous variables and shocks, hence the <code>shock_list</code> option. In this model, capital and TFP are the only inputs that will ever change.</p>
 <h3 id="3.2-HA-blocks">3.2 HA blocks<a class="anchor-link" href="#3.2-HA-blocks">&#182;</a></h3><p>HA blocks have more complicated Jacobians, but there's a regular structure that we can exploit to calculate them very quickly. For comprehensive coverage of our methods, please see the <a href="het_jacobian.ipynb">het-agent Jacobian notebook</a>.</p>
-<p>The tools for dealing with Jacobians of HA blocks are in <code>het_block.py</code>. At the end of the day, we'll be able to call a single function, much like <code>rec_block.all_Js</code> above. Note that the shocked inputs are specified as a nested dict. This may look like an unnecessarily complicated formulation for now, but it pays off handsomely in richer models, since it allows us to compute Jacobians with respect to shocks that change several multidimensional inputs to the HA block.</p>
+<p>The tools for dealing with Jacobians of HA blocks are in <code>het_block.py</code>. At the end of the day, we'll be able to call a single function, much like <code>rec_block.jac</code> above. Note that the shocked inputs are specified as a nested dict. This may look like an unnecessarily complicated formulation for now, but it pays off handsomely in richer models, since it allows us to compute Jacobians with respect to shocks that change several multidimensional inputs to the HA block.</p>
 
 </div>
 </div>
@@ -12318,7 +12318,7 @@ $$</p>
 <div class="prompt input_prompt">In&nbsp;[12]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">J_ha</span> <span class="o">=</span> <span class="n">het</span><span class="o">.</span><span class="n">all_Js</span><span class="p">(</span><span class="n">backward_iterate</span><span class="p">,</span> <span class="n">ss</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">shock_dict</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">J_ha</span> <span class="o">=</span> <span class="n">het</span><span class="o">.</span><span class="n">jac</span><span class="p">(</span><span class="n">backward_iterate</span><span class="p">,</span> <span class="n">ss</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">shock_dict</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">J_ha</span><span class="p">[</span><span class="s1">&#39;C&#39;</span><span class="p">][</span><span class="s1">&#39;r&#39;</span><span class="p">])</span>
 </pre></div>
 
@@ -12391,11 +12391,11 @@ $$</p>
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">T</span><span class="o">=</span><span class="mi">300</span>
 
 <span class="c1"># firm Jacobian: r and w as functions of Z and K</span>
-<span class="o">%</span><span class="k">time</span> J_firm = rec.all_Js(firm, ss, T, [&#39;K&#39;, &#39;Z&#39;])
+<span class="o">%</span><span class="k">time</span> J_firm = rec.jac(firm, ss, T, [&#39;K&#39;, &#39;Z&#39;])
 
 <span class="c1"># household Jacobian: curlyK (called &#39;a&#39; for assets by J_ha) as function of r and w</span>
-<span class="n">J_ha</span> <span class="o">=</span> <span class="n">het</span><span class="o">.</span><span class="n">all_Js</span><span class="p">(</span><span class="n">backward_iterate</span><span class="p">,</span> <span class="n">ss</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span> <span class="c1"># compile burn-in</span>
-<span class="o">%</span><span class="k">time</span> J_ha = het.all_Js(backward_iterate, ss, T, {&#39;r&#39;: {&#39;r&#39;: 1}, &#39;w&#39;: {&#39;w&#39;: 1}})
+<span class="n">J_ha</span> <span class="o">=</span> <span class="n">het</span><span class="o">.</span><span class="n">jac</span><span class="p">(</span><span class="n">backward_iterate</span><span class="p">,</span> <span class="n">ss</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;r&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span> <span class="c1"># compile burn-in</span>
+<span class="o">%</span><span class="k">time</span> J_ha = het.jac(backward_iterate, ss, T, {&#39;r&#39;: {&#39;r&#39;: 1}, &#39;w&#39;: {&#39;w&#39;: 1}})
 </pre></div>
 
 </div>

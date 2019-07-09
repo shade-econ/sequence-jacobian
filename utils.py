@@ -805,5 +805,6 @@ def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
 def factor(X):
     return scipy.linalg.lu_factor(X)
 
+
 def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)

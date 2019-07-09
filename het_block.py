@@ -374,7 +374,8 @@ class HetBlock:
             curlyPs[t, ...] = self.forward_step_transpose(curlyPs[t-1, ...], Pi, pol_i_ss, pol_pi_ss)
         return curlyPs
 
-    def all_Js(self, ss, T, shock_dict, desired_outputs, h=1E-4):
+    def jac(self, ss, T, shock_dict, desired_outputs, h=1E-4):
+        """Compute Jacobians via fake news algorithm."""
         # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_inputs(ss)
         Pi = ss[self.exogenous]
