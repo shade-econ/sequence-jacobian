@@ -196,3 +196,29 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
                'Div': Div, 'Tax': Tax, 'div': div, 'tax': tax, 'div_rule': div_rule, 'tax_rule': tax_rule,
                'goods_mkt': 1 - ss['C'], 'ssflag': False})
     return ss
+
+
+'''Part 4: Nonlinear transition'''
+
+
+def td_map(ss, **kwargs):
+    # initialize results
+    results = kwargs
+
+    # blocks before HA
+    for b in [firm, monetary, fiscal]:
+        results.update(b.td(ss, **{k: results[k] for k in b.inputs if k in results}))
+
+    # hetinput
+    results['div'] = results['Div'][:, np.newaxis] / np.sum(ss['pi_s'] * ss['div_rule']) * ss['div_rule']
+    results['tax'] = results['Tax'][:, np.newaxis] / np.sum(ss['pi_s'] * ss['tax_rule']) * ss['tax_rule']
+
+    # HA block
+    results.update(household.td(ss, monotonic=True, T=results['div']-results['tax'],
+                                **{k: results[k] for k in household.inputs if k in results}))
+
+    # blocks after HA
+    for b in [nkpc, mkt_clearing]:
+        results.update(b.td(ss, **{k: results[k] for k in b.inputs if k in results}))
+
+    return results

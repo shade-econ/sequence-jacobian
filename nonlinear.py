@@ -32,7 +32,7 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, *
 
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False, returnindividual=False,
-             tol=1E-8, maxit=30, noisy=True, **kwargs):
+             tol=1E-8, maxit=30, noisy=True, td_map_user=None, **kwargs):
     # check to make sure that kwargs are valid shocks
     for x in unknowns + targets:
         if x in kwargs:
@@ -52,7 +52,10 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
 
     # iterate until convergence
     for it in range(maxit):
-        results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
+        if td_map_user is None:
+            results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
+        else:
+            results = td_map_user(ss, **kwargs, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if noisy:
             print(f'On iteration {it}')

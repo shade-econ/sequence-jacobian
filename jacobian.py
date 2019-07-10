@@ -182,7 +182,7 @@ def curlyJ_sorted(block_list, inputs, ss=None):
     for num in topsorted:
         block = block_list[num]
         if isinstance(block, sim.SimpleBlock):
-            jac = sim.jac(block, ss, shock_list=[i for i in block.input_list if i in shocks])
+            jac = block.jac(ss, shock_list=[i for i in block.input_list if i in shocks])
         else:
             jac = block
         curlyJs.append(jac)
@@ -244,6 +244,7 @@ def forward_accumulate(curlyJs, inputs, outputs=None, required=None):
 
 '''Part 2: Convenience routines'''
 
+
 def get_H_U(block_list, unknowns, targets, T, ss=None):
     """Get n_u*T by n_u*T matrix H_U, Jacobian mapping all unknowns to all targets.
 
@@ -261,7 +262,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None):
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
@@ -361,16 +362,16 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     G : dict of dict, Jacobians for general equilibrium mapping from exogenous to outputs
     """
 
-    # step 0 (preliminaries): do topological sort and get curlyJs
+    # step 1: do topological sort and get curlyJs
     curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss)
 
-    # step 1: do (matrix) forward accumulation to get
+    # step 2: do (matrix) forward accumulation to get
     # H_U = J^(curlyH, curlyU) [if not provided], H_Z = J^(curlyH, curlyZ)
     if H_U is None and H_U_factored is None:
         J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)
     J_curlyH_Z = forward_accumulate(curlyJs, exogenous, targets, required)
 
-    # step 2: solve for G^U, unpack
+    # step 3: solve for G^U, unpack
     if H_U is None and H_U_factored is None:
         H_U = pack_jacobians(J_curlyH_U, unknowns, targets, T)
     H_Z = pack_jacobians(J_curlyH_Z, exogenous, targets, T)
@@ -380,7 +381,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     else:
         G_U = unpack_jacobians(-utils.factored_solve(H_U_factored, H_Z), exogenous, unknowns, T)
 
-    # step 3: forward accumulation to get all outputs starting with G_U
+    # step 4: forward accumulation to get all outputs starting with G_U
     # by default, don't calculate targets!
     curlyJs = [G_U] + curlyJs
     if outputs is None:

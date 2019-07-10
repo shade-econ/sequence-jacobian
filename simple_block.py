@@ -247,6 +247,66 @@ class SimpleBlock:
 
         return dict(zip(self.output_list, utils.make_tuple(self.f(**kwargs_new))))
 
+    def jac(self, ss, T=None, shock_list=None, h=1E-5):
+        """
+        Assemble nested dict of Jacobians
+
+        Parameters
+        ----------
+        ss : dict,
+            steady state values
+        T : int, optional
+            number of time periods for explicit T*T Jacobian; if omitted, more efficient SimpleSparse objects returned
+        shock_list : list of str, optional
+            names of input variables to differentiate wrt; if omitted, assume all inputs
+        h : float, optional
+            radius for symmetric numerical differentiation
+
+        Returns
+        -------
+        J : dict,
+            Jacobians as nested dict of SimpleSparse objects or, if T specified, (T*T) matrices,
+            with zero derivatives omitted by convention
+        """
+        if shock_list is None:
+            shock_list = self.input_list
+
+        raw_derivatives = {o: {} for o in self.output_list}
+        x_ss_new = {k: Ignore(ss[k]) for k in self.input_list}
+
+        # loop over all inputs to differentiate
+        for i in shock_list:
+            # detect all indices with which i appears
+            reporter = Reporter(ss[i])
+            x_ss_new[i] = reporter
+            self.f(**x_ss_new)
+            relevant_indices = reporter.myset
+            relevant_indices.add(0)
+
+            # evaluate derivative with respect to each and store in dict
+            for index in relevant_indices:
+                x_ss_new[i] = Perturb(ss[i], h, index)
+                y_up_all = convert_tuple(self.f(**x_ss_new))
+
+                x_ss_new[i] = Perturb(ss[i], -h, index)
+                y_down_all = convert_tuple(self.f(**x_ss_new))
+                for y_up, y_down, o in zip(y_up_all, y_down_all, self.output_list):
+                    if y_up != y_down:
+                        sparsederiv = raw_derivatives[o].setdefault(i, {})
+                        sparsederiv[index] = (y_up - y_down) / (2 * h)
+            x_ss_new[i] = Ignore(ss[i])
+
+        # process raw_derivatives to return either SimpleSparse objects or matrices
+        J = {o: {} for o in self.output_list}
+        for o in self.output_list:
+            for i in raw_derivatives[o].keys():
+                if T is None:
+                    J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i])
+                else:
+                    J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i]).matrix(T)
+
+        return J
+
     def __call__(self, *args, **kwargs):
         return self.f(*args, **kwargs)
 
@@ -298,66 +358,3 @@ def convert_tuple(x):
         return (x,)
     else:
         return x
-
-
-def jac(f, ss, T=None, shock_list=None, h=1E-5):
-    """
-    Assemble nested dict of Jacobians
-
-    Parameters
-    ----------
-    f : function,
-        simple model block
-    ss : dict,
-        steady state values
-    T : int, optional
-        number of time periods for explicit T*T Jacobian; if omitted, more efficient SimpleSparse objects returned
-    shock_list : list of str, optional
-        names of input variables to differentiate wrt; if omitted, assume all inputs
-    h : float, optional
-        radius for symmetric numerical differentiation
-
-    Returns
-    -------
-    J : dict,
-        Jacobians as nested dict of SimpleSparse objects or, if T specified, (T*T) matrices,
-        with zero derivatives omitted by convention
-    """
-    if shock_list is None:
-        shock_list = f.input_list
-
-    raw_derivatives = {o: {} for o in f.output_list}
-    x_ss_new = {k: Ignore(ss[k]) for k in f.input_list}
-
-    # loop over all inputs to differentiate
-    for i in shock_list:
-        # detect all indices with which i appears
-        reporter = Reporter(ss[i])
-        x_ss_new[i] = reporter
-        f(**x_ss_new)
-        relevant_indices = reporter.myset
-        relevant_indices.add(0)
-
-        # evaluate derivative with respect to each and store in dict
-        for index in relevant_indices:
-            x_ss_new[i] = Perturb(ss[i], h, index)
-            y_up_all = convert_tuple(f(**x_ss_new))
-
-            x_ss_new[i] = Perturb(ss[i], -h, index)
-            y_down_all = convert_tuple(f(**x_ss_new))
-            for y_up, y_down, o in zip(y_up_all, y_down_all, f.output_list):
-                if y_up != y_down:
-                    sparsederiv = raw_derivatives[o].setdefault(i, {})
-                    sparsederiv[index] = (y_up - y_down) / (2 * h)
-        x_ss_new[i] = Ignore(ss[i])
-
-    # process raw_derivatives to return either SimpleSparse objects or matrices
-    J = {o: {} for o in f.output_list}
-    for o in f.output_list:
-        for i in raw_derivatives[o].keys():
-            if T is None:
-                J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i])
-            else:
-                J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i]).matrix(T)
-
-    return J
