@@ -4,8 +4,73 @@ import jacobian as jac
 import het_block as het
 
 
+def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
+                                returnindividual=False, tol=1E-8, maxit=30, noisy=True, **kwargs):
+    """Solves for TD general equilibrium of SHADE model, given shocks in kwargs.
+
+    Note that either H_U or H_U_factored must be provided, latter given priority.
+
+    Parameters
+    ----------
+    ss              : dict, all steady-state information
+    block_list      : list, blocks in model (SimpleBlocks or HetBlocks)
+    unknowns        : list, unknowns of SHADE DAG, the 'U' in H(U, Z)
+    targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
+    H_U             : [optional] array (nU*nU), Jacobian of targets with respect to unknowns
+    H_U_factored    : [optional] tuple, LU decomposition of H_U, save time by supplying this from utils.factor()
+    monotonic       : [optional] bool, flag indicating HetBlock policy for some k' is monotonic in state k
+                                                                        (allows more efficient interpolation)
+    returnindividual: [optional] bool, flag to return individual outcomes from HetBlock.td
+    tol             : [optional] scalar, for convergence of Newton's method we require |H|<tol
+    maxit           : [optional] int, maximum number of iterations of Newton's method
+    noisy           : [optional] bool, flag to print largest absolute error for each target
+    kwargs          : dict, all shocked Z go here, must all have same length T
+
+    Returns
+    ----------
+    results : dict, return paths for all aggregate variables, plus individual outcomes of HetBlock if returnindividual
+    """
+    # check to make sure that kwargs are valid shocks
+    for x in unknowns + targets:
+        if x in kwargs:
+            raise ValueError(f'Shock {x} in td_solve cannot also be an unknown or target!')
+
+    # for now, assume we have H_U, will deal with the rest later!
+    if H_U_factored is None:
+        H_U_factored = utils.factor(H_U)
+
+    # initialize guess for unknowns at ss after inferring T
+    T = H_U_factored[0].shape[0] // len(unknowns)
+    Us = {k: np.full(T, ss[k]) for k in unknowns}
+    Uvec = jac.pack_vectors(Us, unknowns, T)
+
+    # do a topological sort once to avoid some redundancy
+    sort = utils.block_sort(block_list)
+
+    # iterate until convergence
+    for it in range(maxit):
+        results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
+        errors = {k: np.max(np.abs(results[k])) for k in targets}
+        if noisy:
+            print(f'On iteration {it}')
+            for k in errors:
+                print(f'   max error for {k} is {errors[k]:.2E}')
+        if all(v < tol for v in errors.values()):
+            break
+        else:
+            Hvec = jac.pack_vectors(results, targets, T)
+            Uvec -= utils.factored_solve(H_U_factored, Hvec)
+            Us = jac.unpack_vectors(Uvec, unknowns, T)
+    else:
+        raise ValueError(f'No convergence after {maxit} backward iterations!')
+    
+    return results
+
+
 def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, **kwargs):
-    """Goes through block_list, topologically sorts the implied DAG, and evaluates non-SS paths in kwargs on it,
+    """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
+    
+    Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
 
     hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual}
@@ -31,43 +96,3 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, *
     return results
 
 
-def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False, returnindividual=False,
-             tol=1E-8, maxit=30, noisy=True, td_map_user=None, **kwargs):
-    # check to make sure that kwargs are valid shocks
-    for x in unknowns + targets:
-        if x in kwargs:
-            raise ValueError(f'Shock {x} in td_solve cannot also be an unknown or target!')
-
-    # for now, assume we have H_U, will deal with the rest later!
-    if H_U_factored is None:
-        H_U_factored = utils.factor(H_U)
-
-    # initialize guess for unknowns at ss after inferring T
-    T = H_U_factored[0].shape[0] // len(unknowns)
-    Us = {k: np.full(T, ss[k]) for k in unknowns}
-    Uvec = jac.pack_vectors(Us, unknowns, T)
-
-    # do a topological sort once to avoid some redundancy
-    sort = utils.block_sort(block_list)
-
-    # iterate until convergence
-    for it in range(maxit):
-        if td_map_user is None:
-            results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
-        else:
-            results = td_map_user(ss, **kwargs, **Us)
-        errors = {k: np.max(np.abs(results[k])) for k in targets}
-        if noisy:
-            print(f'On iteration {it}')
-            for k in errors:
-                print(f'   max error for {k} is {errors[k]:.2E}')
-        if all(v < tol for v in errors.values()):
-            break
-        else:
-            Hvec = jac.pack_vectors(results, targets, T)
-            Uvec -= utils.factored_solve(H_U_factored, Hvec)
-            Us = jac.unpack_vectors(Uvec, unknowns, T)
-    else:
-        raise ValueError(f'No convergence after {maxit} backward iterations!')
-    
-    return results
