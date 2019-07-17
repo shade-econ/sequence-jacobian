@@ -2,7 +2,7 @@ import numpy as np
 import inspect
 import re
 import utils
-
+import copy
 
 class HetBlock:
     def __init__(self, back_step_fun, exogenous, policy, backward):
@@ -86,19 +86,21 @@ class HetBlock:
         if self.hetinput is not None:
             raise ValueError('Trying to attach hetinput when it is already there!')
 
-        self.hetinput = hetinput
-        self.hetinput_inputs = set(utils.input_list(hetinput))
-        self.hetinput_outputs_order = utils.output_list(hetinput)
+        newself = copy.deepcopy(self)
+        newself.hetinput = hetinput
+        newself.hetinput_inputs = set(utils.input_list(hetinput))
+        newself.hetinput_outputs_order = utils.output_list(hetinput)
 
         # modify inputs to include hetinput's additional inputs, remove outputs
-        self.inputs |= self.hetinput_inputs
-        self.inputs -= set(self.hetinput_outputs_order)
+        newself.inputs |= newself.hetinput_inputs
+        newself.inputs -= set(newself.hetinput_outputs_order)
+        return newself
 
     def make_inputs(self, indict):
         """Extract from indict exactly the inputs needed for self.back_step_fun,
         process stuff through hetinput first if it's there"""
         if self.hetinput is not None:
-            outputs_as_tuple = self.hetinput(**{k: indict[k] for k in self.hetinput_inputs})
+            outputs_as_tuple = utils.make_tuple(self.hetinput(**{k: indict[k] for k in self.hetinput_inputs if k in indict}))
             indict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
 
         indict_new = {k: indict[k] for k in self.all_inputs - self.inputs_p if k in indict}
@@ -371,7 +373,8 @@ class HetBlock:
         """Iterate policy steps backward T times for a single shock."""
         if self.hetinput is not None and input_shocked in self.hetinput_inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
-            din_dict = utils.numerical_diff_symmetric(self.hetinput, ss_for_hetinput, {input_shocked: 1}, h)
+            din_dict = dict(zip(self.hetinput_outputs_order, 
+                                utils.numerical_diff_symmetric(self.hetinput, ss_for_hetinput, {input_shocked: 1}, h)))
         else:
             # otherwise, we just have that one shock
             din_dict = {input_shocked: 1}
@@ -422,7 +425,7 @@ class HetBlock:
         ss_for_hetinput = None
         
         if self.hetinput is not None:
-            ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs}
+            ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
 
         # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
         sspol_i = {}

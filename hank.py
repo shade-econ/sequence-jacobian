@@ -2,7 +2,7 @@ import numpy as np
 from numba import vectorize, njit
 
 import utils
-import het_block as het
+from het_block import het
 import simple_block as sim
 from simple_block import simple
 import jacobian as jac
@@ -54,8 +54,8 @@ def solve_cn(w, T, eis, frisch, vphi, uc_seed):
     uc = solve_uc(w, T, eis, frisch, vphi, uc_seed)
     return cn(uc, w, eis, frisch, vphi)
 
-
-def backward_iterate(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag=False):
+@het(exogenous='Pi', policy='a', backward='Va')
+def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag=False):
     """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility.
 
     Order of returns matters! backward_var, assets, others
@@ -98,9 +98,6 @@ def backward_iterate(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vph
     ns = e_grid[:, np.newaxis] * n
 
     return Va, a, c, n, ns
-
-
-household = het.HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
 
 
 '''Part 2: simple blocks'''

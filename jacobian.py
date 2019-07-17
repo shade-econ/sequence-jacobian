@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import utils
 import simple_block as sim
+import het_block as het
 
 
 '''Part 1: Manipulating Jacobians'''
@@ -156,7 +157,7 @@ def make_matrix(A, T):
         return A
 
 
-def curlyJ_sorted(block_list, inputs, ss=None):
+def curlyJ_sorted(block_list, inputs, ss=None, T=None):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -165,7 +166,8 @@ def curlyJ_sorted(block_list, inputs, ss=None):
     ----------
     block_list : list, simple blocks or jacdicts
     inputs     : list, input names we need to differentiate with respect to
-    ss         : [optional] dict, steady state, needed if block_list includes simple blocks
+    ss         : [optional] dict, steady state, needed if block_list includes blocks themselves
+    T          : [optional] int, horizon for differentiation, needed if block_list includes hetblock itself
 
     Returns
     -------
@@ -182,7 +184,9 @@ def curlyJ_sorted(block_list, inputs, ss=None):
     for num in topsorted:
         block = block_list[num]
         if isinstance(block, sim.SimpleBlock):
-            jac = block.jac(ss, shock_list=[i for i in block.input_list if i in shocks])
+            jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
+        elif isinstance(block, het.HetBlock):
+            jac = block.jac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks])
         else:
             jac = block
         curlyJs.append(jac)
@@ -262,7 +266,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None):
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
@@ -300,7 +304,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
             T = len(x)
             break
 
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss, T)
 
     # step 1: if not provided, do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
     if H_U is None and H_U_factored is None:
@@ -363,7 +367,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     """
 
     # step 1: do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T)
 
     # step 2: do (matrix) forward accumulation to get
     # H_U = J^(curlyH, curlyU) [if not provided], H_Z = J^(curlyH, curlyZ)
