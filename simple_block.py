@@ -5,6 +5,107 @@ from numba import njit
 import toeplitz
 import utils
 
+'''Part 1: SimpleBlock class and @simple decorator to generate it'''
+
+
+def simple(f):
+    return SimpleBlock(f)
+
+
+class SimpleBlock:
+    """Generated from simple block written in Dynare-ish style and decorated with @simple"""
+
+    def __init__(self, f):
+        self.f = f
+        self.input_list = utils.input_list(f)
+        self.output_list = utils.output_list(f)
+        self.inputs = set(self.input_list)
+        self.outputs = set(self.output_list)
+
+    def __repr__(self):
+        return f"<SimpleBlock '{self.f.__name__}'>"
+
+    def ss(self, *args, **kwargs):
+        args = [Ignore(x) for x in args]
+        kwargs = {k: Ignore(v) for k, v in kwargs.items()}
+        return self.f(*args, **kwargs)
+
+    def td(self, ss, **kwargs):
+        kwargs_new = {}
+        for k, v in kwargs.items():
+            if np.isscalar(v):
+                raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
+            kwargs_new[k] = Displace(v, ss=ss.get(k, None), name=k)
+
+        for k in self.input_list:
+            if k not in kwargs_new:
+                kwargs_new[k] = Ignore(ss[k])
+
+        return dict(zip(self.output_list, utils.make_tuple(self.f(**kwargs_new))))
+
+    def jac(self, ss, T=None, shock_list=None, h=1E-5):
+        """
+        Assemble nested dict of Jacobians
+
+        Parameters
+        ----------
+        ss : dict,
+            steady state values
+        T : int, optional
+            number of time periods for explicit T*T Jacobian; if omitted, more efficient SimpleSparse objects returned
+        shock_list : list of str, optional
+            names of input variables to differentiate wrt; if omitted, assume all inputs
+        h : float, optional
+            radius for symmetric numerical differentiation
+
+        Returns
+        -------
+        J : dict,
+            Jacobians as nested dict of SimpleSparse objects or, if T specified, (T*T) matrices,
+            with zero derivatives omitted by convention
+        """
+        if shock_list is None:
+            shock_list = self.input_list
+
+        raw_derivatives = {o: {} for o in self.output_list}
+        x_ss_new = {k: Ignore(ss[k]) for k in self.input_list}
+
+        # loop over all inputs to differentiate
+        for i in shock_list:
+            # detect all indices with which i appears
+            reporter = Reporter(ss[i])
+            x_ss_new[i] = reporter
+            self.f(**x_ss_new)
+            relevant_indices = reporter.myset
+            relevant_indices.add(0)
+
+            # evaluate derivative with respect to each and store in dict
+            for index in relevant_indices:
+                x_ss_new[i] = Perturb(ss[i], h, index)
+                y_up_all = utils.make_tuple(self.f(**x_ss_new))
+
+                x_ss_new[i] = Perturb(ss[i], -h, index)
+                y_down_all = utils.make_tuple(self.f(**x_ss_new))
+                for y_up, y_down, o in zip(y_up_all, y_down_all, self.output_list):
+                    if y_up != y_down:
+                        sparsederiv = raw_derivatives[o].setdefault(i, {})
+                        sparsederiv[index] = (y_up - y_down) / (2 * h)
+            x_ss_new[i] = Ignore(ss[i])
+
+        # process raw_derivatives to return either SimpleSparse objects or matrices
+        J = {o: {} for o in self.output_list}
+        for o in self.output_list:
+            for i in raw_derivatives[o].keys():
+                if T is None:
+                    J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i])
+                else:
+                    J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i]).matrix(T)
+
+        return J
+
+
+'''Part 2: SimpleSparse class to represent and work with sparse Jacobians of SimpleBlocks'''
+
 
 class SimpleSparse:
     __array_priority__ = 1000
@@ -183,8 +284,11 @@ def multiply_rs_matrix(indices, xs, A):
     return Aout
 
 
+'''Part 3: helper classes used by SimpleBlock for .ss, .td, and .jac evaluation'''
+
+
 class Ignore(float):
-    """This class ignores time displacements of a scalar. Needed for SS eval of SimpleBlocks"""
+    """This class ignores time displacements of a scalar."""
 
     def __call__(self, index):
         return self
@@ -192,7 +296,7 @@ class Ignore(float):
 
 class Displace(np.ndarray):
     """This class makes time displacements of a time path, given the steady-state value.
-    Needed for TD eval of SimpleBlocks"""
+    Needed for SimpleBlock.td()"""
 
     def __new__(cls, x, ss=None, name='UNKNOWN'):
         obj = np.asarray(x).view(cls)
@@ -216,107 +320,9 @@ class Displace(np.ndarray):
             return self
 
 
-class SimpleBlock:
-    """Generated from simple block written in Dynare-ish style and decorated with @simple"""
-
-    def __init__(self, f):
-        self.f = f
-        self.input_list = utils.input_list(f)
-        self.output_list = utils.output_list(f)
-        self.inputs = set(self.input_list)
-        self.outputs = set(self.output_list)
-
-    def __repr__(self):
-        return f"<SimpleBlock '{self.f.__name__}'>"
-
-    def ss(self, *args, **kwargs):
-        args = [Ignore(x) for x in args]
-        kwargs = {k: Ignore(v) for k, v in kwargs.items()}
-        return self.f(*args, **kwargs)
-
-    def td(self, ss, **kwargs):
-        kwargs_new = {}
-        for k, v in kwargs.items():
-            if np.isscalar(v):
-                raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
-            kwargs_new[k] = Displace(v, ss=ss.get(k, None), name=k)
-
-        for k in self.input_list:
-            if k not in kwargs_new:
-                kwargs_new[k] = Ignore(ss[k])
-
-        return dict(zip(self.output_list, utils.make_tuple(self.f(**kwargs_new))))
-
-    def jac(self, ss, T=None, shock_list=None, h=1E-5):
-        """
-        Assemble nested dict of Jacobians
-
-        Parameters
-        ----------
-        ss : dict,
-            steady state values
-        T : int, optional
-            number of time periods for explicit T*T Jacobian; if omitted, more efficient SimpleSparse objects returned
-        shock_list : list of str, optional
-            names of input variables to differentiate wrt; if omitted, assume all inputs
-        h : float, optional
-            radius for symmetric numerical differentiation
-
-        Returns
-        -------
-        J : dict,
-            Jacobians as nested dict of SimpleSparse objects or, if T specified, (T*T) matrices,
-            with zero derivatives omitted by convention
-        """
-        if shock_list is None:
-            shock_list = self.input_list
-
-        raw_derivatives = {o: {} for o in self.output_list}
-        x_ss_new = {k: Ignore(ss[k]) for k in self.input_list}
-
-        # loop over all inputs to differentiate
-        for i in shock_list:
-            # detect all indices with which i appears
-            reporter = Reporter(ss[i])
-            x_ss_new[i] = reporter
-            self.f(**x_ss_new)
-            relevant_indices = reporter.myset
-            relevant_indices.add(0)
-
-            # evaluate derivative with respect to each and store in dict
-            for index in relevant_indices:
-                x_ss_new[i] = Perturb(ss[i], h, index)
-                y_up_all = convert_tuple(self.f(**x_ss_new))
-
-                x_ss_new[i] = Perturb(ss[i], -h, index)
-                y_down_all = convert_tuple(self.f(**x_ss_new))
-                for y_up, y_down, o in zip(y_up_all, y_down_all, self.output_list):
-                    if y_up != y_down:
-                        sparsederiv = raw_derivatives[o].setdefault(i, {})
-                        sparsederiv[index] = (y_up - y_down) / (2 * h)
-            x_ss_new[i] = Ignore(ss[i])
-
-        # process raw_derivatives to return either SimpleSparse objects or matrices
-        J = {o: {} for o in self.output_list}
-        for o in self.output_list:
-            for i in raw_derivatives[o].keys():
-                if T is None:
-                    J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i])
-                else:
-                    J[o][i] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][i]).matrix(T)
-
-        return J
-
-    def __call__(self, *args, **kwargs):
-        return self.f(*args, **kwargs)
-
-
-def simple(f):
-    return SimpleBlock(f)
-
-
 class Reporter(float):
-    """This class adds to a shared set to tell us what x[i] are accessed. Needed for differentiation of SimpleBlocks."""
+    """This class adds to a shared set to tell us what x[i] are accessed.
+    Needed for differentiation in SimpleBlock.jac()"""
 
     def __init__(self, value):
         self.myset = set()
@@ -327,8 +333,8 @@ class Reporter(float):
 
 
 class Perturb(float):
-    """This class uses the shared set to perturb each x[i] separately, starting at steady-state values,
-    for differentiation of SimpleBlocks."""
+    """This class uses the shared set to perturb each x[i] separately, starting at steady-state values.
+    Needed for differentiation in SimpleBlock.jac()"""
 
     def __new__(cls, value, h, index):
         if index == 0:
@@ -351,10 +357,3 @@ class Perturb(float):
                 return self + self.h
             else:
                 return self
-
-
-def convert_tuple(x):
-    if not isinstance(x, tuple):
-        return (x,)
-    else:
-        return x
