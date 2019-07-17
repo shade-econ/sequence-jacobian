@@ -239,7 +239,7 @@ class HetBlock:
         # aggregate all outputs other than backward variables on grid, capitalize
         aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_outputs}
 
-        return {**sspol, **aggs, **report, 'D': D}
+        return {**sspol, **aggs, 'D': D}
 
     def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
         """Evaluate dynamics for hetblock given dynamic paths for inputs in kwargs,
