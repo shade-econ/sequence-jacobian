@@ -2,6 +2,8 @@ import numpy as np
 from scipy.stats import norm
 from numba import njit, guvectorize
 import scipy.linalg
+import re
+import inspect
 
 '''Part 1: Efficient interpolation'''
 
@@ -801,6 +803,21 @@ def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
 
     return dy_list
 
+def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
+    """Differentiate function via symmetric difference."""
+
+    # response to small shock in each direction
+    shocked_inputs_up = {**ssinputs_dict, **{k: ssinputs_dict[k] + h * shock for k, shock in shock_dict.items()}}
+    y_up_list = func(**shocked_inputs_up)
+
+    shocked_inputs_down = {**ssinputs_dict, **{k: ssinputs_dict[k] - h * shock for k, shock in shock_dict.items()}}
+    y_down_list = func(**shocked_inputs_down)
+
+    # scale responses back up
+    dy_list = [(y_up - y_down) / (2*h) for y_up, y_down in zip(y_up_list, y_down_list)]
+
+    return dy_list
+
 
 def factor(X):
     return scipy.linalg.lu_factor(X)
@@ -808,3 +825,11 @@ def factor(X):
 
 def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)
+
+
+def output_list(f):
+    return re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
+
+
+def input_list(f):
+    return inspect.getfullargspec(f).args

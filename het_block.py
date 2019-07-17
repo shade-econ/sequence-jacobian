@@ -31,10 +31,9 @@ class HetBlock:
 
         self.back_step_fun = back_step_fun
 
-        self.all_outputs_order = re.findall('return (.*?)\n',
-                                            inspect.getsource(back_step_fun))[-1].replace(' ', '').split(',')
+        self.all_outputs_order = utils.output_list(back_step_fun)
         all_outputs = set(self.all_outputs_order)
-        self.all_inputs = set(inspect.getfullargspec(back_step_fun).args)
+        self.all_inputs = set(utils.input_list(back_step_fun))
 
         self.exogenous = exogenous
         self.policy, self.backward = (utils.make_tuple(x) for x in (policy, backward))
@@ -64,22 +63,44 @@ class HetBlock:
             if out.isupper():
                 raise ValueError("Output '{out}' is uppercase in {back_step_fun.__name__}, not allowed")
 
-        self.non_back_inputs = self.all_inputs - set(self.backward)
-
-        # aggregate outputs and inputs
-        self.inputs = self.non_back_inputs.copy()
+        # aggregate outputs and inputs for utils.block_sort
+        self.inputs = self.all_inputs - {k + '_p' for k in self.backward}
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
         
         self.outputs = {k.upper() for k in self.non_back_outputs}
+
+        # start without a hetinput
+        self.hetinput = None
+        self.hetinput_inputs = set()
+        self.hetinput_outputs_order = tuple()
 
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
     def __repr__(self):
         return f"<HetBlock '{self.back_step_fun.__name__}'>"
 
+    def attach_hetinput(self, hetinput):
+        """Make new HetBlock that first processes inputs through hetinput.
+        Assumes 'self' currently does not have hetinput."""
+        if self.hetinput is not None:
+            raise ValueError('Trying to attach hetinput when it is already there!')
+
+        self.hetinput = hetinput
+        self.hetinput_inputs = set(utils.input_list(hetinput))
+        self.hetinput_outputs_order = utils.output_list(hetinput)
+
+        # modify inputs to include hetinput's additional inputs, remove outputs
+        self.inputs |= self.hetinput_inputs
+        self.inputs -= set(self.hetinput_outputs_order)
+
     def make_inputs(self, indict):
-        """Extract from ssin exactly the inputs needed for self.back_step_fun"""
+        """Extract from indict exactly the inputs needed for self.back_step_fun,
+        process stuff through hetinput first if it's there"""
+        if self.hetinput is not None:
+            outputs_as_tuple = self.hetinput(**{k: indict[k] for k in self.hetinput_inputs})
+            indict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
+
         indict_new = {k: indict[k] for k in self.all_inputs - self.inputs_p if k in indict}
         try:
             return {**indict_new, **{k + '_p': indict[k] for k in self.inputs_p}}
@@ -102,9 +123,10 @@ class HetBlock:
         Returns
         ----------
         sspol : dict
-            all steady-state outputs of backward iteration
+            all steady-state outputs of backward iteration, combined with inputs to backward iteration
         """
 
+        original_ssin = ssin
         ssin = self.make_inputs(ssin)
         
         old = {}
@@ -126,7 +148,15 @@ class HetBlock:
         else:
             raise ValueError(f'No convergence of policy functions after {maxit} backward iterations!')
         
-        return sspol
+        # want to record inputs in ssin, but remove _p, add in hetinput inputs if there
+        for k in self.inputs_p:
+            ssin[k] = ssin[k + '_p']
+            del ssin[k + '_p']
+        if self.hetinput is not None:
+            for k in self.hetinput_inputs:
+                if k in original_ssin:
+                    ssin[k] = original_ssin[k]
+        return {**ssin, **sspol}
 
     def dist_ss(self, Pi, sspol, grid, tol=1E-10, maxit=5000, D_seed=None, pi_seed=None):
         """Find steady-state distribution through forward iteration until convergence.
@@ -209,10 +239,7 @@ class HetBlock:
         # aggregate all outputs other than backward variables on grid, capitalize
         aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_outputs}
 
-        # report all other inputs as well
-        report = {k: kwargs[k] for k in self.all_inputs - self.inputs_p if k in kwargs}
-
-        return {**sspol, **aggs, **report, 'Pi': Pi, 'D': D}
+        return {**sspol, **aggs, **report, 'D': D}
 
     def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
         """Evaluate dynamics for hetblock given dynamic paths for inputs in kwargs,
@@ -322,7 +349,7 @@ class HetBlock:
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
 
-    def backward_step_fakenews(self, din_dict, desired_outputs, ssin_dict, ssout_list, 
+    def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list, 
                                Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h=1E-4):
         # shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.all_outputs_order,
@@ -335,16 +362,22 @@ class HetBlock:
         curlyD = self.forward_step_shock(Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_pi_shock)
 
         # and the aggregate outcomes today
-        curlyY = {k: np.vdot(Dss, shocked_outputs[k]) for k in desired_outputs}
+        curlyY = {k: np.vdot(Dss, shocked_outputs[k]) for k in output_list}
 
         return curlyV, curlyD, curlyY
 
-    def backward_iteration_fakenews(self, din_dict, desired_outputs, ssin_dict, ssout_list,
-                                    Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, T, h=1E-4):
+    def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T, 
+                                    pol_i_ss, pol_pi_ss, pol_space_ss, T, h=1E-4, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
+        if self.hetinput is not None and input_shocked in self.hetinput_inputs:
+            # if input_shocked is an input to hetinput, take numerical diff to get response
+            din_dict = utils.numerical_diff_symmetric(self.hetinput, ss_for_hetinput, {input_shocked: 1}, h)
+        else:
+            # otherwise, we just have that one shock
+            din_dict = {input_shocked: 1}
 
         # contemporaneous response to unit scalar shock
-        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, desired_outputs, ssin_dict, ssout_list, 
+        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list, 
                                                              Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h)
         
         # infer dimensions from this and initialize empty arrays
@@ -359,7 +392,7 @@ class HetBlock:
         # fill in anticipation effects
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
-                                                    desired_outputs, ssin_dict, ssout_list, 
+                                                    output_list, ssin_dict, ssout_list, 
                                                     Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
@@ -374,14 +407,22 @@ class HetBlock:
             curlyPs[t, ...] = self.forward_step_transpose(curlyPs[t-1, ...], Pi, pol_i_ss, pol_pi_ss)
         return curlyPs
 
-    def jac(self, ss, T, shock_dict, desired_outputs, h=1E-4):
+    def jac(self, ss, T, shock_list, output_list=None, h=1E-4):
         """Compute Jacobians via fake news algorithm."""
+        if output_list is None:
+            # default outputs are just all outputs of back it function except backward variables
+            output_list = self.non_back_outputs
+
         # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_inputs(ss)
         Pi = ss[self.exogenous]
         Pi_T = Pi.T.copy()
         grid = {k: ss[k+'_grid'] for k in self.policy}
         ssout_list = self.back_step_fun(**ssin_dict)
+        ss_for_hetinput = None
+        
+        if self.hetinput is not None:
+            ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs}
 
         # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
         sspol_i = {}
@@ -394,19 +435,20 @@ class HetBlock:
 
         # step 1: compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = dict(), dict()
-        for i, shock in shock_dict.items():
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(shock, desired_outputs, ssin_dict, ssout_list,
-                                                                ss['D'], Pi_T, sspol_i, sspol_pi, sspol_space, T, h)
+        for i in shock_list:
+            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, ssin_dict, ssout_list,
+                                                                ss['D'], Pi_T, sspol_i, sspol_pi, sspol_space, T, h,
+                                                                ss_for_hetinput)
 
         # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = dict()
-        for o in desired_outputs:
+        for o in output_list:
             curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T)
 
         # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
-        J = {o.upper(): {} for o in desired_outputs}
-        for o in desired_outputs:
-            for i in shock_dict:
+        J = {o.upper(): {} for o in output_list}
+        for o in output_list:
+            for i in shock_list:
                 F = build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.upper()][i] = J_from_F(F)
 

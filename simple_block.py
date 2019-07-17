@@ -221,8 +221,8 @@ class SimpleBlock:
 
     def __init__(self, f):
         self.f = f
-        self.input_list = inspect.getfullargspec(f).args
-        self.output_list = re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
+        self.input_list = utils.input_list(f)
+        self.output_list = utils.output_list(f)
         self.inputs = set(self.input_list)
         self.outputs = set(self.output_list)
 
