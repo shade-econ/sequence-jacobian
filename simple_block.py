@@ -1,6 +1,5 @@
 import numpy as np
 from numba import njit
-import toeplitz
 import utils
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
@@ -131,19 +130,6 @@ class SimpleSparse:
             indices, xs = zip(*self.elements.items())
             self.indices, self.xs = np.array(indices), np.array(xs)
             return self.indices, self.xs
-
-    @property
-    def asymptotic_vector(self):
-        indices, xs = self.array()
-        tau = np.max(np.abs(indices[:, 0])) + 1  # how far out do we go?
-        v = np.zeros(2 * tau - 1)
-        # v[indices[:, 0]+tau-1] = xs
-        v[-indices[:, 0] + tau - 1] = xs  # switch from asymptotic ROW to asymptotic COLUMN
-        return toeplitz.AsymptoticVector(v)
-
-    @property
-    def asymptotic_toeplitz(self):
-        return self.asymptotic_vector.make_toeplitz()
 
     @property
     def T(self):
