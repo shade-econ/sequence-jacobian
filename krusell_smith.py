@@ -87,7 +87,7 @@ def household_ss(Pi, a_grid, e_grid, r, w, beta, eis, Va_seed=None, D_seed=None,
     return {**inputs, **results}
 
 
-def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, sigma=0.5, nS=7, nA=500, amax=20):
+def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, sigma=0.5, nS=7, nA=500, amax=200):
     """Solve steady state of full GE model. Calibrate beta to hit target for interest rate."""
     # set up grid
     a_grid = utils.agrid(amax=amax, n=nA)
