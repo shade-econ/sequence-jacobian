@@ -305,7 +305,7 @@ class HetBlock:
                     ssin[k] = original_ssin[k]
         return {**ssin, **sspol}
 
-    def dist_ss(self, Pi, sspol, grid, tol=1E-10, maxit=5000, D_seed=None, pi_seed=None):
+    def dist_ss(self, Pi, sspol, grid, tol=1E-10, maxit=100_000, D_seed=None, pi_seed=None):
         """Find steady-state distribution through forward iteration until convergence.
 
         Parameters
