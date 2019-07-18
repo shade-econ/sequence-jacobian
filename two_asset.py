@@ -117,8 +117,9 @@ def step4(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
     # b'(z, b, a), a'(z, b, a)
     # assert np.min(np.diff(b_endo, axis=1)) > 0, 'b(bp) is not increasing'
     # assert np.min(np.diff(ap_endo, axis=1)) > 0, 'ap(bp) is not increasing'
-    i, pi, ap = utils.interpolate_2d(b_endo, b_grid, ap_endo)
-    bp = utils.apply_coord_2d(i, pi, b_grid)
+    i, pi = utils.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
+    ap = utils.apply_coord(i, pi, ap_endo.swapaxes(1, 2)).swapaxes(1, 2)
+    bp = utils.apply_coord(i, pi, b_grid).swapaxes(1, 2)
     return bp, ap
 
 
@@ -164,7 +165,8 @@ def step6(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
     # b'(z, b, a), a'(z, b, a)
     # assert np.min(np.diff(b_endo, axis=1)) < 0, 'b(kappa) is not decreasing'
     # assert np.min(np.diff(ap_endo, axis=1)) < 0, 'ap(kappa) is not decreasing'
-    _, _, ap = utils.interpolate_2d(b_endo[:, ::-1, :], b_grid, ap_endo[:, ::-1, :])
+    ap = utils.interpolate_y(b_endo[:, ::-1, :].swapaxes(1, 2), b_grid, 
+                             ap_endo[:, ::-1, :].swapaxes(1, 2)).swapaxes(1, 2)
     return ap
 
 

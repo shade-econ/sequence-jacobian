@@ -71,6 +71,17 @@ def interpolate_coord(x, xq, xqi, xqpi):
         xqi[xqi_cur] = xi
 
 
+@guvectorize(['void(int64[:], float64[:], float64[:], float64[:])',
+              'void(uint32[:], float64[:], float64[:], float64[:])'], '(nq),(nq),(n)->(nq)')
+def apply_coord(x_i, x_pi, y, yq):
+    """Apply interpolation rule."""
+    nq = x_i.shape[0]
+    for iq in range(nq):
+        y_low = y[x_i[iq]]
+        y_high = y[x_i[iq]+1]
+        yq[iq] = x_pi[iq]*y_low + (1-x_pi[iq])*y_high
+
+
 def interpolate_coord_robust(x, xq, check_increasing=False):
     """Wrapper for interpolate_coord_robust_vector that works if xq not vector,
     but still require x to be a vector"""
@@ -134,112 +145,6 @@ def interpolate_coord_robust_vector(x, xq):
         xqpi[iq] = (x[ilow+1] - xq[iq]) / (x[ilow+1] - x[ilow])
 
     return xqi, xqpi
-
-
-'''From shade-public:'''
-
-
-@njit
-def interpolate_2d(x, xq, y):
-    """Linear interpolation along middle dimension of 3-dimensional array.
-
-    Parameters
-    ----------
-    x  : array (z, b, a), data points increasing in b-dimension
-    xq : array (b), increasing query points
-    y  : array (b), data points
-
-    Returns
-    -------
-    x_i  : array (z, b, a), index of lower bracketing data point
-    x_pi : array (z, b, a), weight on x_i
-    yq   : array (z, b, a), interpolated values
-    """
-    nZ, nB, nA = x.shape
-    yq = np.empty(x.shape)
-    x_i = np.empty(x.shape, dtype=np.int64)
-    x_pi = np.empty(x.shape)
-
-    for iz in range(nZ):
-        for ia in range(nA):
-            xi = 0
-            x_low = x[iz, 0, ia]
-            x_high = x[iz, 1, ia]
-            for ib in range(nB):
-                xq_cur = xq[ib]
-                while xi < nB - 2:
-                    if x_high >= xq_cur:
-                        break
-                    xi += 1
-                    x_low = x_high
-                    x_high = x[iz, xi + 1, ia]
-
-                xqpi_cur = (x_high - xq_cur) / (x_high - x_low)
-                yq[iz, ib, ia] = xqpi_cur * y[iz, xi, ia] + (1 - xqpi_cur) * y[iz, xi + 1, ia]
-                x_i[iz, ib, ia] = xi
-                x_pi[iz, ib, ia] = xqpi_cur
-
-    return x_i, x_pi, yq
-
-
-@njit
-def interpolate_coord_2d(x, xq):
-    """Linear interpolation along last dimension of 3-dimensional array.
-
-    Parameters
-    ----------
-    x    : array(z, b, a), data points increasing along axis=2
-    xq   : array(k); query points increasing
-
-    Returns
-    -------
-    x_i  : array(z, b, a}; index of lower bracketing data point
-    x_pi : array(z, b, a); weight on x_i
-    """
-    nZ, nB, nA = x.shape
-    nxq = xq.shape[0]
-    x_i = np.empty(x.shape, dtype=np.int64)
-    x_pi = np.empty_like(x)
-
-    for iz in range(nZ):
-        for ib in range(nB):
-            ixp = 1
-            xp_last = xq[0]
-            xp_cur = xq[1]
-            for ia in range(nA):
-                # iterate through every point in x
-                x_cur = x[iz, ib, ia]
-
-                while ixp < nxq - 1:
-                    # now iterate forward on points in xp until we find one greater than x_cur
-                    if xp_cur >= x_cur:
-                        # we've found an ixp such that xp[ixp-1] <= x[ix] < xp[ixp],
-                        # unless we're outside xp[0] and xp[-1]
-                        break
-                    ixp += 1
-                    xp_last = xp_cur
-                    xp_cur = xq[ixp]
-
-                # find the fraction assigned to ixp_1 vs ixp
-                x_i[iz, ib, ia] = ixp - 1
-                x_pi[iz, ib, ia] = (xp_cur - x_cur) / (xp_cur - xp_last)
-
-    return x_i, x_pi
-
-
-@njit
-def apply_coord_2d(x_i, x_pi, y):
-    """Apply interpolation rule."""
-    nZ, nB, nA = x_i.shape
-    yq = np.empty(x_i.shape)
-
-    for iz in range(nZ):
-        for ib in range(nB):
-            for ia in range(nA):
-                y_low = y[x_i[iz, ib, ia]]
-                y_high = y[x_i[iz, ib, ia]+1]
-                yq[iz, ib, ia] = x_pi[iz, ib, ia]*y_low + (1-x_pi[iz, ib, ia])*y_high
-    return yq
 
 
 '''Part 2: Operations on the discretized distribution'''
