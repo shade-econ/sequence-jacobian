@@ -1,6 +1,4 @@
 import numpy as np
-import inspect
-import re
 from numba import njit
 import toeplitz
 import utils

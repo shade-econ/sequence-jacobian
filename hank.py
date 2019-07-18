@@ -3,12 +3,55 @@ from numba import vectorize, njit
 
 import utils
 from het_block import het
-import simple_block as sim
 from simple_block import simple
-import jacobian as jac
 
 
 '''Part 1: HA block'''
+
+
+@het(exogenous='Pi', policy='a', backward='Va')
+def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag=False):
+    """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility.
+
+    Order of returns matters! backward_var, assets, others
+    """
+    # this one is useful to do internally
+    ws = w * e_grid
+
+    # uc(z_t, a_t)
+    uc_nextgrid = (beta * Pi_p) @ Va_p
+
+    # c(z_t, a_t) and n(z_t, a_t)
+    c_nextgrid, n_nextgrid = cn(uc_nextgrid, ws[:, np.newaxis], eis, frisch, vphi)
+
+    # c(z_t, a_{t-1}) and n(z_t, a_{t-1})
+    lhs = c_nextgrid - ws[:, np.newaxis] * n_nextgrid + a_grid[np.newaxis, :] - T[:, np.newaxis]
+    rhs = (1 + r) * a_grid
+    c = utils.interpolate_y(lhs, rhs, c_nextgrid)
+    n = utils.interpolate_y(lhs, rhs, n_nextgrid)
+
+    # test constraints, replace if needed
+    a = rhs + ws[:, np.newaxis] * n + T[:, np.newaxis] - c
+    iconst = np.nonzero(a < a_grid[0])
+    a[iconst] = a_grid[0]
+
+    if ssflag:
+        # use precomputed values
+        c[iconst] = c_const[iconst]
+        n[iconst] = n_const[iconst]
+    else:
+        # have to solve again if in transition
+        uc_seed = c_const[iconst] ** (-1 / eis)
+        c[iconst], n[iconst] = solve_cn(ws[iconst[0]],
+                                        rhs[iconst[1]] + T[iconst[0]] - a_grid[0], eis, frisch, vphi, uc_seed)
+
+    # calculate marginal utility to go backward
+    Va = (1 + r) * c ** (-1 / eis)
+
+    # efficiency units of labor which is what really matters
+    ns = e_grid[:, np.newaxis] * n
+
+    return Va, a, c, n, ns
 
 
 @njit
@@ -54,53 +97,8 @@ def solve_cn(w, T, eis, frisch, vphi, uc_seed):
     uc = solve_uc(w, T, eis, frisch, vphi, uc_seed)
     return cn(uc, w, eis, frisch, vphi)
 
-@het(exogenous='Pi', policy='a', backward='Va')
-def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag=False):
-    """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility.
 
-    Order of returns matters! backward_var, assets, others
-    """
-
-    # this one is useful to do internally
-    ws = w * e_grid
-
-    # uc(z_t, a_t)
-    uc_nextgrid = (beta * Pi_p) @ Va_p
-
-    # c(z_t, a_t) and n(z_t, a_t)
-    c_nextgrid, n_nextgrid = cn(uc_nextgrid, ws[:, np.newaxis], eis, frisch, vphi)
-
-    # c(z_t, a_{t-1}) and n(z_t, a_{t-1})
-    lhs = c_nextgrid - ws[:, np.newaxis] * n_nextgrid + a_grid[np.newaxis, :] - T[:, np.newaxis]
-    rhs = (1 + r) * a_grid
-    c = utils.interpolate_y(lhs, rhs, c_nextgrid)
-    n = utils.interpolate_y(lhs, rhs, n_nextgrid)
-
-    # test constraints, replace if needed
-    a = rhs + ws[:, np.newaxis] * n + T[:, np.newaxis] - c
-    iconst = np.nonzero(a < a_grid[0])
-    a[iconst] = a_grid[0]
-
-    if ssflag:
-        # use precomputed values
-        c[iconst] = c_const[iconst]
-        n[iconst] = n_const[iconst]
-    else:
-        # have to solve again if in transition
-        uc_seed = c_const[iconst] ** (-1 / eis)
-        c[iconst], n[iconst] = solve_cn(ws[iconst[0]],
-                                        rhs[iconst[1]] + T[iconst[0]] - a_grid[0], eis, frisch, vphi, uc_seed)
-
-    # calculate marginal utility to go backward
-    Va = (1 + r) * c ** (-1 / eis)
-
-    # efficiency units of labor which is what really matters
-    ns = e_grid[:, np.newaxis] * n
-
-    return Va, a, c, n, ns
-
-
-'''Part 2: simple blocks'''
+'''Part 2: simple blocks and hetinput'''
 
 
 @simple
@@ -137,6 +135,13 @@ def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
     return asset_mkt, labor_mkt, goods_mkt
 
 
+def transfers(pi_e, Div, Tax, div_rule, tax_rule):
+    div = Div / np.sum(pi_e * div_rule) * div_rule
+    tax = Tax / np.sum(pi_e * tax_rule) * tax_rule
+    T = div - tax
+    return T
+
+
 '''Part 3: Steady state'''
 
 
@@ -146,24 +151,21 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
 
     # set up grid
     a_grid = utils.agrid(amax=amax, n=nA)
-    e_grid, pi_s, Pi = utils.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
+    e_grid, pi_e, Pi = utils.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
 
     # default incidence rule is proportional to skill
     if tax_rule is None:
         tax_rule = e_grid  # scale does not matter, will be normalized anyway
     if div_rule is None:
         div_rule = e_grid
-
-    assert tax_rule.shape[0] == div_rule.shape[0] == nS, 'Incidence rules are inconsistent with income grid.'
+    assert len(tax_rule) == len(div_rule) == len(e_grid), 'Incidence rules are inconsistent with income grid.'
 
     # solve analitically what we can
     B = B_Y
     w = 1 / mu
     Div = (1 - w)
     Tax = r * B
-    div = Div / np.sum(pi_s * div_rule) * div_rule
-    tax = Tax / np.sum(pi_s * tax_rule) * tax_rule
-    T = div - tax
+    T = transfers(pi_e, Div, Tax, div_rule, tax_rule)
 
     # figure out initializer
     fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
@@ -177,7 +179,6 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         c_const_loc, n_const_loc = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi_loc, Va)
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
             raise ValueError('Clearly invalid inputs')
-        # out = household_labor_ss(Pi, a_grid, e_grid, T, w, r, beta_loc, eis, frisch, vphi_loc)
         out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta_loc, eis=eis,
                            frisch=frisch, vphi=vphi_loc, c_const=c_const_loc, n_const=n_const_loc, ssflag=True)
         return np.array([out['A'] - B, out['NS'] - 1])
@@ -189,33 +190,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
     ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta, eis=eis,
                       frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const, ssflag=True)
-    ss.update({'pi_s': pi_s, 'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
-               'Div': Div, 'Tax': Tax, 'div': div, 'tax': tax, 'div_rule': div_rule, 'tax_rule': tax_rule,
+    ss.update({'pi_e': pi_e, 'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
+               'Div': Div, 'Tax': Tax, 'div_rule': div_rule, 'tax_rule': tax_rule,
                'goods_mkt': 1 - ss['C'], 'ssflag': False})
     return ss
-
-
-'''Part 4: Nonlinear transition'''
-
-
-def td_map(ss, **kwargs):
-    # initialize results
-    results = kwargs
-
-    # blocks before HA
-    for b in [firm, monetary, fiscal]:
-        results.update(b.td(ss, **{k: results[k] for k in b.inputs if k in results}))
-
-    # hetinput
-    results['div'] = results['Div'][:, np.newaxis] / np.sum(ss['pi_s'] * ss['div_rule']) * ss['div_rule']
-    results['tax'] = results['Tax'][:, np.newaxis] / np.sum(ss['pi_s'] * ss['tax_rule']) * ss['tax_rule']
-
-    # HA block
-    results.update(household.td(ss, monotonic=True, T=results['div']-results['tax'],
-                                **{k: results[k] for k in household.inputs if k in results}))
-
-    # blocks after HA
-    for b in [nkpc, mkt_clearing]:
-        results.update(b.td(ss, **{k: results[k] for k in b.inputs if k in results}))
-
-    return results

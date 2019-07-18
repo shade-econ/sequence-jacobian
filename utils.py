@@ -50,11 +50,8 @@ def interpolate_coord(x, xq, xqi, xqpi):
     ----------
     x    : array (n), ascending data points
     xq   : array (nq), ascending query points
-
-    Returns
-    ----------
-    xqi  : array (nq), indices of lower bracketing gridpoints
-    xqpi : array (nq), weights on lower bracketing gridpoints
+    xqi  : array (nq), indices of lower bracketing gridpoints to be filled out
+    xqpi : array (nq), weights on lower bracketing gridpoints to be filled out
     """
     nxq, nx = xq.shape[0], x.shape[0]
 
@@ -73,6 +70,7 @@ def interpolate_coord(x, xq, xqi, xqpi):
         xqpi[xqi_cur] = (x_high - xq_cur) / (x_high - x_low)
         xqi[xqi_cur] = xi
 
+
 def interpolate_coord_robust(x, xq, check_increasing=False):
     """Wrapper for interpolate_coord_robust_vector that works if xq not vector,
     but still require x to be a vector"""
@@ -87,6 +85,7 @@ def interpolate_coord_robust(x, xq, check_increasing=False):
     else:
         i, pi = interpolate_coord_robust_vector(x, xq.ravel())
         return i.reshape(xq.shape), pi.reshape(xq.shape)
+
 
 @njit
 def interpolate_coord_robust_vector(x, xq):
@@ -137,9 +136,116 @@ def interpolate_coord_robust_vector(x, xq):
     return xqi, xqpi
 
 
+'''From shade-public:'''
+
+
+@njit
+def interpolate_2d(x, xq, y):
+    """Linear interpolation along middle dimension of 3-dimensional array.
+
+    Parameters
+    ----------
+    x  : array (z, b, a), data points increasing in b-dimension
+    xq : array (b), increasing query points
+    y  : array (b), data points
+
+    Returns
+    -------
+    x_i  : array (z, b, a), index of lower bracketing data point
+    x_pi : array (z, b, a), weight on x_i
+    yq   : array (z, b, a), interpolated values
+    """
+    nZ, nB, nA = x.shape
+    yq = np.empty(x.shape)
+    x_i = np.empty(x.shape, dtype=np.int64)
+    x_pi = np.empty(x.shape)
+
+    for iz in range(nZ):
+        for ia in range(nA):
+            xi = 0
+            x_low = x[iz, 0, ia]
+            x_high = x[iz, 1, ia]
+            for ib in range(nB):
+                xq_cur = xq[ib]
+                while xi < nB - 2:
+                    if x_high >= xq_cur:
+                        break
+                    xi += 1
+                    x_low = x_high
+                    x_high = x[iz, xi + 1, ia]
+
+                xqpi_cur = (x_high - xq_cur) / (x_high - x_low)
+                yq[iz, ib, ia] = xqpi_cur * y[iz, xi, ia] + (1 - xqpi_cur) * y[iz, xi + 1, ia]
+                x_i[iz, ib, ia] = xi
+                x_pi[iz, ib, ia] = xqpi_cur
+
+    return x_i, x_pi, yq
+
+
+@njit
+def interpolate_coord_2d(x, xq):
+    """Linear interpolation along last dimension of 3-dimensional array.
+
+    Parameters
+    ----------
+    x    : array(z, b, a), data points increasing along axis=2
+    xq   : array(k); query points increasing
+
+    Returns
+    -------
+    x_i  : array(z, b, a}; index of lower bracketing data point
+    x_pi : array(z, b, a); weight on x_i
+    """
+    nZ, nB, nA = x.shape
+    nxq = xq.shape[0]
+    x_i = np.empty(x.shape, dtype=np.int64)
+    x_pi = np.empty_like(x)
+
+    for iz in range(nZ):
+        for ib in range(nB):
+            ixp = 1
+            xp_last = xq[0]
+            xp_cur = xq[1]
+            for ia in range(nA):
+                # iterate through every point in x
+                x_cur = x[iz, ib, ia]
+
+                while ixp < nxq - 1:
+                    # now iterate forward on points in xp until we find one greater than x_cur
+                    if xp_cur >= x_cur:
+                        # we've found an ixp such that xp[ixp-1] <= x[ix] < xp[ixp],
+                        # unless we're outside xp[0] and xp[-1]
+                        break
+                    ixp += 1
+                    xp_last = xp_cur
+                    xp_cur = xq[ixp]
+
+                # find the fraction assigned to ixp_1 vs ixp
+                x_i[iz, ib, ia] = ixp - 1
+                x_pi[iz, ib, ia] = (xp_cur - x_cur) / (xp_cur - xp_last)
+
+    return x_i, x_pi
+
+
+@njit
+def apply_coord_2d(x_i, x_pi, y):
+    """Apply interpolation rule."""
+    nZ, nB, nA = x_i.shape
+    yq = np.empty(x_i.shape)
+
+    for iz in range(nZ):
+        for ib in range(nB):
+            for ia in range(nA):
+                y_low = y[x_i[iz, ib, ia]]
+                y_high = y[x_i[iz, ib, ia]+1]
+                yq[iz, ib, ia] = x_pi[iz, ib, ia]*y_low + (1-x_pi[iz, ib, ia])*y_high
+    return yq
+
+
 '''Part 2: Operations on the discretized distribution'''
 
 """OLD STUFF HERE"""
+
 
 @njit
 def forward_step(D, Pi_T, a_pol_i, a_pol_pi):
@@ -174,6 +280,7 @@ def forward_step(D, Pi_T, a_pol_i, a_pol_pi):
 
     return Dnew
 
+
 @njit
 def forward_step_transpose(D, Pi, a_pol_i, a_pol_pi):
     """Efficient implementation of D_t =  Lam_{t-1} @ D_{t-1}' using sparsity of Lam_{t-1}."""
@@ -200,7 +307,9 @@ def forward_step_policy_shock(Dss, Pi_T, a_pol_i_ss, a_pol_pi_shock):
     Dnew = Pi_T @ Dnew
     return Dnew
 
+
 """BEGIN NEW STUFF HERE"""
+
 
 @njit
 def forward_step_1d(D, Pi_T, x_i, x_pi):
@@ -242,7 +351,7 @@ def forward_step_1d(D, Pi_T, x_i, x_pi):
 
 
 @njit
-def forward_step_2d(D, Pi_T, x_i, y_i, x_pi, y_pi):
+def forward_step_endo_2d(D, x_i, y_i, x_pi, y_pi):
     """Like forward_step_1d but with two-dimensional endogenous state, policies given by x and y"""
 
     # first update using endogenous policy
@@ -261,8 +370,16 @@ def forward_step_2d(D, Pi_T, x_i, y_i, x_pi, y_pi):
                 Dnew[iz, ixp, iyp+1] += (1 - alpha) * beta * D[iz, ix, iy]
                 Dnew[iz, ixp+1, iyp+1] += (1 - alpha) * (1 - beta) * D[iz, ix, iy]
 
-    # then using exogenous transition matrix 
-    return (Pi_T @ Dnew.reshape(nZ, -1)).reshape(nZ, nX, nY)
+    # then using exogenous transition matrix
+    # return (Pi_T @ Dnew.reshape(nZ, -1)).reshape(nZ, nX, nY)  # NOT SUPPORTED BY NUMBA
+    return Dnew
+
+
+def forward_step_2d(D, Pi_T, a_i, b_i, a_pi, b_pi):
+    """Full forward iteration in two steps: D(z, b, a) to D(z, b', a') to D(z', b', a')."""
+    Dmid = forward_step_endo_2d(D, a_i, b_i, a_pi, b_pi)
+    nZ, nX, nY = Dmid.shape
+    return (Pi_T @ Dmid.reshape(nZ, -1)).reshape(nZ, nX, nY)
 
 
 @njit
@@ -347,6 +464,7 @@ def forward_step_shock_2d(Dss, Pi_T, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shoc
     # then apply exogenous transition matrix to update
     return (Pi_T @ Dshock.reshape(nZ, -1)).reshape(nZ, nX, nY)
 
+
 @njit
 def fast_aggregate(X, Y):
     """If X has dims (T, ...) and Y has dims (T, ...), do dot product T-by-T to get length-T vector,
@@ -359,8 +477,10 @@ def fast_aggregate(X, Y):
         Z[t] = Xnew[t, :] @ Ynew[t, :]
     return Z
 
+
 def make_tuple(x):
     return (x,) if not (isinstance(x, tuple) or isinstance(x, list)) else x
+
 
 def dist_ss(a_pol, Pi, a_grid, D_seed=None, pi_seed=None, tol=1E-10, maxit=100_000):
     """Iterate to find steady-state distribution."""
@@ -802,6 +922,7 @@ def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
     dy_list = [(y - y_ss) / h for y, y_ss in zip(y_list, y_ss_list)]
 
     return dy_list
+
 
 def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
     """Differentiate function via symmetric difference."""

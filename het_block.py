@@ -1,6 +1,4 @@
 import numpy as np
-import inspect
-import re
 import utils
 import copy
 
@@ -12,7 +10,7 @@ def het(exogenous, policy, backward):
 
 
 class HetBlock:
-    '''Part 1: Initializer for HetBlock, intended to be called via @het() decorator on back it function.'''
+    """Part 1: Initializer for HetBlock, intended to be called via @het() decorator on back it function."""
 
     def __init__(self, back_step_fun, exogenous, policy, backward):
         """Construct HetBlock from backward iteration function.

@@ -4,6 +4,7 @@ from numba import njit
 
 '''Part 1: compute covariances at all lags and log likelihood'''
 
+
 def all_covariances(M, sigmas):
     """Use Fast Fourier Transform to compute covariance function between O vars up to T-1 lags.
 
@@ -47,6 +48,7 @@ def log_likelihood(Y, Sigma, sigma_measurement=None):
 
 
 '''Part 2: helper functions'''
+
 
 def log_likelihood_formula(y, V):
     """Implements multivariate normal log-likelihood formula using Cholesky with data vector y and variance V.
