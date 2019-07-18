@@ -344,6 +344,7 @@ def forward_step_transpose_2d(D, Pi, x_i, y_i, x_pi, y_pi):
 @njit
 def forward_step_transpose_endo_2d(D, x_i, y_i, x_pi, y_pi):
     """Endogenous update part of forward_step_transpose_2d"""
+    nZ, nX, nY = D.shape
     Dnew = np.empty_like(D)
     for iz in range(nZ):
         for ix in range(nX):

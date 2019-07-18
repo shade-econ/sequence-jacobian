@@ -2,8 +2,6 @@ import numpy as np
 from numba import njit
 import utils
 import jacobian as jac
-import simple_block as sim
-import het_block as ha
 from het_block import het
 from simple_block import simple
 
@@ -247,6 +245,11 @@ def mkt_clearing(p, A, B, Bg):
     return asset_mkt
 
 
+def income(e_grid, tax, w, N):
+    z_grid = (1 - tax) * w * N * e_grid
+    return z_grid
+
+
 '''Part 3: Steady state'''
 
 
@@ -269,8 +272,9 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
     tax = (r * Bg + G) / w
     div = 1 - w - I
     p = div / r
+    ra = r
     rb = r - omega
-    z_grid = (1 - tax) * w * e_grid
+    z_grid = income(e_grid, tax, w, 1)
 
     # figure out initializer
     Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
@@ -282,7 +286,7 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001 or chi1_loc < 0.5:
             raise ValueError('Clearly invalid inputs')
         out = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, z_grid=z_grid, e_grid=e_grid,
-                           k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=r, chi0=chi0, chi1=chi1_loc, chi2=chi2)
+                           k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
         asset_mkt = out['A'] + out['B'] - p - Bg
         labor_mkt = vphi_loc - muw * (1 - tax) * w * out['U']
         return np.array([asset_mkt, labor_mkt, out['B'] - Bh])
@@ -292,7 +296,7 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
 
     # extra evaluation to report variables
     ss = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, z_grid=z_grid, e_grid=e_grid, k_grid=k_grid,
-                      beta=beta, eis=eis, rb=rb, ra=r, chi0=chi0, chi1=chi1, chi2=chi2)
+                      beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
 
     # other thigns of interest
     pshare = p / (tot_wealth - Bh)
@@ -310,6 +314,36 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
     return ss
 
 
-'''TRY THIS'''
-
-ss = hank_ss()
+# '''TRY THIS'''
+#
+# # step 1: steady state
+# ss = hank_ss()
+# household_inc = household.attach_hetinput(income)
+#
+# # step 2: solved blocks
+# T = 300
+# G_pricing = jac.get_G(block_list=[pricing],
+#                       exogenous=['mc'],  # we know that r, Y have no first-order effect
+#                       unknowns=['pi'],
+#                       targets=['nkpc'],
+#                       T=T, ss=ss)
+#
+# G_arbitrage = jac.get_G(block_list=[arbitrage],
+#                         exogenous=['div', 'r'],
+#                         unknowns=['p'],
+#                         targets=['equity'],
+#                         T=T, ss=ss)
+#
+# G_production = jac.get_G(block_list=[labor, investment],
+#                          exogenous=['Y', 'w', 'r', 'Z'],
+#                          unknowns=['Q', 'K'],
+#                          targets=['inv', 'val'],
+#                          T=T, ss=ss)
+#
+# # step 3: G matrix
+# G = jac.get_G(block_list=[household_inc, G_pricing, G_arbitrage, G_production, dividend, taylor, fiscal, finance, wage,
+#                           union, mkt_clearing],
+#               exogenous=['rstar', 'Z', 'G'],
+#               unknowns=['r', 'w', 'Y'],
+#               targets=['asset_mkt', 'fisher', 'wnkpc'],
+#               T=T, ss=ss)

@@ -98,7 +98,7 @@ def solve_cn(w, T, eis, frisch, vphi, uc_seed):
     return cn(uc, w, eis, frisch, vphi)
 
 
-'''Part 2: simple blocks and hetinput'''
+'''Part 2: Simple blocks and hetinput'''
 
 
 @simple
