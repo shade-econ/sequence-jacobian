@@ -1,7 +1,6 @@
 import numpy as np
 from numba import njit
 import utils
-import jacobian as jac
 from het_block import het
 from simple_block import simple
 
@@ -312,38 +311,3 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'z_grid': z_grid, 'e_grid': e_grid,
                'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r})
     return ss
-
-
-# '''TRY THIS'''
-#
-# # step 1: steady state
-# ss = hank_ss()
-# household_inc = household.attach_hetinput(income)
-#
-# # step 2: solved blocks
-# T = 300
-# G_pricing = jac.get_G(block_list=[pricing],
-#                       exogenous=['mc'],  # we know that r, Y have no first-order effect
-#                       unknowns=['pi'],
-#                       targets=['nkpc'],
-#                       T=T, ss=ss)
-#
-# G_arbitrage = jac.get_G(block_list=[arbitrage],
-#                         exogenous=['div', 'r'],
-#                         unknowns=['p'],
-#                         targets=['equity'],
-#                         T=T, ss=ss)
-#
-# G_production = jac.get_G(block_list=[labor, investment],
-#                          exogenous=['Y', 'w', 'r', 'Z'],
-#                          unknowns=['Q', 'K'],
-#                          targets=['inv', 'val'],
-#                          T=T, ss=ss)
-#
-# # step 3: G matrix
-# G = jac.get_G(block_list=[household_inc, G_pricing, G_arbitrage, G_production, dividend, taylor, fiscal, finance, wage,
-#                           union, mkt_clearing],
-#               exogenous=['rstar', 'Z', 'G'],
-#               unknowns=['r', 'w', 'Y'],
-#               targets=['asset_mkt', 'fisher', 'wnkpc'],
-#               T=T, ss=ss)
