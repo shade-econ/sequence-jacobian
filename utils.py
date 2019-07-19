@@ -487,8 +487,10 @@ def within_tolerance(x1, x2, tol):
 
 @njit
 def fast_aggregate(X, Y):
-    """If X has dims (T, ...) and Y has dims (T, ...), do dot product T-by-T to get length-T vector,
-    avoids costly creation of intermediates with np.sum(X*Y, axis=(...)) pattern for aggregation in td"""
+    """If X has dims (T, ...) and Y has dims (T, ...), do dot product for each T to get length-T vector.
+
+    Identical to np.sum(X*Y, axis=(1,...,X.ndim-1)) but avoids costly creation of intermediates, useful
+    for speeding up aggregation in td by factor of 4 to 5."""
     T = X.shape[0]
     Xnew = X.reshape(T, -1)
     Ynew = Y.reshape(T, -1)
@@ -502,7 +504,25 @@ def fast_aggregate(X, Y):
 
 
 def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
-    """Differentiate function via forward difference."""
+    """Differentiate function numerically via forward difference, i.e. calculate
+
+    f'(xss)*shock = (f(xss + h*shock) - f(xss))/h
+
+    for small h. (Variable names inspired by application of differentiating around ss.)
+
+    Parameters
+    ----------
+    func            : function, 'f' to be differentiated
+    ssinputs_dict   : dict, values in 'xss' around which to differentiate
+    shock_dict      : dict, values in 'shock' for which we're taking derivative
+                        (keys in shock_dict are weak subset of keys in ssinputs_dict)
+    h               : [optional] scalar, scaling of forward difference 'h'
+    y_ss_list       : [optional] list, value of y=f(xss) if we already have it
+
+    Returns
+    ----------
+    dy_list : list, output f'(xss)*shock of numerical differentiation
+    """
     # compute ss output if not supplied
     if y_ss_list is None:
         y_ss_list = make_tuple(func(**ssinputs_dict))
@@ -511,14 +531,17 @@ def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
     shocked_inputs = {**ssinputs_dict, **{k: ssinputs_dict[k] + h * shock for k, shock in shock_dict.items()}}
     y_list = make_tuple(func(**shocked_inputs))
 
-    # scale responses back up
+    # scale responses back up, dividing by h
     dy_list = [(y - y_ss) / h for y, y_ss in zip(y_list, y_ss_list)]
 
     return dy_list
 
 
 def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
-    """Differentiate function via symmetric difference."""
+    """Same as numerical_diff, but differentiate numerically using central (symmetric) difference, i.e.
+    
+    f'(xss)*shock = (f(xss + h*shock) - f(xss - h*shock))/(2*h)
+    """
 
     # response to small shock in each direction
     shocked_inputs_up = {**ssinputs_dict, **{k: ssinputs_dict[k] + h * shock for k, shock in shock_dict.items()}}
@@ -527,7 +550,7 @@ def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
     shocked_inputs_down = {**ssinputs_dict, **{k: ssinputs_dict[k] - h * shock for k, shock in shock_dict.items()}}
     y_down_list = make_tuple(func(**shocked_inputs_down))
 
-    # scale responses back up
+    # scale responses back up, dividing by h
     dy_list = [(y_up - y_down) / (2*h) for y_up, y_down in zip(y_up_list, y_down_list)]
 
     return dy_list
@@ -536,37 +559,28 @@ def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
 '''Part 7: simple nonlinear solvers'''
 
 
-def obtain_J(f, x, y, h=1E-5):
-    """finds Jacobian f'(x) around y=f(x)"""
-    nx = x.shape[0]
-    ny = y.shape[0]
-    J = np.empty((nx, ny))
+def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
+    """Simple line search solver for root x satisfying f(x)=0 using Newton direction.
+    
+    Backtracks if input invalid or improvement is not at least half the predicted improvement.
+    
+    Parameters
+    ----------
+    f               : function, to solve for f(x)=0, input and output are arrays of same length
+    x0              : array (n), initial guess for x
+    y0              : [optional] array (n), y0=f(x0), if already known
+    tol             : [optional] scalar, solver exits successfully when |f(x)| < tol
+    maxcount        : [optional] int, maximum number of Newton steps
+    backtrack_c     : [optional] scalar, fraction to backtrack if step unsuccessful, i.e.
+                        if we tried step from x to x+dx, now try x+backtrack_c*dx
 
-    for i in range(nx):
-        dx = h * (np.arange(nx) == i)
-        J[:, i] = (f(x + dx) - y) / h
-    return J
+    Returns
+    ----------
+    x       : array (n), (approximate) root of f(x)=0
+    y       : array (n), y=f(x), satisfies |y| < tol
+    """
 
-
-def broyden_update(J, dx, dy):
-    """Returns Broyden update to approximate Jacobian J given that last
-    change in inputs to function was dx and led to output change of dy"""
-    return J + np.outer(((dy - J @ dx) / np.linalg.norm(dx) ** 2), dx)
-
-
-def printit(it, x, y, **kwargs):
-    """Convenience printing function for noisy iterations"""
-    print(f'On iteration {it}')
-    print(('x = %.3f' + ',%.3f' * (len(x) - 1)) % tuple(x))
-    print(('y = %.3f' + ',%.3f' * (len(y) - 1)) % tuple(y))
-    for kw, val in kwargs.items():
-        print(f'{kw} = {val:.3f}')
-    print('\n')
-
-
-def newton_solver(f, x, y=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
-    """Simple line search solver in Newton direction, backtracks if input
-    invalid or if improvement is not at least half the predicted improvement"""
+    x, y = x0, y0
     if y is None:
         y = f(x)
 
@@ -605,8 +619,15 @@ def newton_solver(f, x, y=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=T
         raise ValueError(f'No convergence after {maxcount} iterations')
 
 
-def broyden_solver(f, x, y=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
-    """Simple line search solver in approximate Newton direction, obtaining approximate J from Broyden updating."""
+def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
+    """Similar to newton_solver, but solves f(x)=0 using approximate rather than exact Newton direction,
+    obtaining approximate Jacobian J=f'(x) from Broyden updating (starting from exact Newton at f'(x0)).
+
+    Backtracks only if error raised by evaluation of f, since improvement criterion no longer guaranteed
+    to work for any amount of backtracking if Jacobian not exact.
+    """
+
+    x, y = x0, y0
     if y is None:
         y = f(x)
 
@@ -641,6 +662,34 @@ def broyden_solver(f, x, y=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=
             raise ValueError('Too many backtracks, maybe bad initial guess?')
     else:
         raise ValueError(f'No convergence after {maxcount} iterations')
+
+
+def obtain_J(f, x, y, h=1E-5):
+    """Finds Jacobian f'(x) around y=f(x)"""
+    nx = x.shape[0]
+    ny = y.shape[0]
+    J = np.empty((nx, ny))
+
+    for i in range(nx):
+        dx = h * (np.arange(nx) == i)
+        J[:, i] = (f(x + dx) - y) / h
+    return J
+
+
+def broyden_update(J, dx, dy):
+    """Returns Broyden update to approximate Jacobian J, given that last change in inputs to function
+    was dx and led to output change of dy."""
+    return J + np.outer(((dy - J @ dx) / np.linalg.norm(dx) ** 2), dx)
+
+
+def printit(it, x, y, **kwargs):
+    """Convenience printing function for noisy iterations"""
+    print(f'On iteration {it}')
+    print(('x = %.3f' + ',%.3f' * (len(x) - 1)) % tuple(x))
+    print(('y = %.3f' + ',%.3f' * (len(y) - 1)) % tuple(y))
+    for kw, val in kwargs.items():
+        print(f'{kw} = {val:.3f}')
+    print('\n')
 
 
 '''Part 8: topological sort and related code'''
