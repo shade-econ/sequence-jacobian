@@ -8,8 +8,6 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
                                 returnindividual=False, tol=1E-8, maxit=30, noisy=True, **kwargs):
     """Solves for TD general equilibrium of SHADE model, given shocks in kwargs.
 
-    Note that either H_U or H_U_factored must be provided, latter given priority.
-
     Parameters
     ----------
     ss              : dict, all steady-state information
@@ -35,14 +33,21 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
         if x in kwargs:
             raise ValueError(f'Shock {x} in td_solve cannot also be an unknown or target!')
 
-    # for now, assume we have H_U, will deal with the rest later!
-    if H_U_factored is None:
-        H_U_factored = utils.factor(H_U)
-
-    # initialize guess for unknowns at ss after inferring T
-    T = H_U_factored[0].shape[0] // len(unknowns)
+    # infer T from a single shocked Z in kwargs
+    for v in kwargs.values():
+        T = v.shape[0]
+        break
+    
+    # initialize guess for unknowns to steady state length T
     Us = {k: np.full(T, ss[k]) for k in unknowns}
     Uvec = jac.pack_vectors(Us, unknowns, T)
+
+    # obtain H_U_factored if we don't have it already 
+    if H_U_factored is None:
+        if H_U is None:
+            # not even H_U is supplied, get it (costly if there are HetBlocks)
+            H_U = jac.get_H_U(block_list, unknowns, targets, T, ss)
+        H_U_factored = utils.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
     sort = utils.block_sort(block_list)
