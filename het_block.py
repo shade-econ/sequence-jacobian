@@ -31,7 +31,12 @@ class HetBlock:
 
         It is assumed that every output of the function (except possibly backward), including policy,
         will be on a grid of dimension 1 + len(policy), where the first dimension is the exogenous
-        variable and then the remaining dimensions are each of the continuous policy variables.
+        variable and then the remaining dimensions are each of the continuous policy variables, in the
+        same order they are listed in 'policy'.
+
+        The Markov transition matrix between the current and future period and backward iteration
+        variables should appear in the backward iteration function with '_p' subscripts ("prime") to
+        indicate that they come from the next period.
 
         Currently, we only support up to two policy variables.
         """
@@ -99,13 +104,42 @@ class HetBlock:
         - attach_hetinput : make new HetBlock that first processes inputs through function hetinput
     '''
 
-    def ss(self, backward_tol=1E-8, backward_maxit=5000, forward_tol=1E-10, forward_maxit=5000, **kwargs):
-        """Evaluate steady state hetblock using keyword arguments for all inputs, analogous to
-        simple block ss method.
-        
-        Need all inputs to policy_ss, also '{pol}_grid' argument for each policy variable pol.
-        
-        If 'D' included, will be treated as seed. Seed for dist for exog Markov Pi is Pi_seed"""
+    def ss(self, backward_tol=1E-8, backward_maxit=5000, forward_tol=1E-10, forward_maxit=100_000, **kwargs):
+        """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
+
+        Parameters
+        ----------
+        backward_tol : [optional] float
+            in backward iteration, max abs diff between policy in consecutive steps needed for convergence
+        backward_maxit : [optional] int
+            maximum number of backward iterations, if 'backward_tol' not reached by then, raise error
+        forward_tol : [optional] float
+            in forward iteration, max abs diff between dist in consecutive steps needed for convergence
+        forward_maxit : [optional] int
+            maximum number of forward iterations, if 'forward_tol' not reached by then, raise error
+
+        kwargs : dict
+            The following inputs are required as keyword arguments, which show up in 'kwargs':
+                - The exogenous Markov matrix, e.g. Pi=... if self.exogenous=='Pi'
+                - A seed for each backward variable, e.g. Va=... and Vb=... if self.backward==('Va','Vb')
+                - A grid for each policy variable, e.g. a_grid=... and b_grid=... if self.policy==('a','b')
+                - All other inputs to the backward iteration function self.back_step_fun, except _p added to
+                    for self.exogenous and self.backward, for which the method uses steady-state values.
+                    If there is a self.hetinput, then we need the inputs to that, not to self.back_step_fun.
+
+            Other inputs in 'kwargs' are optional:
+                - A seed for the distribution: D=...
+                - If no seed for the distribution is provided, a seed for the invariant distribution
+                    of the Markov process, e.g. Pi_seed=... if self.exogenous=='Pi'
+
+        Returns
+        ----------
+        ss : dict, contains
+            - ss inputs of self.back_step_fun and (if present) self.hetinput
+            - ss outputs of self.back_step_fun
+            - ss distribution 'D'
+            - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.backward
+        """
 
         # extract information from kwargs
         Pi = kwargs[self.exogenous]
@@ -125,16 +159,33 @@ class HetBlock:
         return {**sspol, **aggs, 'D': D}
 
     def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
-        """Evaluate dynamics for hetblock given dynamic paths for inputs in kwargs,
-        starting and ending in steady state ss (assume everything not given in kwargs
-        is constant at ss value).
+        """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
+        assuming that we start and end in steady state ss, and that all inputs not specified in
+        kwargs are constant at their ss values. Analog to SimpleBlock.td.
 
-        If monotonic=True, use faster interpolation method for policies against grid,
-        otherwise use slower interpolation.
+        CANNOT provide time-varying paths of grid or Markov transition matrix for now.
+        
+        Parameters
+        ----------
+        ss : dict
+            all steady-state info, intended to be from .ss()
+        monotonic : [optional] bool
+            flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
+            to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
+        returnindividual : [optional] bool
+            return distribution and full outputs on grid
+        kwargs : dict of {str : array(T, ...)}
+            all time-varying inputs here, with first dimension being time
+            this must have same length T for all entries (all outputs will be calculated up to T)
 
-        Do not return full individual outputs and distribution unless returnindividual=True.
-
-        Cannot alter Markov transition matrix or grid for now."""
+        Returns
+        ----------
+        td : dict
+            if returnindividual = False, time paths for aggregates (uppercase) for all outputs
+                of self.back_step_fun except self.backward
+            if returnindividual = True, additionally time paths for distribution and for all outputs
+                of self.back_Step_fun on the full grid
+        """
 
         # infer T from kwargs, check that all shocks have same length
         shock_lengths = [x.shape[0] for x in kwargs.values()]
@@ -182,12 +233,32 @@ class HetBlock:
 
         # return either this, or also include distributional information
         if returnindividual:
-            return {**aggregates, **individual, 'D': D_path}
+            return {**aggregates, **individual_paths, 'D': D_path}
         else:
             return aggregates
 
     def jac(self, ss, T, shock_list, output_list=None, h=1E-4):
-        """Compute Jacobians via fake news algorithm."""
+        """Assemble nested dict of Jacobians relating aggregate inputs to outputs.
+
+        Parameters
+        ----------
+        ss : dict,
+            all steady-state info, intended to be from .ss()
+        T : [optional] int
+            number of time periods for T*T Jacobian
+        shock_list : list of str
+            names of input variables to differentiate wrt (main cost scales with # of inputs)
+        output_list : list of str
+            names of output variables to get derivatives of, if not provided assume all outputs of
+            self.back_step_fun except self.backward
+        h : [optional] float
+            h for numerical differentiation of backward iteration
+
+        Returns
+        -------
+        J : dict of {str: dict of {str: array(T,T)}}
+            J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
+        """
         if output_list is None:
             # default outputs are just all outputs of back it function except backward variables
             output_list = self.non_back_outputs
@@ -262,9 +333,9 @@ class HetBlock:
         ----------
         ssin : dict
             all steady-state inputs to back_step_fun, including seed values for backward variables
-        tol : float, optional
-            absolute tolerance for max diff between consecutive iterations for policy variables
-        maxit : int, optional
+        tol : [optional] float
+            max diff between consecutive iterations of policy variables needed for convergence
+        maxit : [optional] int
             maximum number of iterations, if 'tol' not reached by then, raise error
 
         Returns
@@ -316,13 +387,13 @@ class HetBlock:
             steady-state policies on grid for all policy variables in self.policy
         grid : dict
             grids for all policy variables in self.policy
-        tol : float, optional
+        tol : [optional] float
             absolute tolerance for max diff between consecutive iterations for distribution
-        maxit : int, optional
+        maxit : [optional] int
             maximum number of iterations, if 'tol' not reached by then, raise error
-        D_seed : array, optional
+        D_seed : [optional] array
             initial seed for overall distribution
-        pi_seed : array, optional
+        pi_seed : [optional] array
             initial seed for stationary dist of Pi, if no D_seed
 
         Returns

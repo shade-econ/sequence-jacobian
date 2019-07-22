@@ -69,9 +69,10 @@ class SimpleBlock:
 
         Returns
         -------
-        J : dict,
-            Jacobians as nested dict of SimpleSparse objects or, if T specified, (T*T) matrices,
-            with zero derivatives omitted by convention
+        J : dict of {str: dict of {str: array(T,T)}}
+            J[o][i] for output o and input i gives Jacobian of o with respect to i
+            This Jacobian is a SimpleSparse object or, if T specific, a T*T matrix, omitted by convention
+            if zero
         """
         if shock_list is None:
             shock_list = self.input_list
