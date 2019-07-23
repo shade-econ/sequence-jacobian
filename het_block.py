@@ -90,6 +90,8 @@ class HetBlock:
         # 'saved' arguments start empty
         self.saved = {}
         self.prelim_saved = {}
+        self.saved_shock_list = []
+        self.saved_output_list = []
 
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
@@ -263,13 +265,27 @@ class HetBlock:
         J : dict of {str: dict of {str: array(T,T)}}
             J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
+        # default outputs are just all outputs of back it function except backward variables
         if output_list is None:
-            # default outputs are just all outputs of back it function except backward variables
             output_list = self.non_back_outputs
+
+        # if we're supposed to use saved Jacobian, bypass ordinary steps to use (skip this to see algorithmm)
+        if use_saved:
+            try:
+                J = {o.upper(): {} for o in output_list}
+                for o in output_list:
+                    for i in shock_list:
+                        J[o.upper()][i] = self.saved['J'][o.upper()][i][:T, :T]
+                        if J[o.upper()][i].shape != (T, T):
+                            raise ValueError(f'Want {(T,T)} Jacobian, but saved is only {J[o.upper()][i].shape}')
+                return J
+            except KeyError as e:
+                print(f'Output or input {e} not present in saved Jacobians, but wanted')
+                raise
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
-                                    sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save, use_saved)
+                                                sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save)
 
         # step 1: compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = dict(), dict()
@@ -284,11 +300,16 @@ class HetBlock:
             curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T)
 
         # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
+        F = {o.upper(): {} for o in output_list}
         J = {o.upper(): {} for o in output_list}
         for o in output_list:
             for i in shock_list:
-                F = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
-                J[o.upper()][i] = HetBlock.J_from_F(F)
+                F[o.upper()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
+                J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
+
+        # if supposed to save, record everything
+        self.saved_shock_list, self.saved_output_list = shock_list, output_list
+        self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
 
         # report Jacobians
         return J
