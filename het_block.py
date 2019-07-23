@@ -87,6 +87,10 @@ class HetBlock:
         self.hetinput_inputs = set()
         self.hetinput_outputs_order = tuple()
 
+        # 'saved' arguments start empty
+        self.saved = {}
+        self.prelim_saved = {}
+
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
     def __repr__(self):
@@ -237,7 +241,7 @@ class HetBlock:
         else:
             return aggregates
 
-    def jac(self, ss, T, shock_list, output_list=None, h=1E-4):
+    def jac(self, ss, T, shock_list, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians relating aggregate inputs to outputs.
 
         Parameters
@@ -263,25 +267,9 @@ class HetBlock:
             # default outputs are just all outputs of back it function except backward variables
             output_list = self.non_back_outputs
 
-        # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
-        ssin_dict = self.make_inputs(ss)
-        Pi = ss[self.exogenous]
-        Pi_T = Pi.T.copy()
-        grid = {k: ss[k+'_grid'] for k in self.policy}
-        ssout_list = self.back_step_fun(**ssin_dict)
-        ss_for_hetinput = None
-        
-        if self.hetinput is not None:
-            ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
-
-        # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
-        sspol_i = {}
-        sspol_pi = {}
-        sspol_space = {}
-        for pol in self.policy:
-            # use robust binary-search-based method that only requires grids to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], ss[pol])
-            sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
+        # step 0: preliminary processing of steady state
+        (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
+                                    sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save, use_saved)
 
         # step 1: compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = dict(), dict()
@@ -515,7 +503,46 @@ class HetBlock:
             J[1:, t] += J[:-1, t - 1]
         return J
 
-    '''Part 5: helper to extract inputs and potentially process them through hetinput'''
+    '''Part 5: preliminary processing for .jac, only deals with steady state'''
+
+    def jac_prelim(self, ss, save=False, use_saved=False):
+        output_names = ('ssin_dict', 'Pi', 'Pi_T', 'ssout_list',
+                            'ss_for_hetinput', 'sspol_i', 'sspol_pi', 'sspol_space')
+
+        if use_saved:
+            if save:
+                raise ValueError('Cannot save and use saved simultaneously!')
+            if self.prelim_saved:
+                return tuple(self.prelim_saved[k] for k in output_names)
+            else:
+                raise ValueError('Nothing saved to be used by jac_prelim!')
+        
+        # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
+        ssin_dict = self.make_inputs(ss)
+        Pi = ss[self.exogenous]
+        Pi_T = Pi.T.copy()
+        grid = {k: ss[k+'_grid'] for k in self.policy}
+        ssout_list = self.back_step_fun(**ssin_dict)
+
+        ss_for_hetinput = None
+        if self.hetinput is not None:
+            ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
+
+        # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
+        sspol_i = {}
+        sspol_pi = {}
+        sspol_space = {}
+        for pol in self.policy:
+            # use robust binary-search-based method that only requires grids to be monotonic
+            sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], ss[pol])
+            sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
+
+        toreturn = (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
+        if save:
+            self.prelim_saved = {k: v for (k, v) in zip(output_names, toreturn)}
+        return toreturn
+
+    '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
     def make_inputs(self, indict):
         """Extract from indict exactly the inputs needed for self.back_step_fun,
@@ -531,7 +558,7 @@ class HetBlock:
             print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
             raise
 
-    '''Part 6: routines to do forward steps of different kinds, all wrap functions in utils'''
+    '''Part 7: routines to do forward steps of different kinds, all wrap functions in utils'''
 
     def forward_step(self, D, Pi_T, pol_i, pol_pi):
         """Update distribution, calling on 1d and 2d-specific compiled routines.
