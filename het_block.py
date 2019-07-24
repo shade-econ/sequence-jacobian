@@ -163,6 +163,9 @@ class HetBlock:
         # aggregate all outputs other than backward variables on grid, capitalize
         aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_outputs}
 
+        # clear any previously saved Jacobian info for safety, since we're computing new SS
+        self.clear_saved()
+
         return {**sspol, **aggs, 'D': D}
 
     def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
@@ -300,8 +303,9 @@ class HetBlock:
                 J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
 
         # if supposed to save, record everything
-        self.saved_shock_list, self.saved_output_list = shock_list, output_list
-        self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
+        if save:
+            self.saved_shock_list, self.saved_output_list = shock_list, output_list
+            self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
 
         # report Jacobians
         return J
@@ -320,9 +324,11 @@ class HetBlock:
 
         # saved last by ajac, directly extract
         if use_saved and 'curlyYs' not in self.saved:
-            J = utils.extract_nested_dict(savedA=self.saved['J'],
-                        keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T+Tpost-1, T))
-            # come back to this later!
+            asympJ = {}
+            for o in output_list:
+                for i in shock_list:
+                    asympJ[o.upper()][i] = self.saved['asympJ'][o.upper()][i][-(Tpost-1): Tpost]
+            return asympJ
 
         # was either saved last by jac or not saved at all, need to do more work!
 
@@ -368,8 +374,11 @@ class HetBlock:
                 asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
                     np.concatenate((np.zeros(Tpost-T), J[o.upper()][i][:, -1])))
 
-        # will make this the actual asymptotic thing later, for now just see if it works
-        # return J
+        # if supposed to save, record J and asympJ for use by jac or ajac
+        if save:
+            self.saved_shock_list, self.saved_output_list = shock_list, output_list
+            self.saved = {'J' : J, 'asympJ' : asympJ}
+
         return asympJ
 
     def attach_hetinput(self, hetinput):
@@ -583,7 +592,7 @@ class HetBlock:
             J[1:, t] += J[:-1, t - 1]
         return J
 
-    '''Part 5: preliminary processing for .jac, only deals with steady state'''
+    '''Part 5: helpers for .jac and .ajac: preliminary processing and clearing saved info'''
 
     def jac_prelim(self, ss, save=False, use_saved=False):
         output_names = ('ssin_dict', 'Pi', 'Pi_T', 'ssout_list',
@@ -619,6 +628,12 @@ class HetBlock:
         if save:
             self.prelim_saved = {k: v for (k, v) in zip(output_names, toreturn)}
         return toreturn
+
+    def clear_saved(self):
+        self.saved = {}
+        self.prelim_saved = {}
+        self.saved_shock_list = []
+        self.saved_output_list = []
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
