@@ -34,11 +34,12 @@ class SolvedBlock:
         return nonlinear.td_solve(ss, self.block_list, self.unknowns, self.targets, monotonic=monotonic, 
                                   returnindividual=returnindividual, noisy=noisy, **kwargs)
     
-    def jac(self, ss, T, shock_list, output_list=None):
+    def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):
         # TODO: consider whether we want the other arguments of HetBlock.jac here!
         # also H_U_factored caching could be helpful here too
         # shock_list better be subset of exogenous!
-        return jac.get_G(self.block_list, shock_list, self.unknowns, self.targets, T, ss, output_list)
+        return jac.get_G(self.block_list, shock_list, self.unknowns, self.targets,
+                         T, ss, output_list, save=save, use_saved=use_saved)
 
     def ajac(self):
         # NEED TO IMPLEMENT

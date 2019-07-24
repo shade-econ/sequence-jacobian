@@ -3,7 +3,7 @@ import copy
 import utils
 import simple_block as sim
 import het_block as het
-import solved_block
+import solved_block as sol
 import asymptotic
 
 
@@ -196,20 +196,13 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
         block = block_list[num]
         if isinstance(block, sim.SimpleBlock):
             jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
-        elif isinstance(block, het.HetBlock):
+        elif isinstance(block, het.HetBlock) or isinstance(block, sol.SolvedBlock):
             if asymptotic:
                 jac = block.ajac(ss, T=T,
                                  shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost, save=save, use_saved=use_saved)
             else:
                 jac = block.jac(ss, T=T,
                                 shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved)
-        elif isinstance(block, solved_block.SolvedBlock):
-            # TODO: this can actually be implemented together with hetblock, no difference between the two
-            # once we have options passed through solved block and we have an ajac
-            if asymptotic:
-                raise NotImplementedError
-            else:
-                jac = block.jac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks])
         else:
             jac = block
         curlyJs.append(jac)
