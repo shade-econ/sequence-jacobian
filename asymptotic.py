@@ -68,7 +68,7 @@ class AsymptoticTimeInvariant:
                 other = other.changetau(self.tau)
             elif other.tau > self.tau:
                 newself = self.changetau(other.tau)
-            return AsymptoticTimeInvariant(irfft(newself.vfft*other.vfft, 4*newself.tau-1)[newself.tau:-newself.tau])
+            return AsymptoticTimeInvariant(irfft(newself.vfft*other.vfft, 4*newself.tau-1)[newself.tau-1:-(newself.tau+1)])
         elif hasattr(other, 'asymptotic_time_invariant'):
             return self @ other.asymptotic_time_invariant
         else:
@@ -85,8 +85,8 @@ class AsymptoticTimeInvariant:
             elif other.tau > self.tau:
                 newself = self.changetau(other.tau)
             return AsymptoticTimeInvariant(newself.v + other.v)
-        elif hasattr(other, 'asymptotic_vector'):
-            return self + other.asymptotic_vector
+        elif hasattr(other, 'asymptotic_time_invariant'):
+            return self + other.asymptotic_time_invariant
         else:
             return NotImplemented
 
