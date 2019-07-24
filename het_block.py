@@ -269,19 +269,10 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_outputs
 
-        # if we're supposed to use saved Jacobian, bypass ordinary steps to use (skip this to see algorithmm)
+        # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
-            try:
-                J = {o.upper(): {} for o in output_list}
-                for o in output_list:
-                    for i in shock_list:
-                        J[o.upper()][i] = self.saved['J'][o.upper()][i][:T, :T]
-                        if J[o.upper()][i].shape != (T, T):
-                            raise ValueError(f'Want {(T,T)} Jacobian, but saved is only {J[o.upper()][i].shape}')
-                return J
-            except KeyError as e:
-                print(f'Output or input {e} not present in saved Jacobians, but wanted')
-                raise
+            return utils.extract_nested_dict(savedA=self.saved['J'],
+                        keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T,T))
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
@@ -297,7 +288,7 @@ class HetBlock:
         # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = dict()
         for o in output_list:
-            curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T)
+            curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
 
         # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
         F = {o.upper(): {} for o in output_list}
@@ -312,6 +303,68 @@ class HetBlock:
         self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
 
         # report Jacobians
+        return J
+
+    def ajac(self, ss, T, shock_list, output_list=None, h=1E-4, Tpost=None, save=False, use_saved=False):
+        """Output asymptotic Jacobian (-T+1, ... 0, T-1)"""
+        # default outputs are just all outputs of back it function except backward variables
+        if output_list is None:
+            output_list = self.non_back_outputs
+
+        # if Tpost not provided, assume it is 2*T by default
+        if Tpost is None:
+            Tpost = 2*T
+        elif Tpost < T:
+            raise ValueError(f'must have Tpost={Tpost} less than T={T}')
+
+        # saved last by ajac, directly extract
+        if use_saved and 'curlyYs' not in self.saved:
+            J = utils.extract_nested_dict(savedA=self.saved['J'],
+                        keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T+Tpost-1, T))
+            # come back to this later!
+
+        # was either saved last by jac or not saved at all, need to do more work!
+
+        # step 0: preliminary processing of steady state
+        (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
+                                        sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save, use_saved)
+
+        if use_saved and 'curlyYs' in self.saved:
+            # was saved by jac, first copy curlyYs, curlyDs, curlyPs
+            curlyYs = utils.extract_nested_dict(savedA=self.saved['curlyYs'],
+                                                keys1=shock_list, keys2=output_list, shape=(T,))
+            curlyDs = utils.extract_dict(savedA=self.saved['curlyDs'], keys=shock_list, shape=(T,))
+            curlyPs_old = utils.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T-1,))
+
+            # now need curlyPs that go to T+Tpost-1, not just T
+            curlyPs = {}
+            for o in output_list:
+                curlyP_extrarows = self.forward_iteration_fakenews(curlyPs_old[o][-1, ...], 
+                                                                   Pi, sspol_i, sspol_pi, Tpost)
+                curlyPs[o] = np.concatenate((curlyPs_old[o][:-1, ...], curlyP_extrarows), axis=0)
+        else:
+            # was not saved at all, get curlyYs, curlyDs, curlyPs for ourselves
+            # step 1: compute curlyY and curlyD (backward iteration) for each input i (same as jac)
+            curlyYs, curlyDs = dict(), dict()
+            for i in shock_list:
+                curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, 
+                                                    ssin_dict, ssout_list, ss['D'], Pi_T, sspol_i, 
+                                                    sspol_pi, sspol_space, T, h, ss_for_hetinput)
+
+            # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
+            # here go to (T-1) + (Tpost-1) rather than (T-1)
+            curlyPs = dict()
+            for o in output_list:
+                curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1+Tpost-1)
+
+        # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
+        J = {o.upper(): {} for o in output_list}
+        for o in output_list:
+            for i in shock_list:
+                F = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
+                J[o.upper()][i] = HetBlock.J_from_F(F)
+
+        # will make this the actual asymptotic thing later, for now just see if it works
         return J
 
     def attach_hetinput(self, hetinput):
@@ -504,23 +557,24 @@ class HetBlock:
     def forward_iteration_fakenews(self, o_ss, Pi, pol_i_ss, pol_pi_ss, T):
         """Iterate transpose forward T steps to get full set of prediction vectors for a given outcome."""
         curlyPs = np.empty((T,) + o_ss.shape)
-        curlyPs[0, ...] = o_ss
+        curlyPs[0, ...] = utils.demean(o_ss)
         for t in range(1, T):
-            curlyPs[t, ...] = self.forward_step_transpose(curlyPs[t-1, ...], Pi, pol_i_ss, pol_pi_ss)
+            curlyPs[t, ...] = utils.demean(self.forward_step_transpose(curlyPs[t-1, ...], Pi, pol_i_ss, pol_pi_ss))
         return curlyPs
 
     @staticmethod
     def build_F(curlyYs, curlyDs, curlyPs):
         T = curlyDs.shape[0]
-        F = np.empty((T, T))
+        Tpost = curlyPs.shape[0] - T + 2
+        F = np.empty((Tpost + T - 1, T))
         F[0, :] = curlyYs
-        F[1:, :] = curlyPs[:T - 1, ...].reshape((T - 1, -1)) @ curlyDs.reshape((T, -1)).T
+        F[1:, :] = curlyPs.reshape((Tpost + T - 2, -1)) @ curlyDs.reshape((T, -1)).T
         return F
 
     @staticmethod
     def J_from_F(F):
         J = F.copy()
-        for t in range(1, J.shape[0]):
+        for t in range(1, J.shape[1]):
             J[1:, t] += J[:-1, t - 1]
         return J
 
@@ -531,8 +585,6 @@ class HetBlock:
                             'ss_for_hetinput', 'sspol_i', 'sspol_pi', 'sspol_space')
 
         if use_saved:
-            if save:
-                raise ValueError('Cannot save and use saved simultaneously!')
             if self.prelim_saved:
                 return tuple(self.prelim_saved[k] for k in output_names)
             else:

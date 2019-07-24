@@ -885,6 +885,10 @@ def output_list(f):
     return re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
 
 
+def demean(x):
+    return x - x.sum()/x.size
+
+
 # simpler aliases for LU factorization and solution
 def factor(X):
     return scipy.linalg.lu_factor(X)
@@ -894,5 +898,18 @@ def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)
 
 
+def extract_dict(savedA, keys, shape):
+    return {k: take_subarray(savedA[k], shape) for k in keys}
 
 
+def extract_nested_dict(savedA, keys1, keys2, shape):
+    return {k1: {k2: take_subarray(savedA[k1][k2], shape) for k2 in keys2} for k1 in keys1}
+        
+
+def take_subarray(A, shape):
+    # verify leading dimensions of A are >= shape
+    if not all(m <= n for m, n in zip(shape, A.shape)):
+        raise ValueError(f'Saved has dimensions {A.shape}, want larger {shape} subarray')
+
+    # take subarray along those dimensions: A[:shape, ...]
+    return A[tuple(slice(None, x, None) for x in shape) + (Ellipsis,)]
