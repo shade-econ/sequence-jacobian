@@ -2,6 +2,7 @@ import numpy as np
 from scipy.linalg import toeplitz
 from numpy.fft import rfft, rfftn, irfft, irfftn
 from numba import njit
+import jacobian as jac
 
 class AsymptoticTimeInvariant:
     """Represents the asymptotic behavior of infinite matrix that is asymptotically time invariant,
@@ -113,3 +114,31 @@ class AsymptoticTimeInvariant:
     def __eq__(self, other):
         return np.array_equal(self.v, other.v) if isinstance(other, AsymptoticTimeInvariant) else False
     
+    @staticmethod
+    def stack_invert(jacdict, unknowns, targets, tau):
+        n = len(unknowns)
+        assert n == len(targets)
+
+        # stack all together
+        A = jac.pack_asymptotic_jacobians(jacdict, unknowns, targets, tau)
+
+        # do rfft (turn into one-liner with rfftn later)
+        stacked_rfft = np.empty((2*tau, n, n),  dtype=np.complex128)
+        for i in range(n):
+            for j in range(n):
+                stacked_rfft[:, i, j] = AsymptoticTimeInvariant(A[:, i, j]).vfft
+        
+        # now stack the identity under similar conditions
+        id_rfft = rfft(np.arange(4*tau-1)==(2*tau-1))
+        stacked_id_rfft = np.zeros((2*tau, n, n), dtype=np.complex128)
+        for i in range(n):
+            stacked_id_rfft[:, i, i] = id_rfft
+        
+        # now solve for everything and extract
+        stacked_results = np.linalg.solve(stacked_rfft, stacked_id_rfft)
+        invJ = {}
+        for i, u in enumerate(unknowns):
+            invJ[u] = {}
+            for j, t in enumerate(targets):
+                invJ[u][t] = AsymptoticTimeInvariant(irfft(stacked_results[:, i, j], 4*tau-1)[1:2*tau])
+        return invJ

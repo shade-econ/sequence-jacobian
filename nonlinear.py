@@ -5,7 +5,7 @@ import het_block as het
 
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
-                                returnindividual=False, tol=1E-8, maxit=30, noisy=True, **kwargs):
+             returnindividual=False, tol=1E-8, maxit=30, noisy=True, save=False, use_saved=False, **kwargs):
     """Solves for TD general equilibrium of SHADE model, given shocks in kwargs.
 
     Parameters
@@ -46,7 +46,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     if H_U_factored is None:
         if H_U is None:
             # not even H_U is supplied, get it (costly if there are HetBlocks)
-            H_U = jac.get_H_U(block_list, unknowns, targets, T, ss)
+            H_U = jac.get_H_U(block_list, unknowns, targets, T, ss, save=save, use_saved=use_saved)
         H_U_factored = utils.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
