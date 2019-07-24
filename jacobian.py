@@ -3,6 +3,7 @@ import copy
 import utils
 import simple_block as sim
 import het_block as het
+import asymptotic
 
 
 '''Part 1: High-level convenience routines: 
@@ -15,7 +16,7 @@ import het_block as het
 '''
 
 
-def get_H_U(block_list, unknowns, targets, T, ss=None):
+def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=None):
     """Get n_u*T by n_u*T matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
@@ -32,13 +33,18 @@ def get_H_U(block_list, unknowns, targets, T, ss=None):
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, asymptotic, Tpost)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
 
     # "pack" these n_u*n_u matrices, each T*T, into a single matrix
-    return pack_jacobians(H_U_unpacked, unknowns, targets, T)
+    if not asymptotic:
+        return pack_jacobians(H_U_unpacked, unknowns, targets, T)
+    else:
+        if Tpost is None:
+            Tpost = 2*T
+        return pack_asymptotic_jacobians(H_U_unpacked, unknowns, targets, Tpost)
 
 
 def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None,
@@ -159,7 +165,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
-def curlyJ_sorted(block_list, inputs, ss=None, T=None):
+def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -188,7 +194,10 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None):
         if isinstance(block, sim.SimpleBlock):
             jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
         elif isinstance(block, het.HetBlock):
-            jac = block.jac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks])
+            if asymptotic:
+                jac = block.ajac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost)
+            else:
+                jac = block.jac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks])
         else:
             jac = block
         curlyJs.append(jac)
@@ -313,6 +322,19 @@ def unpack_jacobians(bigjac, inputs, outputs, T):
     return jacdict
 
 
+def pack_asymptotic_jacobians(jacdict, inputs, outputs, tau):
+    nI, nO = len(inputs), len(outputs)
+    A = np.empty((2*tau-1, nI, nO))
+    for iO in range(nO):
+        subdict = jacdict.get(outputs[iO], {})
+        for iI in range(nI):
+            if inputs[iI] in subdict:
+                A[:, iO, iI] = make_ATI(jacdict[outputs[iO]][inputs[iI]], tau)
+            else:
+                A[:, iO, iI] = 0
+    return A
+
+
 def pack_vectors(vs, names, T):
     v = np.zeros(len(names)*T)
     for i, name in enumerate(names):
@@ -336,6 +358,13 @@ def make_matrix(A, T):
         return A.matrix(T)
     else:
         return A
+
+
+def make_ATI(x, tau):
+    if not isinstance(x, asymptotic.AsymptoticTimeInvariant):
+        return x.asymptotic_time_invariant.changetau(tau).v
+    else:
+        return x.v
 
 
 '''Part 3: IdentityMatrix class'''
