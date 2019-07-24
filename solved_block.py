@@ -23,8 +23,8 @@ class SolvedBlock:
         self.targets = targets
 
         # need to have inputs and outputs!!!
-        # self.outputs = set.union(*(b.outputs for b in block_list))
-        # self.inputs = set.union(*(b.inputs for b in block_list)) - self.outputs
+        self.outputs = (set.union(*(b.outputs for b in block_list)) | set(self.unknowns)) - set(self.targets)
+        self.inputs = set.union(*(b.inputs for b in block_list)) - self.outputs
 
     def ss(self, *args, **kwargs):
         raise NotImplementedError('Cannot evaluate steady state for a SolvedBlock!')
