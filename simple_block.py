@@ -1,6 +1,7 @@
 import numpy as np
 from numba import njit
 import utils
+import asymptotic
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
@@ -187,6 +188,15 @@ class SimpleSparse:
             indices, xs = zip(*self.elements.items())
             self.indices, self.xs = np.array(indices), np.array(xs)
             return self.indices, self.xs
+
+    @property
+    def asymptotic_time_invariant(self):
+        indices, xs = self.array()
+        tau = np.max(np.abs(indices[:, 0]))+1 # how far out do we go?
+        v = np.zeros(2*tau-1)
+        #v[indices[:, 0]+tau-1] = xs
+        v[-indices[:, 0]+tau-1] = xs # switch from asymptotic ROW to asymptotic COLUMN
+        return asymptotic.AsymptoticTimeInvariant(v)
 
     @property
     def T(self):

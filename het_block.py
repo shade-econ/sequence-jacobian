@@ -1,6 +1,7 @@
 import numpy as np
 import utils
 import copy
+import asymptotic
 
 
 def het(exogenous, policy, backward):
@@ -359,13 +360,17 @@ class HetBlock:
 
         # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
         J = {o.upper(): {} for o in output_list}
+        asympJ = {o.upper(): {} for o in output_list}
         for o in output_list:
             for i in shock_list:
                 F = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.upper()][i] = HetBlock.J_from_F(F)
+                asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
+                    np.concatenate((np.zeros(Tpost-T), J[o.upper()][i][:, -1])))
 
         # will make this the actual asymptotic thing later, for now just see if it works
-        return J
+        # return J
+        return asympJ
 
     def attach_hetinput(self, hetinput):
         """Make new HetBlock that first processes inputs through function hetinput.
