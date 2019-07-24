@@ -326,8 +326,10 @@ class HetBlock:
         if use_saved and 'curlyYs' not in self.saved:
             asympJ = {}
             for o in output_list:
+                asympJ[o.upper()] = {}
                 for i in shock_list:
-                    asympJ[o.upper()][i] = self.saved['asympJ'][o.upper()][i][-(Tpost-1): Tpost]
+                    asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
+                                                self.saved['asympJ'][o.upper()][i][-(Tpost-1): Tpost])
             return asympJ
 
         # was either saved last by jac or not saved at all, need to do more work!

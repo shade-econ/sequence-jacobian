@@ -260,7 +260,12 @@ class SimpleSparse:
             return A.reshape((T, T))
 
     def __radd__(self, A):
-        return self + A
+        try:
+            return self + A
+        except:
+            print(self)
+            print(A)
+            raise
 
     def __sub__(self, A):
         # slightly inefficient implementation with temporary for simplicity

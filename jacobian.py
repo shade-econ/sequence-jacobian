@@ -16,7 +16,7 @@ import asymptotic
 '''
 
 
-def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=None):
+def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
     """Get n_u*T by n_u*T matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
@@ -33,7 +33,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, asymptotic, Tpost)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, asymptotic, Tpost, save, use_saved)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
@@ -48,7 +48,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
 
 
 def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None,
-                                                            H_U=None, H_U_factored=None):
+                                        H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Get a single general equilibrium impulse response.
 
     Extremely fast when H_U_factored = utils.factor(get_HU(...)) has already been computed
@@ -76,7 +76,8 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
             T = len(x)
             break
 
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss, T)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss, T,
+                                      save=save, use_saved=use_saved)
 
     # step 1: if not provided, do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
     if H_U is None and H_U_factored is None:
@@ -112,7 +113,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
 
 
 def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, 
-                                                        H_U=None, H_U_factored=None):
+                            H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
 
@@ -139,7 +140,8 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     """
 
     # step 1: do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T,
+                                      save=save, use_saved=use_saved)
 
     # step 2: do (matrix) forward accumulation to get
     # H_U = J^(curlyH, curlyU) [if not provided], H_Z = J^(curlyH, curlyZ)
@@ -165,7 +167,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
-def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None):
+def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -195,9 +197,11 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
             jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
         elif isinstance(block, het.HetBlock):
             if asymptotic:
-                jac = block.ajac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost)
+                jac = block.ajac(ss, T=T,
+                                 shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost, save=save, use_saved=use_saved)
             else:
-                jac = block.jac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks])
+                jac = block.jac(ss, T=T,
+                                shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved)
         else:
             jac = block
         curlyJs.append(jac)
