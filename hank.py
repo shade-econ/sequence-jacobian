@@ -1,9 +1,12 @@
 import numpy as np
 from numba import vectorize, njit
+import matplotlib.pyplot as plt
 
 import utils
 from het_block import het
 from simple_block import simple
+import jacobian as jac
+import determinacy as det
 
 
 '''Part 1: HA block'''
@@ -204,3 +207,49 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     ss.update({'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
                'walras': walras, 'ssflag': False})
     return ss
+
+
+def fig_winding_number(T=300):
+    """Winding number vs. singular values"""
+    # phis=np.linspace(start=0.95, stop=1.05, num=10)
+    phis = np.unique(np.concatenate((np.linspace(0.95, 0.98, 5),
+                                     np.linspace(0.98, 1.02, 30),
+                                     np.linspace(1.02, 1.05, 5))))
+
+    # determinacy threshold
+    sv_ratio = np.empty_like(phis)
+    for it, phi in enumerate(phis):
+        # print(it)
+        ss_cur = {**ss, 'phi': phi}
+        H_U_cur = jac.get_H_U(block_list, unknowns, targets, T, ss_cur, use_saved=True)
+
+        _, s, _ = np.linalg.svd(H_U_cur)
+        sv_ratio[it] = s[-1] / s[-2]
+
+    # bisection to get the threshold of winding number
+    # then plot EXACT step function
+    phi_low = 0.95
+    phi_high = 1.05
+    while phi_high - phi_low > 1E-6:
+        phi_mid = (phi_low + phi_high)/2
+        ss_cur = {**ss, 'phi': phi_mid}
+        A_cur = jac.get_H_U(block_list, unknowns, targets, T, ss_cur, asymptotic=True, use_saved=True)
+        wn_cur = det.winding_criterion(A_cur)
+        if wn_cur == 0:
+            phi_high = phi_mid
+        else:
+            phi_low = phi_mid
+    phi_threshold = (phi_low + phi_high)/2
+    print(f'PHI THRESHOLD IS {phi_threshold}')
+
+    phis_wn = [phis[0], phi_threshold, phi_threshold, phis[-1]]
+    wns = [0, 0, 1, 1]
+
+    # plot
+    plt.figure()
+    plt.plot(phis_wn, wns, linewidth=2, label=r'winding number + 1')
+    plt.plot(phis, sv_ratio, linewidth=2, label=r'singular value ratio', linestyle='--')
+    plt.legend(framealpha=0)
+    plt.xlabel(r'Taylor rule coefficient $\phi$')
+    plt.tight_layout()
+    plt.show()
