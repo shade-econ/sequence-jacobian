@@ -31,8 +31,7 @@ def winding_criterion(A, N=4096):
 def detA_path(A, N=4096):
     """Evaluates det A(lambda) at N equispaced points lambda on interval [0,2pi].
 
-    A brief derivation of how this function uses the FFT to rapidly evaluate det A(lambda)
-    follows. For more in-depth discussion of each step, see determinacy.ipynb notebook.
+    A brief derivation of how this function uses FFT to rapidly evaluate det A(lambda) follows.
 
     We have, letting A_(-j) denote the k*k matrix A[-j,:,:]:
 
