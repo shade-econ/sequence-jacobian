@@ -142,6 +142,9 @@ def transfers(pi_e, Div, Tax, div_rule, tax_rule):
     return T
 
 
+household_trans = household.attach_hetinput(transfers)
+
+
 '''Part 3: Steady state'''
 
 
@@ -179,18 +182,25 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         c_const_loc, n_const_loc = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi_loc, Va)
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
             raise ValueError('Clearly invalid inputs')
-        out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta_loc, eis=eis,
-                           frisch=frisch, vphi=vphi_loc, c_const=c_const_loc, n_const=n_const_loc, ssflag=True)
+        out = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta_loc, eis=eis,
+                                 frisch=frisch, vphi=vphi_loc, c_const=c_const_loc, n_const=n_const_loc,
+                                 tax_rule=tax_rule, div_rule=div_rule, ssflag=True)
         return np.array([out['A'] - B, out['NS'] - 1])
 
     # solve for beta, vphi
     (beta, vphi), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
 
-    # extra evaluation to report variables
+    # extra evaluation for reporting
     c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
-    ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, T=T, w=w, r=r, beta=beta, eis=eis,
-                      frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const, ssflag=True)
-    ss.update({'pi_e': pi_e, 'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
-               'Div': Div, 'Tax': Tax, 'div_rule': div_rule, 'tax_rule': tax_rule,
-               'goods_mkt': 1 - ss['C'], 'ssflag': False})
+    ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
+                      Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const,
+                      tax_rule=tax_rule, div_rule=div_rule, ssflag=True)
+
+    # check Walras's law
+    walras = 1 - ss['C']
+    assert np.abs(walras) < 1E-8
+
+    # add aggregate variables
+    ss.update({'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
+               'walras': walras, 'ssflag': False})
     return ss
