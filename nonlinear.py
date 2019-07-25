@@ -6,8 +6,10 @@ import het_block as het
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, noisy=True, save=False, use_saved=False, **kwargs):
-    """Solves for TD general equilibrium of SHADE model, given shocks in kwargs.
+    """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
+    Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
+    
     Parameters
     ----------
     ss              : dict, all steady-state information
@@ -22,6 +24,8 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     tol             : [optional] scalar, for convergence of Newton's method we require |H|<tol
     maxit           : [optional] int, maximum number of iterations of Newton's method
     noisy           : [optional] bool, flag to print largest absolute error for each target
+    save            : [optional] bool, flag for saving Jacobians inside HetBlocks during calc of H_U
+    use_saved       : [optional] bool, flag for using saved Jacobians inside HetBlocks during calc of H_U
     kwargs          : dict, all shocked Z go here, must all have same length T
 
     Returns
@@ -63,6 +67,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
         if all(v < tol for v in errors.values()):
             break
         else:
+            # update guess U by -H_U^(-1) times errors H
             Hvec = jac.pack_vectors(results, targets, T)
             Uvec -= utils.factored_solve(H_U_factored, Hvec)
             Us = jac.unpack_vectors(Uvec, unknowns, T)
