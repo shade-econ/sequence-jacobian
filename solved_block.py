@@ -41,7 +41,9 @@ class SolvedBlock:
         return jac.get_G(self.block_list, shock_list, self.unknowns, self.targets,
                          T, ss, output_list, save=save, use_saved=use_saved)
 
-    def ajac(self):
-        # NEED TO IMPLEMENT
-        # need inversion for get_G to even work
-        pass
+    def ajac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False, Tpost=None):
+        # test to see if this works?
+        if Tpost is None:
+            Tpost = 2*T
+        return jac.get_G_asymptotic(self.block_list, shock_list, self.unknowns,
+                self.targets, T, ss, output_list, save=save, use_saved=use_saved, Tpost=Tpost)

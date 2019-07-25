@@ -114,7 +114,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
 
 
 def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, 
-                            H_U=None, H_U_factored=None, save=False, use_saved=False):
+          H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
 
@@ -166,6 +166,28 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     if outputs is None:
         outputs = set().union(*(curlyJ.keys() for curlyJ in curlyJs)) - set(targets)
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
+
+
+def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, 
+                     save=False, use_saved=False, Tpost=None):
+    # step 1: do topological sort and get curlyJs
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T, save=save, 
+                                      use_saved=use_saved, asymptotic=True, Tpost=Tpost)
+
+    # step 2: do (matrix) forward accumulation to get
+    # H_U = J^(curlyH, curlyU)
+    J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)   
+
+    # step 3: invert H_U and forward accumulate to get G_U = H_U^(-1)H_Z
+    U_H_unpacked = asymptotic.invert_jacdict(J_curlyH_U, unknowns, targets, Tpost)
+    G_U = forward_accumulate(curlyJs + [U_H_unpacked], exogenous, unknowns, required | set(targets))
+
+    # step 4: forward accumulation to get all outputs starting with G_U
+    # by default, don't calculate targets!
+    curlyJs = [G_U] + curlyJs
+    if outputs is None:
+        outputs = set().union(*(curlyJ.keys() for curlyJ in curlyJs)) - set(targets)
+    return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns)) 
 
 
 def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
