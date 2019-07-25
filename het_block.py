@@ -107,6 +107,7 @@ class HetBlock:
         - ss    : do backward and forward iteration until convergence to get complete steady state
         - td    : do backward and forward iteration up to T to compute dynamics given some shocks
         - jac   : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
+        - ajac  : compute asymptotic columns of jacobians output by jac, also using fake news algorithm
 
         - attach_hetinput : make new HetBlock that first processes inputs through function hetinput
     '''
@@ -248,7 +249,7 @@ class HetBlock:
             return aggregates
 
     def jac(self, ss, T, shock_list, output_list=None, h=1E-4, save=False, use_saved=False):
-        """Assemble nested dict of Jacobians relating aggregate inputs to outputs.
+        """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
         ----------
@@ -263,6 +264,11 @@ class HetBlock:
             self.back_step_fun except self.backward
         h : [optional] float
             h for numerical differentiation of backward iteration
+        save : [optional] bool
+            store curlyYs, curlyDs, curlyPs, F, and J from calculation inside HetBlock itself
+            useful to avoid redundant work when evaluating .jac or .ajac again
+        use_saved : [optional] bool
+            use J stored inside HetBlock to calculate the Jacobian, raises error if not available
 
         Returns
         -------
@@ -282,19 +288,22 @@ class HetBlock:
         (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
                                                 sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save)
 
-        # step 1: compute curlyY and curlyD (backward iteration) for each input i
+        # step 1 of fake news algorithm
+        # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = dict(), dict()
         for i in shock_list:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, ssin_dict, ssout_list,
                                                                 ss['D'], Pi_T, sspol_i, sspol_pi, sspol_space, T, h,
                                                                 ss_for_hetinput)
 
-        # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
+        # step 2 of fake news algorithm
+        # compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = dict()
         for o in output_list:
             curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
 
-        # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
+        # steps 3-4 of fake news algorithm
+        # make fake news matrix and Jacobian for each outcome-input pair
         F = {o.upper(): {} for o in output_list}
         J = {o.upper(): {} for o in output_list}
         for o in output_list:
@@ -302,16 +311,21 @@ class HetBlock:
                 F[o.upper()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
 
-        # if supposed to save, record everything
         if save:
             self.saved_shock_list, self.saved_output_list = shock_list, output_list
             self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
 
-        # report Jacobians
         return J
 
     def ajac(self, ss, T, shock_list, output_list=None, h=1E-4, Tpost=None, save=False, use_saved=False):
-        """Output asymptotic Jacobian (-T+1, ... 0, T-1)"""
+        """Like .jac, but outputs asymptotic columns of Jacobians as AsymptoticTimeInvariant objects
+        with nonzero entries -(T-1),...,(Tpost-1) representing asymptotic entries in diagonals,
+        measured relative to main diagonal.
+        
+        Does additional iteration on curlyPs as necessary to extend Tpost beyond T, since common case
+        is that curlyYs and curlyDs from backward iteration converge to zero much more quickly than
+        curlyPs from forward iteration."""
+
         # default outputs are just all outputs of back it function except backward variables
         if output_list is None:
             output_list = self.non_back_outputs
@@ -571,7 +585,13 @@ class HetBlock:
         return curlyYs, curlyDs
 
     def forward_iteration_fakenews(self, o_ss, Pi, pol_i_ss, pol_pi_ss, T):
-        """Iterate transpose forward T steps to get full set of prediction vectors for a given outcome."""
+        """Iterate transpose forward T steps to get full set of curlyPs for a given outcome.
+        
+        Note we depart from definition in paper by applying the demeaning operator in addition to Lambda
+        at each step. This does not affect products with curlyD (which are the only way curlyPs enter
+        Jacobian) since perturbations to distribution always have mean zero. It has numerical benefits
+        since curlyPs now go to zero for high t (used in paper in proof of Proposition 1).
+        """
         curlyPs = np.empty((T,) + o_ss.shape)
         curlyPs[0, ...] = utils.demean(o_ss)
         for t in range(1, T):

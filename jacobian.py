@@ -2,8 +2,6 @@ import numpy as np
 import copy
 import utils
 import simple_block as sim
-import het_block as het
-import solved_block as sol
 import asymptotic
 
 
@@ -238,16 +236,19 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     shocks = set(inputs) | required
     for num in topsorted:
         block = block_list[num]
-        if isinstance(block, sim.SimpleBlock):
-            jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
-        elif isinstance(block, het.HetBlock) or isinstance(block, sol.SolvedBlock):
+        if hasattr('ajac'):
+            # has 'ajac' function, is some block other than SimpleBlock
             if asymptotic:
                 jac = block.ajac(ss, T=T,
                                  shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost, save=save, use_saved=use_saved)
             else:
                 jac = block.jac(ss, T=T,
                                 shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved)
+        elif hasattr('jac'):
+            # has 'jac' but not 'ajac', must be SimpleBlock where no distinction (given SimpleSparse)
+            jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
         else:
+            # doesn't have 'jac', must be nested dict that is jac directly
             jac = block
         curlyJs.append(jac)
 
