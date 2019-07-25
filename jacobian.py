@@ -236,7 +236,7 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     shocks = set(inputs) | required
     for num in topsorted:
         block = block_list[num]
-        if hasattr('ajac'):
+        if hasattr(block, 'ajac'):
             # has 'ajac' function, is some block other than SimpleBlock
             if asymptotic:
                 jac = block.ajac(ss, T=T,
@@ -244,7 +244,7 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
             else:
                 jac = block.jac(ss, T=T,
                                 shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved)
-        elif hasattr('jac'):
+        elif hasattr(block, 'jac'):
             # has 'jac' but not 'ajac', must be SimpleBlock where no distinction (given SimpleSparse)
             jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])
         else:
