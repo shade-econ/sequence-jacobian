@@ -362,6 +362,17 @@ def pack_asymptotic_jacobians(jacdict, inputs, outputs, tau):
     return A
 
 
+def unpack_asymptotic_jacobians(A, inputs, outputs, tau):
+    nI, nO = len(inputs), len(outputs)
+
+    jacdict = {}
+    for iO in range(nO):
+        jacdict[outputs[iO]] = {}
+        for iI in range(nI):
+            jacdict[outputs[iO]][inputs[iI]] = asymptotic.AsymptoticTimeInvariant(A[:, iO, iI])
+    return jacdict
+
+
 def pack_vectors(vs, names, T):
     v = np.zeros(len(names)*T)
     for i, name in enumerate(names):

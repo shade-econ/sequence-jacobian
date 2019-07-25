@@ -13,7 +13,6 @@ def winding_criterion(A, N=4096):
     A : array ((2T-1)*k*k)
             asymptotic H_U matrix, where A[t,i,j] gives Jacobian of target i vs. unknown j
             at t-(T-1) above the main diagonal
-
     N : [optional] int
             number of equispaced points lambda on interval [0,2pi] for evaluating det A(lambda)
 
