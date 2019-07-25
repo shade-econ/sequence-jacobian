@@ -11,6 +11,7 @@ import asymptotic
     - get_H_U               : get H_U matrix mapping all unknowns to all targets
     - get_impulse           : get single GE impulse response
     - get_G                 : get G matrices characterizing all GE impulse responses
+    - get_G_asymptotic      : get asymptotic diagonals of the G matrices returned by get_G
 
     - curlyJs_sorted        : get block Jacobians curlyJ and return them topologically sorted
     - forward_accumulate    : forward accumulation on DAG, taking in topologically sorted Jacobians
@@ -18,7 +19,7 @@ import asymptotic
 
 
 def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
-    """Get n_u*T by n_u*T matrix H_U, Jacobian mapping all unknowns to all targets.
+    """Get T*n_u by T*n_u matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
     ----------
@@ -26,11 +27,20 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
     unknowns   : list of str, names of unknowns in DAG
     targets    : list of str, names of targets in DAG
     T          : int, truncation horizon
+                    (if asymptotic, truncation horizon for backward iteration in HetBlocks)
     ss         : [optional] dict, steady state required if block_list contains any non-jacdicts
+    asymptotic : [optional] bool, flag for returning asymptotic H_U
+    Tpost      : [optional] int, truncation horizon for asymptotic -(Tpost-1),...,0,...,(Tpost-1)
+    save       : [optional] bool, flag for saving Jacobians inside HetBlocks
+    use_saved  : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
     Returns
     -------
-    H_U : array H_U, Jacobian mapping all unknowns to all targets.
+    H_U : 
+        if asymptotic=False:
+            array(T*n_u*T*n_u) H_U, Jacobian mapping all unknowns to all targets
+        is asymptotic=True:
+            array((2*Tpost-1)*n_u*n_u), representation of asymptotic columns of H_U
     """
 
     # do topological sort and get curlyJs
@@ -39,10 +49,11 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
 
-    # "pack" these n_u*n_u matrices, each T*T, into a single matrix
     if not asymptotic:
+        # pack these n_u^2 matrices, each T*T, into a single matrix
         return pack_jacobians(H_U_unpacked, unknowns, targets, T)
     else:
+        # pack these n_u^2 AsymptoticTimeInvariant objects into a single (2*Tpost-1,n_u,n_u) array
         if Tpost is None:
             Tpost = 2*T
         return pack_asymptotic_jacobians(H_U_unpacked, unknowns, targets, Tpost)
@@ -66,6 +77,8 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
     outputs      : [optional] list of str, variables we want impulse responses for
     H_U          : [optional] array, precomputed Jacobian mapping unknowns to targets
     H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.factor(H_U)
+    save         : [optional] bool, flag for saving Jacobians inside HetBlocks
+    use_saved    : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
     Returns
     -------
@@ -134,6 +147,8 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     outputs      : [optional] list of str, variables we want impulse responses for
     H_U          : [optional] array, precomputed Jacobian mapping unknowns to targets
     H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.factor(H_U)
+    save         : [optional] bool, flag for saving Jacobians inside HetBlocks
+    use_saved    : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
     Returns
     -------
@@ -170,6 +185,9 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
 
 def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, 
                      save=False, use_saved=False, Tpost=None):
+    """Like get_G, but rather than returning the actual matrices G, return
+    asymptotic.AsymptoticTimeInvariant objects representing their asymptotic columns."""
+
     # step 1: do topological sort and get curlyJs
     curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T, save=save, 
                                       use_saved=use_saved, asymptotic=True, Tpost=Tpost)
@@ -201,6 +219,10 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     inputs     : list, input names we need to differentiate with respect to
     ss         : [optional] dict, steady state, needed if block_list includes blocks themselves
     T          : [optional] int, horizon for differentiation, needed if block_list includes hetblock itself
+    asymptotic : [optional] bool, flag for returning asymptotic Jacobians
+    Tpost      : [optional] int, truncation horizon for asymptotic -(Tpost-1),...,0,...,(Tpost-1)
+    save       : [optional] bool, flag for saving Jacobians inside HetBlocks
+    use_saved  : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
     Returns
     -------
@@ -241,6 +263,10 @@ def forward_accumulate(curlyJs, inputs, outputs=None, required=None):
     Optionally only find outputs in 'outputs', especially if we have knowledge of
     what is required for later Jacobians.
 
+    Note that the overloading of @ means that this works automatically whether curlyJs are ordinary
+    matrices, simple_block.SimpleSparse objects, or asymptotic.AsymptoticTimeInvariant objects,
+    as long as the first and third are not mixed (since multiplication not defined for them).
+
     Much-extended version of chain_jacobians.
 
     Parameters
@@ -252,23 +278,31 @@ def forward_accumulate(curlyJs, inputs, outputs=None, required=None):
 
     Returns
     -------
-    out : dict of dict or dict, either total J for each output wrt all inputs or outcome from applying all curlyJs
+    out : dict of dict or dict, either total J for each output wrt all inputs or
+            outcome from applying all curlyJs
     """
 
     if outputs is not None and required is not None:
+        # if list of outputs provided, we need to obtain these and 'required' along the way
         alloutputs = set(outputs) | set(required)
     else:
+        # otherwise, set to None, implies default behavior of obtaining all outputs in curlyJs
         alloutputs = None
 
+    # if inputs is list (jacflag=True), interpret as list of inputs for which we want to calculate jacs
+    # if inputs is dict, interpret as input *paths* to which we apply all Jacobians in curlyJs
     jacflag = not isinstance(inputs, dict)
 
     if jacflag:
+        # Jacobians of inputs with respect to themselves are the identity, initialize with this
         out = {i: {i: IdentityMatrix()} for i in inputs}
     else:
         out = inputs.copy()
 
+    # iterate through curlyJs, in what is presumed to be a topologically sorted order
     for curlyJ in curlyJs:
         if alloutputs is not None:
+            # if we want specific list of outputs, restrict curlyJ to that before continuing
             curlyJ = {k: v for k, v in curlyJ.items() if k in alloutputs}
         if jacflag:
             out.update(compose_jacobians(out, curlyJ))
@@ -276,11 +310,16 @@ def forward_accumulate(curlyJs, inputs, outputs=None, required=None):
             out.update(apply_jacobians(curlyJ, out))
 
     if outputs is not None:
+        # if we want specific list of outputs, restrict to that
+        # (dropping 'required' in 'alloutputs' that was needed for intermediate computations)
         return {k: out[k] for k in outputs if k in out}
     else:
         if jacflag:
+            # default behavior for Jacobian case: return all Jacobians we used/calculated along the way
+            # except the (redundant) IdentityMatrix objects mapping inputs to themselves
             return {k: v for k, v in out.items() if k not in inputs}
         else:
+            # default behavior for case where we're calculating paths: return everything, including inputs
             return out
 
 
@@ -350,16 +389,31 @@ def unpack_jacobians(bigjac, inputs, outputs, T):
 
 
 def pack_asymptotic_jacobians(jacdict, inputs, outputs, tau):
+    """If we have -(tau-1),...,(tau-1) AsymptoticTimeInvariant Jacobians (or SimpleSparse) from
+    nI inputs to nO outputs in jacdict, combine into (2*tau-1,nO,nI) array A"""
     nI, nO = len(inputs), len(outputs)
     A = np.empty((2*tau-1, nI, nO))
     for iO in range(nO):
         subdict = jacdict.get(outputs[iO], {})
         for iI in range(nI):
             if inputs[iI] in subdict:
-                A[:, iO, iI] = make_ATI(jacdict[outputs[iO]][inputs[iI]], tau)
+                A[:, iO, iI] = make_ATI_v(jacdict[outputs[iO]][inputs[iI]], tau)
             else:
                 A[:, iO, iI] = 0
     return A
+
+
+def unpack_asymptotic_jacobians(A, inputs, outputs, tau):
+    """If we have (2*tau-1, nO, nI) array A where each A[:,o,i] is vector for AsymptoticTimeInvariant
+    Jacobian mapping output o to output i, output nested dict of AsymptoticTimeInvariant objects"""
+    nI, nO = len(inputs), len(outputs)
+
+    jacdict = {}
+    for iO in range(nO):
+        jacdict[outputs[iO]] = {}
+        for iI in range(nI):
+            jacdict[outputs[iO]][inputs[iI]] = asymptotic.AsymptoticTimeInvariant(A[:, iO, iI])
+    return jacdict
 
 
 def pack_vectors(vs, names, T):
@@ -378,16 +432,17 @@ def unpack_vectors(v, names, T):
 
 
 def make_matrix(A, T):
-    """
-    If A is not an outright ndarray, e.g. it is SimpleSparse, call its .matrix(T) method to convert it to T*T array.
-    """
+    """If A is not an outright ndarray, e.g. it is SimpleSparse, call its .matrix(T) method
+    to convert it to T*T array."""
     if not isinstance(A, np.ndarray):
         return A.matrix(T)
     else:
         return A
 
 
-def make_ATI(x, tau):
+def make_ATI_v(x, tau):
+    """If x is either a AsymptoticTimeInvariant or something that can be converted to it, e.g.
+    SimpleSparse, report the underlying length 2*tau-1 vector with entries -(tau-1),...,(tau-1)"""
     if not isinstance(x, asymptotic.AsymptoticTimeInvariant):
         return x.asymptotic_time_invariant.changetau(tau).v
     else:
@@ -398,8 +453,8 @@ def make_ATI(x, tau):
 
 
 class IdentityMatrix:
-    """Simple identity matrix class with which we can initialize chain_jacobians, avoiding costly explicit construction
-    of and operations on identity matrices."""
+    """Simple identity matrix class with which we can initialize chain_jacobians and forward_accumulate,
+    avoiding costly explicit construction of and operations on identity matrices."""
     __array_priority__ = 10_000
 
     def sparse(self):

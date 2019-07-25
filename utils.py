@@ -898,6 +898,8 @@ def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)
 
 
+# functions for handling saved Jacobians: extract keys from dicts or key pairs
+# from nested dicts, and take subarrays with 'shape' of the values
 def extract_dict(savedA, keys, shape):
     return {k: take_subarray(savedA[k], shape) for k in keys}
 

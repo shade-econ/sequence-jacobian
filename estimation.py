@@ -8,6 +8,8 @@ from numba import njit
 def all_covariances(M, sigmas):
     """Use Fast Fourier Transform to compute covariance function between O vars up to T-1 lags.
 
+    See equation (108) in appendix B.5 of paper for details.
+
     Parameters
     ----------
     M      : array (T*O*Z), stacked impulse responses of nO variables to nZ shocks (MA(T-1) representation) 
