@@ -3,16 +3,16 @@
 Interactive guide to Auclert, Bardóczy, Rognlie, Straub (2019):
  "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models". 
 
-[Click here](https://github.com/shade-econ/sequence-jacobian/archive/master.zip) to download all files as a zip.
+[Click here](https://github.com/shade-econ/sequence-jacobian/archive/master.zip) to download all files as a zip. Note: **major update** on July 26, 2019.
 
 ## 1. Resources
 
+- [Paper](https://shade-econ.github.io/sequence-jacobian/sequence_jacobian_paper.pdf)
 - [Beamer slides](https://shade-econ.github.io/sequence-jacobian/sequence_jacobian_slides.pdf)
-- Working paper
-- RBC notebook 
+- RBC notebook ([html](https://shade-econ.github.io/sequence-jacobian/rbc.html)) ([Jupyter](rbc.ipynb))
 - Krusell-Smith notebook ([html](https://shade-econ.github.io/sequence-jacobian/krusell_smith.html)) ([Jupyter](krusell_smith.ipynb))
-- One-Asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/hank.html)) ([Jupyter](hank.ipynb))
-- Two-Asset HANK notebook
+- One-asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/hank.html)) ([Jupyter](hank.ipynb))
+- Two-asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/two_asset.html)) ([Jupyter](two_asset.ipynb))
 - HA Jacobian notebook ([html](https://shade-econ.github.io/sequence-jacobian/het_jacobian.html)) ([Jupyter](het_jacobian.ipynb))
 
 ### 1.1 RBC notebook
@@ -22,16 +22,15 @@ Interactive guide to Auclert, Bardóczy, Rognlie, Straub (2019):
 
 ### 1.2. Krusell-Smith notebook
 
-**The first example.** A comprehensive tutorial in the context of a simple, well-known HA model. 
+**The first example.** A comprehensive tutorial in the context of a simple, well-known HA model. Shows how to compute the Jacobian both "by hand" and with our automated tools. Also shows how to calculate second moments and the likelihood function.
 
-### 1.3. One-Asset HANK notebook
+### 1.3. One-asset HANK notebook
 
-**The second example.** Illustrates that our method generalizes well to larger models with significant
-nonlinearities. Uses tools that automatically combine the Jacobians of individual model blocks. Also addresses the question of local determinacy.
+**The second example.** Generalizes to a more complex model, with a focus on our automated tools to streamline the workflow. Introduces our winding number criterion for local determinacy.
 
-### 1.4. Two-Asset HANK notebook
+### 1.4. Two-asset HANK notebook
 
-**The third example.** Showcases the workflow for solving a state-of-the-art HANK model with sticky prices, sticky wages, and capital adjustment costs. Introduces the concept of solved blocks.
+**The third example.** Showcases the workflow for solving a state-of-the-art HANK model where households hold liquid and illiquid assets, and there are sticky prices, sticky wages, and capital adjustment costs on the production side. Introduces the concept of solved blocks.
 
 ### 1.5. HA Jacobian notebook
 
