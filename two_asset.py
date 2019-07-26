@@ -249,12 +249,19 @@ def income(e_grid, tax, w, N):
     return z_grid
 
 
+household_inc = household.attach_hetinput(income)
+
+
 '''Part 3: Steady state'''
 
 
 def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
             muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi2=2, epsI=4, omega=0.005, kappaw=0.1,
             phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, noisy=True):
+    """Solve steady state of full GE model. Calibrate (beta, vphi, chi1, alpha, mup, Z) to hit targets for
+       (r, tot_wealth, Bh, K, Y=N=1).
+    """
+
     # set up grid
     b_grid = utils.agrid(amax=bmax, n=nB)
     a_grid = utils.agrid(amax=amax, n=nA)
@@ -273,9 +280,9 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
     p = div / r
     ra = r
     rb = r - omega
-    z_grid = income(e_grid, tax, w, 1)
 
     # figure out initializer
+    z_grid = income(e_grid, tax, w, 1)
     Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
     Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
 
@@ -284,8 +291,8 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
         beta_loc, vphi_loc, chi1_loc = x
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001 or chi1_loc < 0.5:
             raise ValueError('Clearly invalid inputs')
-        out = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, z_grid=z_grid, e_grid=e_grid,
-                           k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
+        out = household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
+                               k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
         asset_mkt = out['A'] + out['B'] - p - Bg
         labor_mkt = vphi_loc - muw * (1 - tax) * w * out['U']
         return np.array([asset_mkt, labor_mkt, out['B'] - Bh])
@@ -294,16 +301,17 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
     (beta, vphi, chi1), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess, chi1_guess]), noisy=noisy)
 
     # extra evaluation to report variables
-    ss = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, z_grid=z_grid, e_grid=e_grid, k_grid=k_grid,
-                      beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+    ss = household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
+                          k_grid=k_grid, beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
 
-    # other thigns of interest
+    # other things of interest
     pshare = p / (tot_wealth - Bh)
 
     # calculate aggregate adjustment cost and check Walras's law
     chi = Psi_fun(ss['a'], a_grid, r, chi0, chi1, chi2)
     Chi = np.vdot(ss['D'], chi)
     goods_mkt = ss['C'] + I + G + Chi + omega * ss['B'] - 1
+    assert np.abs(goods_mkt) < 1E-7
 
     ss.update({'pi': 0, 'piw': 0, 'Q': 1, 'Y': 1, 'N': 1, 'mc': mc, 'K': K, 'Z': Z, 'I': I, 'w': w, 'tax': tax,
                'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'Chi': Chi, 'goods_mkt': goods_mkt, 'chi': chi, 'phi': phi,
