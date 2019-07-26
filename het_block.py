@@ -285,20 +285,20 @@ class HetBlock:
                         keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T,T))
 
         # step 0: preliminary processing of steady state
-        (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
-                                                sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save)
+        (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
+                                    sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
-        curlyYs, curlyDs = dict(), dict()
+        curlyYs, curlyDs = {}, {}
         for i in shock_list:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, ssin_dict, ssout_list,
-                                                                ss['D'], Pi_T, sspol_i, sspol_pi, sspol_space, T, h,
-                                                                ss_for_hetinput)
+                                                ss['D'], Pi.T.copy(), sspol_i, sspol_pi, sspol_space, T, h,
+                                                ss_for_hetinput)
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
-        curlyPs = dict()
+        curlyPs = {}
         for o in output_list:
             curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
 
@@ -349,8 +349,8 @@ class HetBlock:
         # was either saved last by jac or not saved at all, need to do more work!
 
         # step 0: preliminary processing of steady state
-        (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, 
-                                        sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save, use_saved)
+        (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
+                        sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save, use_saved)
 
         if use_saved and 'curlyYs' in self.saved:
             # was saved by jac, first copy curlyYs, curlyDs, curlyPs
@@ -368,15 +368,15 @@ class HetBlock:
         else:
             # was not saved at all, get curlyYs, curlyDs, curlyPs for ourselves
             # step 1: compute curlyY and curlyD (backward iteration) for each input i (same as jac)
-            curlyYs, curlyDs = dict(), dict()
+            curlyYs, curlyDs = {}, {}
             for i in shock_list:
                 curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, 
-                                                    ssin_dict, ssout_list, ss['D'], Pi_T, sspol_i, 
+                                                    ssin_dict, ssout_list, ss['D'], Pi.T.copy(), sspol_i, 
                                                     sspol_pi, sspol_space, T, h, ss_for_hetinput)
 
             # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
             # here go to (T-1) + (Tpost-1) rather than (T-1)
-            curlyPs = dict()
+            curlyPs = {}
             for o in output_list:
                 curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1+Tpost-1)
 
@@ -534,7 +534,7 @@ class HetBlock:
     '''
 
     def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list, 
-                               Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h=1E-4):
+                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4):
         # shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.all_outputs_order,
                                                 utils.numerical_diff(self.back_step_fun, ssin_dict, din_dict, h,
@@ -542,8 +542,8 @@ class HetBlock:
         curlyV = {k: shocked_outputs[k] for k in self.backward}
 
         # which affects the distribution tomorrow
-        pol_pi_shock = {k: -shocked_outputs[k]/pol_space_ss[k] for k in self.policy}
-        curlyD = self.forward_step_shock(Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_pi_shock)
+        pol_pi_shock = {k: -shocked_outputs[k]/sspol_space[k] for k in self.policy}
+        curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
 
         # and the aggregate outcomes today
         curlyY = {k: np.vdot(Dss, shocked_outputs[k]) for k in output_list}
@@ -551,7 +551,7 @@ class HetBlock:
         return curlyV, curlyD, curlyY
 
     def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T, 
-                                    pol_i_ss, pol_pi_ss, pol_space_ss, T, h=1E-4, ss_for_hetinput=None):
+                                    sspol_i, sspol_pi, sspol_space, T, h=1E-4, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
         if self.hetinput is not None and input_shocked in self.hetinput_inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
@@ -563,7 +563,7 @@ class HetBlock:
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list, 
-                                                             Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h)
+                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
         
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -578,7 +578,7 @@ class HetBlock:
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
                                                     output_list, ssin_dict, ssout_list, 
-                                                    Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_space_ss, h)
+                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
 
@@ -617,7 +617,26 @@ class HetBlock:
     '''Part 5: helpers for .jac and .ajac: preliminary processing and clearing saved info'''
 
     def jac_prelim(self, ss, save=False, use_saved=False):
-        output_names = ('ssin_dict', 'Pi', 'Pi_T', 'ssout_list',
+        """Helper that does preliminary processing of steady state for fake news algorithm.
+
+        Parameters
+        ----------
+        ss : dict, all steady-state info, intended to be from .ss()
+        save : [optional] bool, whether to store results in .prelim_saved attribute
+        use_saved : [optional] bool, whether to use already-stored results in .prelim_saved
+        
+        Returns
+        ----------
+        ssin_dict       : dict, ss vals of exactly the inputs needed by self.back_step_fun for backward step
+        Pi              : array (S*S), Markov matrix for exogenous state
+        ssout_list      : tuple, what self.back_step_fun returns when given ssin_dict (not exactly the same
+                            as steady-state numerically since SS convergence was to some tolerance threshold)
+        ss_for_hetinput : dict, ss vals of exactly the inputs needed by self.hetinput (if it exists)
+        sspol_i         : dict, indices on lower bracketing gridpoint for all in self.policy
+        sspol_pi        : dict, weights on lower bracketing gridpoint for all in self.policy
+        sspol_space     : dict, space between lower and upper bracketing gridpoints for all in self.policy
+        """
+        output_names = ('ssin_dict', 'Pi', 'ssout_list',
                             'ss_for_hetinput', 'sspol_i', 'sspol_pi', 'sspol_space')
 
         if use_saved:
@@ -629,7 +648,6 @@ class HetBlock:
         # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_inputs(ss)
         Pi = ss[self.exogenous]
-        Pi_T = Pi.T.copy()
         grid = {k: ss[k+'_grid'] for k in self.policy}
         ssout_list = self.back_step_fun(**ssin_dict)
 
@@ -646,12 +664,13 @@ class HetBlock:
             sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], ss[pol])
             sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
 
-        toreturn = (ssin_dict, Pi, Pi_T, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
+        toreturn = (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
         if save:
             self.prelim_saved = {k: v for (k, v) in zip(output_names, toreturn)}
         return toreturn
 
     def clear_saved(self):
+        """Erase any saved Jacobian information from .jac or .ajac (e.g. if steady state changes)"""
         self.saved = {}
         self.prelim_saved = {}
         self.saved_shock_list = []
