@@ -21,7 +21,7 @@ def all_covariances(M, sigmas):
     """
     T = M.shape[0]
     dft = np.fft.rfftn(M, s=(2 * T - 2,), axes=(0,))
-    total = (dft.conjugate() * sigmas) @ dft.swapaxes(1, 2)
+    total = (dft.conjugate() * sigmas**2) @ dft.swapaxes(1, 2)
     return np.fft.irfftn(total, s=(2 * T - 2,), axes=(0,))[:T]
 
 
