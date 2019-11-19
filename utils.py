@@ -8,7 +8,7 @@ import inspect
 '''Part 1: Efficient linear interpolation exploiting monotonicity.
 
     Interpolates increasing query points xq against increasing data points x.
-    
+
     - interpolate_y: (x, xq, y) -> yq
         get interpolated values of yq at xq
 
@@ -182,7 +182,7 @@ def interpolate_coord_robust_vector(x, xq):
                     ilow = imid
                 else:
                     ihigh = imid
-         
+
         xqi[iq] = ilow
         xqpi[iq] = (x[ilow+1] - xq[iq]) / (x[ilow+1] - x[ilow])
 
@@ -190,7 +190,7 @@ def interpolate_coord_robust_vector(x, xq):
 
 
 '''Part 3: Forward iteration of distribution on grid and related functions.
-    
+
         - forward_step_1d
         - forward_step_2d
             - apply law of motion for distribution to go from D_{t-1} to D_t
@@ -354,7 +354,7 @@ def forward_step_transpose_endo_2d(D, x_i, y_i, x_pi, y_pi):
                 alpha = x_pi[iz, ix, iy]
                 beta = y_pi[iz, ix, iy]
 
-                Dnew[iz, ix, iy] = (alpha * beta * D[iz, ixp, iyp] + alpha * (1-beta) * D[iz, ixp, iyp+1] + 
+                Dnew[iz, ix, iy] = (alpha * beta * D[iz, ixp, iyp] + alpha * (1-beta) * D[iz, ixp, iyp+1] +
                                     (1-alpha) * beta * D[iz, ixp+1, iyp] +
                                     (1-alpha) * (1-beta) * D[iz, ixp+1, iyp+1])
     return Dnew
@@ -363,8 +363,9 @@ def forward_step_transpose_endo_2d(D, x_i, y_i, x_pi, y_pi):
 '''Part 4: grids and Markov chains'''
 
 
-def agrid(amax, n, amin=0, pivot=0.25):
+def agrid(amax, n, amin=0):
     """Create grid between amin-pivot and amax+pivot that is equidistant in logs."""
+    pivot = np.abs(amin) + 0.25
     a_grid = np.geomspace(amin + pivot, amax + pivot, n) - pivot
     a_grid[0] = amin  # make sure *exactly* equal to amin
     return a_grid
@@ -389,9 +390,29 @@ def stationary(Pi, pi_seed=None, tol=1E-11, maxit=10_000):
     return pi
 
 
+def mean(x, pi):
+    """Mean of discretized random variable with support x and probability mass function pi."""
+    return np.sum(pi * x)
+
+
 def variance(x, pi):
     """Variance of discretized random variable with support x and probability mass function pi."""
     return np.sum(pi * (x - np.sum(pi * x)) ** 2)
+
+
+def std(x, pi):
+    """Standard deviation of discretized random variable with support x and probability mass function pi."""
+    return np.sqrt(variance(x, pi))
+
+
+def cov(x, y, pi):
+    """Covariance of two discretized random variables with supports x and y common probability mass function pi."""
+    return np.sum(pi * (x - mean(x, pi)) * (y - mean(y, pi)))
+
+
+def corr(x, y, pi):
+    """Correlation of two discretized random variables with supports x and y common probability mass function pi."""
+    return cov(x, y, pi) / (std(x, pi) * std(y, pi))
 
 
 def markov_tauchen(rho, sigma, N=7, m=3):
@@ -452,7 +473,7 @@ def markov_rouwenhorst(rho, sigma, N=7):
     # invariant distribution and scaling
     pi = stationary(Pi)
     s = np.linspace(-1, 1, N)
-    s *= (sigma / np.sqrt(variance(s, pi)))
+    s *= (sigma     / np.sqrt(variance(s, pi)))
     y = np.exp(s) / np.sum(pi * np.exp(s))
 
     return y, pi, Pi
@@ -539,7 +560,7 @@ def numerical_diff(func, ssinputs_dict, shock_dict, h=1E-4, y_ss_list=None):
 
 def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
     """Same as numerical_diff, but differentiate numerically using central (symmetric) difference, i.e.
-    
+
     f'(xss)*shock = (f(xss + h*shock) - f(xss - h*shock))/(2*h)
     """
 
@@ -561,9 +582,9 @@ def numerical_diff_symmetric(func, ssinputs_dict, shock_dict, h=1E-4):
 
 def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
     """Simple line search solver for root x satisfying f(x)=0 using Newton direction.
-    
+
     Backtracks if input invalid or improvement is not at least half the predicted improvement.
-    
+
     Parameters
     ----------
     f               : function, to solve for f(x)=0, input and output are arrays of same length
@@ -698,7 +719,7 @@ def printit(it, x, y, **kwargs):
 def block_sort(block_list, findrequired=False):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
     optionally return which outputs must be computed as inputs of later blocks.
-    
+
     Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
     inferred) that indicate their aggregate inputs and outputs"""
     # step 1: map outputs to blocks for topological sort
@@ -859,7 +880,7 @@ class SetStack:
 
 def make_tuple(x):
     """If not tuple or list, make into tuple with one element.
-    
+
     Wrapping with this allows user to write, e.g.:
     "return r" rather than "return (r,)"
     "policy='a'" rather than "policy=('a',)"
@@ -874,11 +895,11 @@ def input_list(f):
 
 def output_list(f):
     """Scans source code of function to detect statement like
-    
+
     'return L, Div'
-    
+
     and reports the list ['L', 'Div'].
-    
+
     Important to write functions in this way when they will be scanned by output_list, for
     either SimpleBlock or HetBlock.
     """
@@ -906,7 +927,7 @@ def extract_dict(savedA, keys, shape):
 
 def extract_nested_dict(savedA, keys1, keys2, shape):
     return {k1: {k2: take_subarray(savedA[k1][k2], shape) for k2 in keys2} for k1 in keys1}
-        
+
 
 def take_subarray(A, shape):
     # verify leading dimensions of A are >= shape

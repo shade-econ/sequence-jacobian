@@ -282,7 +282,7 @@ class HetBlock:
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
             return utils.extract_nested_dict(savedA=self.saved['J'],
-                        keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T,T))
+                        keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T, T))
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
