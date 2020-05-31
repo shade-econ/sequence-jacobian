@@ -97,9 +97,6 @@ def step3(lhs, rhs, Wb, a_grid, eis, nZ, nB, nA):
                 if iap == 0:
                     ap_endo[iz, ibp, ia] = 0
                     Wb_endo[iz, ibp, ia] = Wb[iz, ibp, 0]
-                elif iap == nA:
-                    ap_endo[iz, ibp, ia] = a_grid[iap]
-                    Wb_endo[iz, ibp, ia] = Wb[iz, ibp, iap]
                 else:
                     y0 = lhs[iz, ibp, iap - 1] - rhs[iap - 1, ia]
                     y1 = lhs[iz, ibp, iap] - rhs[iap, ia]
@@ -143,9 +140,6 @@ def step5(lhs, rhs, Wb, a_grid, k_grid, eis, nZ, nK, nA):
                 if iap == 0:
                     ap_endo[iz, ik, ia] = 0
                     Wb_endo[iz, ik, ia] = (1 + k_grid[ik]) * Wb[iz, 0, 0]
-                elif iap == nA:
-                    ap_endo[iz, ik, ia] = a_grid[iap]
-                    Wb_endo[iz, ik, ia] = (1 + k_grid[ik]) * Wb[iz, 0, iap]
                 else:
                     y0 = lhs[iz, ik, iap - 1] - rhs[iap - 1, ia]
                     y1 = lhs[iz, ik, iap] - rhs[iap, ia]
