@@ -33,17 +33,14 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     a_endo_con, c_endo_con = step5(lhs_con, 1 + Psi1, Wb, a_grid, k_grid, eis, nZ, nK, nA)
 
     # step 6: a'(z, b, a) for CONSTRAINED
-    a_con = step6(a_endo_con, c_endo_con, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2)
+    a_con = step6(a_endo_con, c_endo_con, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2, nK)
 
     # step 7a: put policy functions together
     a, b = a_unc.copy(), b_unc.copy()
     b[b <= b_grid[0]] = b_grid[0]
     a[b <= b_grid[0]] = a_con[b <= b_grid[0]]
-    zzz = z_grid[:, np.newaxis, np.newaxis]
-    bbb = b_grid[np.newaxis, :, np.newaxis]
-    aaa = a_grid[np.newaxis, np.newaxis, :]
-    Psi, _, Psi2 = get_Psi_and_deriv(a, aaa, ra, chi0, chi1, chi2)
-    c = zzz + (1 + ra) * aaa + (1 + rb) * bbb - Psi - a - b
+    Psi, _, Psi2 = get_Psi_and_deriv(a, a_grid, ra, chi0, chi1, chi2)
+    c = addouter(z_grid, (1+rb)*b_grid, (1+ra)*a_grid) - Psi - a - b
     uc = c ** (-1 / eis)
     u = e_grid[:, np.newaxis, np.newaxis] * uc
 
@@ -59,6 +56,11 @@ def matrix_times_first_dim(A, X):
     for each i1, i2, i3, ..., in. Same output as A @ X if X is 1D or 2D"""
     # flatten all dimensions of X except first, then multiply, then restore shape
     return (A @ X.reshape(X.shape[0], -1)).reshape(X.shape)
+
+
+def addouter(z, b, a):
+    """Take outer sum of three arguments: result[i, j, k] = z[i] + b[j] + a[k]"""
+    return z[:, np.newaxis, np.newaxis] + b[:, np.newaxis] + a
 
 
 def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
@@ -111,11 +113,8 @@ def step3(lhs, rhs, Wb, a_grid, eis, nZ, nB, nA):
 
 def step4(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
     # b(z, b', a)
-    zzz = z_grid[:, np.newaxis, np.newaxis]
-    bbb = b_grid[np.newaxis, :, np.newaxis]
-    aaa = a_grid[np.newaxis, np.newaxis, :]
-    b_endo = (c_endo + ap_endo + bbb - (1 + ra) * aaa 
-            + get_Psi_and_deriv(ap_endo, aaa, ra, chi0, chi1, chi2)[0] -  zzz) / (1 + rb)
+    b_endo = (c_endo + ap_endo + addouter(-z_grid, b_grid, -(1+ra)*a_grid)
+            + get_Psi_and_deriv(ap_endo, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
 
     # b'(z, b, a), a'(z, b, a)
     # assert np.min(np.diff(b_endo, axis=1)) > 0, 'b(bp) is not increasing'
@@ -158,12 +157,10 @@ def step5(lhs, rhs, Wb, a_grid, k_grid, eis, nZ, nK, nA):
     return ap_endo, c_endo
 
 
-def step6(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
+def step6(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2, nK):
     # b(z, k, a)
-    zzz = z_grid[:, np.newaxis, np.newaxis]
-    aaa = a_grid[np.newaxis, np.newaxis, :]
-    b_endo = (c_endo + ap_endo + b_grid[0] - (1 + ra) * aaa
-            + get_Psi_and_deriv(ap_endo, aaa, ra, chi0, chi1, chi2)[0] - zzz) / (1 + rb)
+    b_endo = (c_endo + ap_endo + addouter(-z_grid, np.full(nK, b_grid[0]), -(1+ra)*a_grid)
+            + get_Psi_and_deriv(ap_endo, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
 
     # b'(z, b, a), a'(z, b, a)
     # assert np.min(np.diff(b_endo, axis=1)) < 0, 'b(kappa) is not decreasing'
