@@ -15,7 +15,8 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     nK = k_grid.shape[0]
 
     # step 2: Wb(z, b', a') and Wa(z, b', a')
-    Wb, Wa = post_decision_vfun(Va_p, Vb_p, Pi_p, beta)
+    Wb = matrix_times_first_dim(beta*Pi_p, Vb_p)
+    Wa = matrix_times_first_dim(beta*Pi_p, Va_p)
 
     # step 3: a'(z, b', a) for UNCONSTRAINED
     lhs_unc = Wa / Wb
@@ -53,10 +54,11 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     return Va, Vb, a, b, c, u
 
 
-def post_decision_vfun(Va_p, Vb_p, Pi, beta):
-    Wb = (Vb_p.T @ (beta * Pi.T)).T
-    Wa = (Va_p.T @ (beta * Pi.T)).T
-    return Wb, Wa
+def matrix_times_first_dim(A, X):
+    """Take matrix A times vector X[:, i1, i2, i3, ... , in] separately
+    for each i1, i2, i3, ..., in. Same output as A @ X if X is 1D or 2D"""
+    # flatten all dimensions of X except first, then multiply, then restore shape
+    return (A @ X.reshape(X.shape[0], -1)).reshape(X.shape)
 
 
 def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
@@ -68,6 +70,7 @@ def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
     adj_denominator = a_with_return + chi0
     core_factor = (abs_a_change / adj_denominator) ** (chi2 - 1)
 
+    # Psi1 and Psi2 are derivatives of Psi wrt ap and a, respectively
     Psi = chi1 / chi2 * abs_a_change * core_factor
     Psi1 = chi1 * sign_change * core_factor
     Psi2 = -(1 + ra)*(Psi1 + (chi2 - 1)*Psi/adj_denominator)
