@@ -43,3 +43,31 @@ def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delt
                            eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
     
     return out['A'], out['B'], out['U']
+
+
+def test_Psi():
+    np.random.seed(41234)
+    chi0, chi1, chi2 = 0.25, 6.5, 2.3
+    ra = 0.05
+
+    a = np.random.rand(50) + 1
+    ap = np.random.rand(50) + 1
+
+    Psi = Psi_correct(ap, a, ra, chi0, chi1, chi2)
+    assert np.allclose(two_asset.Psi_fun(ap, a, ra, chi0, chi1, chi2), Psi)
+
+    # compare two-sided numerical derivative to our analytical one
+    # numerical doesn't work well at kink of "abs" function, so this would fail
+    # for some seeds if chi2 was less than 2
+    Psi1 = (Psi_correct(ap+1E-4, a, ra, chi0, chi1, chi2) -
+            Psi_correct(ap-1E-4, a, ra, chi0, chi1, chi2)) / 2E-4
+    assert np.allclose(two_asset.Psi1_fun(ap, a, ra, chi0, chi1, chi2), Psi1)
+
+    Psi2 = (Psi_correct(ap, a+1E-4, ra, chi0, chi1, chi2) -
+            Psi_correct(ap, a-1E-4, ra, chi0, chi1, chi2)) / 2E-4
+    assert np.allclose(two_asset.Psi2_fun(ap, a, ra, chi0, chi1, chi2), Psi2)
+
+def Psi_correct(ap, a, ra, chi0, chi1, chi2):
+    """Original Psi function that we know is correct, once denominator has power
+    chi2-1 rather than 1 (error in original code)"""
+    return chi1 / chi2 * np.abs((ap - (1 + ra) * a)) ** chi2 / ((1 + ra) * a + chi0) ** (chi2 - 1)

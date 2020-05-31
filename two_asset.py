@@ -59,7 +59,7 @@ def post_decision_vfun(Va_p, Vb_p, Pi, beta):
 
 
 def Psi_fun(ap, a, ra, chi0, chi1, chi2):
-    return chi1 / chi2 * np.abs((ap - (1 + ra) * a)) ** chi2 / ((1 + ra) * a + chi0)
+    return chi1 / chi2 * np.abs((ap - (1 + ra) * a)) ** chi2 / ((1 + ra) * a + chi0) ** (chi2 - 1)
 
 
 def Psi1_fun(ap, a, ra, chi0, chi1, chi2):
