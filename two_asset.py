@@ -19,7 +19,8 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
     # step 3: a'(z, b', a) for UNCONSTRAINED
     lhs_unc = Wa / Wb
-    Psi1 = Psi1_fun(a_grid[:, np.newaxis], a_grid[np.newaxis, :], ra, chi0, chi1, chi2)
+    Psi1 = get_Psi_and_deriv(a_grid[:, np.newaxis],
+                             a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
     a_endo_unc, c_endo_unc = step3(lhs_unc, 1 + Psi1, Wb, a_grid, eis, nZ, nB, nA)
 
     # step 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED
@@ -40,12 +41,12 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     zzz = z_grid[:, np.newaxis, np.newaxis]
     bbb = b_grid[np.newaxis, :, np.newaxis]
     aaa = a_grid[np.newaxis, np.newaxis, :]
-    c = zzz + (1 + ra) * aaa + (1 + rb) * bbb - Psi_fun(a, aaa, ra, chi0, chi1, chi2) - a - b
+    Psi, _, Psi2 = get_Psi_and_deriv(a, aaa, ra, chi0, chi1, chi2)
+    c = zzz + (1 + ra) * aaa + (1 + rb) * bbb - Psi - a - b
     uc = c ** (-1 / eis)
     u = e_grid[:, np.newaxis, np.newaxis] * uc
 
     # step 7b: update guesses
-    Psi2 = Psi2_fun(a, aaa, ra, chi0, chi1, chi2)
     Va = (1 + ra - Psi2) * uc
     Vb = (1 + rb) * uc
 
@@ -58,17 +59,19 @@ def post_decision_vfun(Va_p, Vb_p, Pi, beta):
     return Wb, Wa
 
 
-def Psi_fun(ap, a, ra, chi0, chi1, chi2):
-    return chi1 / chi2 * np.abs((ap - (1 + ra) * a)) ** chi2 / ((1 + ra) * a + chi0) ** (chi2 - 1)
+def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
+    a_with_return = (1 + ra) * a
+    a_change = ap - a_with_return
+    abs_a_change = np.abs(a_change)
+    sign_change = np.sign(a_change)
 
+    adj_denominator = a_with_return + chi0
+    core_factor = (abs_a_change / adj_denominator) ** (chi2 - 1)
 
-def Psi1_fun(ap, a, ra, chi0, chi1, chi2):
-    return np.sign(ap - (1 + ra) * a) * chi1 * np.abs((ap - (1 + ra) * a) / ((1 + ra) * a + chi0)) ** (chi2 - 1)
-
-
-def Psi2_fun(ap, a, ra, chi0, chi1, chi2):
-    Psi1 = np.sign(ap - (1 + ra) * a) * chi1 * np.abs((ap - (1 + ra) * a) / ((1 + ra) * a + chi0)) ** (chi2 - 1)
-    return -(1 + ra) * (Psi1 + chi1 * (chi2 - 1) / chi2 * (np.abs(ap - (1 + ra) * a) / ((1 + ra) * a + chi0)) ** chi2)
+    Psi = chi1 / chi2 * abs_a_change * core_factor
+    Psi1 = chi1 * sign_change * core_factor
+    Psi2 = -(1 + ra)*(Psi1 + (chi2 - 1)*Psi/adj_denominator)
+    return Psi, Psi1, Psi2
 
 
 @njit
@@ -108,8 +111,8 @@ def step4(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
     zzz = z_grid[:, np.newaxis, np.newaxis]
     bbb = b_grid[np.newaxis, :, np.newaxis]
     aaa = a_grid[np.newaxis, np.newaxis, :]
-    b_endo = (c_endo + ap_endo + bbb - (1 + ra) * aaa + Psi_fun(ap_endo, aaa, ra, chi0, chi1, chi2) -
-              zzz) / (1 + rb)
+    b_endo = (c_endo + ap_endo + bbb - (1 + ra) * aaa 
+            + get_Psi_and_deriv(ap_endo, aaa, ra, chi0, chi1, chi2)[0] -  zzz) / (1 + rb)
 
     # b'(z, b, a), a'(z, b, a)
     # assert np.min(np.diff(b_endo, axis=1)) > 0, 'b(bp) is not increasing'
@@ -156,8 +159,8 @@ def step6(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
     # b(z, k, a)
     zzz = z_grid[:, np.newaxis, np.newaxis]
     aaa = a_grid[np.newaxis, np.newaxis, :]
-    b_endo = (c_endo + ap_endo + b_grid[0] - (1 + ra) * aaa + Psi_fun(ap_endo, aaa, ra, chi0, chi1, chi2) -
-              zzz) / (1 + rb)
+    b_endo = (c_endo + ap_endo + b_grid[0] - (1 + ra) * aaa
+            + get_Psi_and_deriv(ap_endo, aaa, ra, chi0, chi1, chi2)[0] - zzz) / (1 + rb)
 
     # b'(z, b, a), a'(z, b, a)
     # assert np.min(np.diff(b_endo, axis=1)) < 0, 'b(kappa) is not decreasing'
@@ -308,7 +311,7 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
     pshare = p / (tot_wealth - Bh)
 
     # calculate aggregate adjustment cost and check Walras's law
-    chi = Psi_fun(ss['a'], a_grid, r, chi0, chi1, chi2)
+    chi = get_Psi_and_deriv(ss['a'], a_grid, r, chi0, chi1, chi2)[0]
     Chi = np.vdot(ss['D'], chi)
     goods_mkt = ss['C'] + I + G + Chi + omega * ss['B'] - 1
     assert np.abs(goods_mkt) < 1E-7

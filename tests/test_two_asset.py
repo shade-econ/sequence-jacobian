@@ -53,19 +53,22 @@ def test_Psi():
     a = np.random.rand(50) + 1
     ap = np.random.rand(50) + 1
 
+    oPsi, oPsi1, oPsi2 = two_asset.get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2)
+
     Psi = Psi_correct(ap, a, ra, chi0, chi1, chi2)
-    assert np.allclose(two_asset.Psi_fun(ap, a, ra, chi0, chi1, chi2), Psi)
+    assert np.allclose(oPsi, Psi)
 
     # compare two-sided numerical derivative to our analytical one
     # numerical doesn't work well at kink of "abs" function, so this would fail
     # for some seeds if chi2 was less than 2
     Psi1 = (Psi_correct(ap+1E-4, a, ra, chi0, chi1, chi2) -
             Psi_correct(ap-1E-4, a, ra, chi0, chi1, chi2)) / 2E-4
-    assert np.allclose(two_asset.Psi1_fun(ap, a, ra, chi0, chi1, chi2), Psi1)
+    assert np.allclose(oPsi1, Psi1)
 
     Psi2 = (Psi_correct(ap, a+1E-4, ra, chi0, chi1, chi2) -
             Psi_correct(ap, a-1E-4, ra, chi0, chi1, chi2)) / 2E-4
-    assert np.allclose(two_asset.Psi2_fun(ap, a, ra, chi0, chi1, chi2), Psi2)
+    assert np.allclose(oPsi2, Psi2)
+
 
 def Psi_correct(ap, a, ra, chi0, chi1, chi2):
     """Original Psi function that we know is correct, once denominator has power
