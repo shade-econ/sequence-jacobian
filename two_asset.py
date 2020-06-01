@@ -24,22 +24,29 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
                              a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
 
     # step 3: a'(z, b', a) for UNCONSTRAINED
-    k_solve, pi_solve = lhs_equals_rhs_interpolate(W_ratio, 1 + Psi1)
-    a_endo_unc = utils.apply_coord(k_solve, pi_solve, a_grid)
-    c_endo_unc = utils.apply_coord(k_solve, pi_solve, Wb) ** (-eis)
+    i, pi = lhs_equals_rhs_interpolate(W_ratio, 1 + Psi1)
+    a_endo_unc = utils.apply_coord(i, pi, a_grid)
+    c_endo_unc = utils.apply_coord(i, pi, Wb) ** (-eis)
 
     # step 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED
-    b_unc, a_unc = step4(a_endo_unc, c_endo_unc, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2)
+    b_endo = (c_endo_unc + a_endo_unc + addouter(-z_grid, b_grid, -(1+ra)*a_grid)
+                + get_Psi_and_deriv(a_endo_unc, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+    i, pi = utils.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
+    a_unc = utils.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
+    b_unc = utils.apply_coord(i, pi, b_grid).swapaxes(1, 2)
 
     # step 5: a'(z, kappa, a) for CONSTRAINED
     lhs_con = W_ratio[:, 0:1, :] / (1 + k_grid[np.newaxis, :, np.newaxis])
-    k_solve, pi_solve = lhs_equals_rhs_interpolate(lhs_con, 1 + Psi1)
-    a_endo_con = utils.apply_coord(k_solve, pi_solve, a_grid)
+    i, pi = lhs_equals_rhs_interpolate(lhs_con, 1 + Psi1)
+    a_endo_con = utils.apply_coord(i, pi, a_grid)
     c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis])**(-eis) 
-                    * utils.apply_coord(k_solve, pi_solve, Wb[:, 0:1, :]) ** (-eis))
+                    * utils.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
 
     # step 6: a'(z, b, a) for CONSTRAINED
-    a_con = step6(a_endo_con, c_endo_con, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2, nK)
+    b_endo = (c_endo_con + a_endo_con + addouter(-z_grid, np.full(nK, b_grid[0]), -(1+ra)*a_grid)
+                + get_Psi_and_deriv(a_endo_con, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+    a_con = utils.interpolate_y(b_endo[:, ::-1, :].swapaxes(1, 2), b_grid, 
+                            a_endo_con[:, ::-1, :].swapaxes(1, 2)).swapaxes(1, 2)
 
     # step 7a: put policy functions together
     a, b = a_unc.copy(), b_unc.copy()
@@ -134,33 +141,6 @@ def lhs_equals_rhs_interpolate(lhs, rhs):
                     pi_solve[i, j, l] =  err_upper / (err_upper - err_lower)
 
     return k_solve, pi_solve
-
-
-def step4(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
-    # b(z, b', a)
-    b_endo = (c_endo + ap_endo + addouter(-z_grid, b_grid, -(1+ra)*a_grid)
-            + get_Psi_and_deriv(ap_endo, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
-
-    # b'(z, b, a), a'(z, b, a)
-    # assert np.min(np.diff(b_endo, axis=1)) > 0, 'b(bp) is not increasing'
-    # assert np.min(np.diff(ap_endo, axis=1)) > 0, 'ap(bp) is not increasing'
-    i, pi = utils.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
-    ap = utils.apply_coord(i, pi, ap_endo.swapaxes(1, 2)).swapaxes(1, 2)
-    bp = utils.apply_coord(i, pi, b_grid).swapaxes(1, 2)
-    return bp, ap
-
-
-def step6(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2, nK):
-    # b(z, k, a)
-    b_endo = (c_endo + ap_endo + addouter(-z_grid, np.full(nK, b_grid[0]), -(1+ra)*a_grid)
-            + get_Psi_and_deriv(ap_endo, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
-
-    # b'(z, b, a), a'(z, b, a)
-    # assert np.min(np.diff(b_endo, axis=1)) < 0, 'b(kappa) is not decreasing'
-    # assert np.min(np.diff(ap_endo, axis=1)) < 0, 'ap(kappa) is not decreasing'
-    ap = utils.interpolate_y(b_endo[:, ::-1, :].swapaxes(1, 2), b_grid, 
-                             ap_endo[:, ::-1, :].swapaxes(1, 2)).swapaxes(1, 2)
-    return ap
 
 
 '''Part 2: Simple blocks'''
