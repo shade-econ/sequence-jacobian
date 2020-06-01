@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, guvectorize
 import utils
 from het_block import het
 from simple_block import simple
@@ -136,55 +136,48 @@ def addouter(z, b, a):
     return z[:, np.newaxis, np.newaxis] + b[:, np.newaxis] + a
 
 
-@njit
-def lhs_equals_rhs_interpolate(lhs, rhs):
-    """Given lhs (i,j,k) and rhs (k,l), for each (i,j,l) triplet, find the k such that
+@guvectorize(['void(float64[:], float64[:,:], uint32[:], float64[:])'], '(ni),(ni,nj)->(nj),(nj)')
+def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
+    """
+    Given lhs (i) and rhs (i,j), for each j, find the i such that
 
-    lhs[i,j,k] > rhs[k,l] and lhs[i,j,k+1] < rhs[k+1,l]
+    lhs[i] > rhs[i,j] and lhs[i+1] < rhs[i+1,j]
     
-    i.e. where lhs == rhs in between k and k+1.
+    i.e. where given j, lhs == rhs in between i and i+1.
     
     Also return the pi such that 
 
-    pi*(lhs[i,j,k] - rhs[k,l]) + (1-pi)*(lhs[i,j,k+1] - rhs[k+1,l]) == 0
+    pi*(lhs[i] - rhs[i,j]) + (1-pi)*(lhs[i+1] - rhs[i+1,j]) == 0
 
-    i.e. such that the point at pi*k + (1-pi)*(k+1) satisfies lhs == rhs by linear interpolation.
+    i.e. such that the point at pi*i + (1-pi)*(i+1) satisfies lhs == rhs by linear interpolation.
 
-    If lhs[i,j,0] < rhs[0,l] already, just return k=0 and pi=1.
+    If lhs[0] < rhs[0,j] already, just return u=0 and pi=1.
 
-    **IMPORTANT: Assumes that solution k is monotonically increasing in l and that 
-    lhs - rhs is monotonically decreasing in k.***
+    ***IMPORTANT: Assumes that solution i is monotonically increasing in j
+    and that lhs - rhs is monotonically decreasing in i.***
     """
     
-    ni, nj, nk = lhs.shape
-    nk2, nl = rhs.shape
-    assert nk == nk2
+    ni, nj = rhs.shape
+    assert len(lhs) == ni
 
-    k_solve = np.empty((ni, nj, nl), dtype=np.int64)
-    pi_solve = np.empty((ni, nj, nl))
+    i = 0
+    for j in range(nj):
+        while True:
+            if lhs[i] < rhs[i, j]:
+                break
+            elif i < nj - 1:
+                i += 1
+            else:
+                break
 
-    for i in range(ni):
-        for j in range(nj):
-            k = 0
-            for l in range(nl):
-                while True:
-                    if lhs[i, j, k] < rhs[k, l]:
-                        break
-                    elif k < nk - 1:
-                        k += 1
-                    else:
-                        break
-
-                if k == 0:
-                    k_solve[i, j, l] = 0
-                    pi_solve[i, j, l] = 1
-                else:
-                    k_solve[i, j, l] = k-1
-                    err_upper = rhs[k, l] - lhs[i, j, k]
-                    err_lower = rhs[k-1, l] - lhs[i, j, k-1]
-                    pi_solve[i, j, l] =  err_upper / (err_upper - err_lower)
-
-    return k_solve, pi_solve
+        if i == 0:
+            iout[j] = 0
+            piout[j] = 1
+        else:
+            iout[j] = i-1
+            err_upper = rhs[i, j] - lhs[i]
+            err_lower = rhs[i-1, j] - lhs[i-1]
+            piout[j] =  err_upper / (err_upper - err_lower)
 
 
 '''Part 2: Simple blocks'''
