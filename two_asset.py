@@ -17,20 +17,26 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     # step 2: Wb(z, b', a') and Wa(z, b', a')
     Wb = matrix_times_first_dim(beta*Pi_p, Vb_p)
     Wa = matrix_times_first_dim(beta*Pi_p, Va_p)
+    W_ratio = Wa / Wb
 
-    # step 3: a'(z, b', a) for UNCONSTRAINED
-    lhs_unc = Wa / Wb
+    # precompute Psi1(a', a) on grid of (a', a) for steps 3 and 5
     Psi1 = get_Psi_and_deriv(a_grid[:, np.newaxis],
                              a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
-    a_endo_unc, c_endo_unc = step3(lhs_unc, 1 + Psi1, Wb, a_grid, eis, nZ, nB, nA)
+
+    # step 3: a'(z, b', a) for UNCONSTRAINED
+    k_solve, pi_solve = lhs_equals_rhs_interpolate(W_ratio, 1 + Psi1)
+    a_endo_unc = utils.apply_coord(k_solve, pi_solve, a_grid)
+    c_endo_unc = utils.apply_coord(k_solve, pi_solve, Wb) ** (-eis)
 
     # step 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED
     b_unc, a_unc = step4(a_endo_unc, c_endo_unc, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2)
 
     # step 5: a'(z, kappa, a) for CONSTRAINED
-    lhs_con = lhs_unc[:, 0, :]
-    lhs_con = lhs_con[:, np.newaxis, :] / (1 + k_grid[np.newaxis, :, np.newaxis])
-    a_endo_con, c_endo_con = step5(lhs_con, 1 + Psi1, Wb, a_grid, k_grid, eis, nZ, nK, nA)
+    lhs_con = W_ratio[:, 0:1, :] / (1 + k_grid[np.newaxis, :, np.newaxis])
+    k_solve, pi_solve = lhs_equals_rhs_interpolate(lhs_con, 1 + Psi1)
+    a_endo_con = utils.apply_coord(k_solve, pi_solve, a_grid)
+    c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis])**(-eis) 
+                    * utils.apply_coord(k_solve, pi_solve, Wb[:, 0:1, :]) ** (-eis))
 
     # step 6: a'(z, b, a) for CONSTRAINED
     a_con = step6(a_endo_con, c_endo_con, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2, nK)
@@ -80,32 +86,54 @@ def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
 
 
 @njit
-def step3(lhs, rhs, Wb, a_grid, eis, nZ, nB, nA):
-    ap_endo = np.empty((nZ, nB, nA))
-    Wb_endo = np.empty((nZ, nB, nA))
-    for iz in range(nZ):
-        for ibp in range(nB):
-            iap = 0  # use mononicity in a
-            for ia in range(nA):
+def lhs_equals_rhs_interpolate(lhs, rhs):
+    """Given lhs (i,j,k) and rhs (k,l), for each (i,j,l) triplet, find the k such that
+
+    lhs[i,j,k] > rhs[k,l] and lhs[i,j,k+1] < rhs[k+1,l]
+    
+    i.e. where lhs == rhs in between k and k+1.
+    
+    Also return the pi such that 
+
+    pi*(lhs[i,j,k] - rhs[k,l]) + (1-pi)*(lhs[i,j,k+1] - rhs[k+1,l]) == 0
+
+    i.e. such that the point at pi*k + (1-pi)*(k+1) satisfies lhs == rhs by linear interpolation.
+
+    If lhs[i,j,0] < rhs[0,l] already, just return k=0 and pi=1.
+
+    **IMPORTANT: Assumes that solution k is monotonically increasing in l and that 
+    lhs - rhs is monotonically decreasing in k.***
+    """
+    
+    ni, nj, nk = lhs.shape
+    nk2, nl = rhs.shape
+    assert nk == nk2
+
+    k_solve = np.empty((ni, nj, nl), dtype=np.int64)
+    pi_solve = np.empty((ni, nj, nl))
+
+    for i in range(ni):
+        for j in range(nj):
+            k = 0
+            for l in range(nl):
                 while True:
-                    if lhs[iz, ibp, iap] < rhs[iap, ia]:
+                    if lhs[i, j, k] < rhs[k, l]:
                         break
-                    elif iap < nA - 1:
-                        iap += 1
+                    elif k < nk - 1:
+                        k += 1
                     else:
                         break
-                if iap == 0:
-                    ap_endo[iz, ibp, ia] = 0
-                    Wb_endo[iz, ibp, ia] = Wb[iz, ibp, 0]
+
+                if k == 0:
+                    k_solve[i, j, l] = 0
+                    pi_solve[i, j, l] = 1
                 else:
-                    y0 = lhs[iz, ibp, iap - 1] - rhs[iap - 1, ia]
-                    y1 = lhs[iz, ibp, iap] - rhs[iap, ia]
-                    ap_endo[iz, ibp, ia] = a_grid[iap - 1] - y0 * (a_grid[iap] - a_grid[iap - 1]) / (y1 - y0)
-                    Wb_endo[iz, ibp, ia] = Wb[iz, ibp, iap - 1] + (
-                                ap_endo[iz, ibp, ia] - a_grid[iap - 1]) * (
-                                Wb[iz, ibp, iap] - Wb[iz, ibp, iap - 1]) / (a_grid[iap] - a_grid[iap - 1])
-    c_endo = Wb_endo ** (-eis)
-    return ap_endo, c_endo
+                    k_solve[i, j, l] = k-1
+                    err_upper = rhs[k, l] - lhs[i, j, k]
+                    err_lower = rhs[k-1, l] - lhs[i, j, k-1]
+                    pi_solve[i, j, l] =  err_upper / (err_upper - err_lower)
+
+    return k_solve, pi_solve
 
 
 def step4(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
@@ -120,35 +148,6 @@ def step4(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2):
     ap = utils.apply_coord(i, pi, ap_endo.swapaxes(1, 2)).swapaxes(1, 2)
     bp = utils.apply_coord(i, pi, b_grid).swapaxes(1, 2)
     return bp, ap
-
-
-@njit
-def step5(lhs, rhs, Wb, a_grid, k_grid, eis, nZ, nK, nA):
-    ap_endo = np.empty((nZ, nK, nA))
-    Wb_endo = np.empty((nZ, nK, nA))
-    for iz in range(nZ):
-        for ik in range(nK):
-            iap = 0  # use mononicity in a
-            for ia in range(nA):
-                while True:
-                    if lhs[iz, ik, iap] < rhs[iap, ia]:
-                        break
-                    elif iap < nA - 1:
-                        iap += 1
-                    else:
-                        break
-                if iap == 0:
-                    ap_endo[iz, ik, ia] = 0
-                    Wb_endo[iz, ik, ia] = (1 + k_grid[ik]) * Wb[iz, 0, 0]
-                else:
-                    y0 = lhs[iz, ik, iap - 1] - rhs[iap - 1, ia]
-                    y1 = lhs[iz, ik, iap] - rhs[iap, ia]
-                    ap_endo[iz, ik, ia] = a_grid[iap - 1] - y0 * (a_grid[iap] - a_grid[iap - 1]) / (y1 - y0)
-                    Wb_endo[iz, ik, ia] = (1 + k_grid[ik]) * (
-                            Wb[iz, 0, iap - 1] + (ap_endo[iz, ik, ia] - a_grid[iap - 1]) *
-                            (Wb[iz, 0, iap] - Wb[iz, 0, iap - 1]) / (a_grid[iap] - a_grid[iap - 1]))
-    c_endo = Wb_endo ** (-eis)
-    return ap_endo, c_endo
 
 
 def step6(ap_endo, c_endo, z_grid, b_grid, a_grid, ra, rb, chi0, chi1, chi2, nK):
