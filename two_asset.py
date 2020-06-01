@@ -13,51 +13,91 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     # require that k is decreasing (new)
     assert k_grid[1] < k_grid[0], 'kappas in k_grid must be decreasing!'
 
-    # step 2: Wb(z, b', a') and Wa(z, b', a')
-    Wb = matrix_times_first_dim(beta*Pi_p, Vb_p)
-    Wa = matrix_times_first_dim(beta*Pi_p, Va_p)
-    W_ratio = Wa / Wb
-
     # precompute Psi1(a', a) on grid of (a', a) for steps 3 and 5
     Psi1 = get_Psi_and_deriv(a_grid[:, np.newaxis],
                              a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
 
-    # step 3: a'(z, b', a) for UNCONSTRAINED
+
+    # === STEP 2: Wb(z, b', a') and Wa(z, b', a') ===
+    # (take discounted expectation of tomorrow's value function)
+    Wb = matrix_times_first_dim(beta*Pi_p, Vb_p)
+    Wa = matrix_times_first_dim(beta*Pi_p, Va_p)
+    W_ratio = Wa / Wb
+
+
+    # === STEP 3: a'(z, b', a) for UNCONSTRAINED ===
+
+    # for each (z, b', a), linearly interpolate to find a' between gridpoints
+    # satisfying optimality condition W_ratio == 1+Psi1
     i, pi = lhs_equals_rhs_interpolate(W_ratio, 1 + Psi1)
+
+    # use same interpolation to get Wb and then c
     a_endo_unc = utils.apply_coord(i, pi, a_grid)
     c_endo_unc = utils.apply_coord(i, pi, Wb) ** (-eis)
 
-    # step 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED
+
+    # === STEP 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED ===
+
+    # solve out budget constraint to get b(z, b', a)
     b_endo = (c_endo_unc + a_endo_unc + addouter(-z_grid, b_grid, -(1+ra)*a_grid)
                 + get_Psi_and_deriv(a_endo_unc, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+                
+    # interpolate this b' -> b mapping to get b -> b', so we have b'(z, b, a)
+    # and also use interpolation to get a'(z, b, a)
+    # (note utils.interpolate_coord and utils.apply_coord work on last axis,
+    #  so we need to swap 'b' to the last axis, then back when done)
     i, pi = utils.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
     a_unc = utils.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
     b_unc = utils.apply_coord(i, pi, b_grid).swapaxes(1, 2)
 
-    # step 5: a'(z, kappa, a) for CONSTRAINED
+
+    # === STEP 5: a'(z, kappa, a) for CONSTRAINED ===
+
+    # for each (z, kappa, a), linearly interpolate to find a' between gridpoints
+    # satisfying optimality condition W_ratio/(1+kappa) == 1+Psi1, assuming b'=0
     lhs_con = W_ratio[:, 0:1, :] / (1 + k_grid[np.newaxis, :, np.newaxis])
     i, pi = lhs_equals_rhs_interpolate(lhs_con, 1 + Psi1)
+    
+    # use same interpolation to get Wb and then c
     a_endo_con = utils.apply_coord(i, pi, a_grid)
     c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis])**(-eis) 
                     * utils.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
 
-    # step 6: a'(z, b, a) for CONSTRAINED
+
+    # === STEP 6: a'(z, b, a) for CONSTRAINED ===
+
+    # solve out budget constraint to get b(z, kappa, a), enforcing b'=0
     b_endo = (c_endo_con + a_endo_con
                 + addouter(-z_grid, np.full(len(k_grid), b_grid[0]), -(1+ra)*a_grid)
                 + get_Psi_and_deriv(a_endo_con, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+
+    # interpolate this kappa -> b mapping to get b -> kappa
+    # then use the interpolated kappa to get a', so we have a'(z, b, a)
+    # (utils.interpolate_y does this in one swoop, but since it works on last
+    #  axis, we need to swap kappa to last axis, and then b back to middle when done)
     a_con = utils.interpolate_y(b_endo.swapaxes(1, 2), b_grid, 
                                 a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
 
-    # step 7a: put policy functions together
+
+    # === STEP 7: obtain policy functions and update derivatives of value function ===
+
+    # combine unconstrained solution and constrained solution, choosing latter
+    # when unconstrained goes below minimum b
     a, b = a_unc.copy(), b_unc.copy()
     b[b <= b_grid[0]] = b_grid[0]
     a[b <= b_grid[0]] = a_con[b <= b_grid[0]]
+
+    # calculate adjustment cost and its derivative
     Psi, _, Psi2 = get_Psi_and_deriv(a, a_grid, ra, chi0, chi1, chi2)
+
+    # solve out budget constraint to get consumption and marginal utility
     c = addouter(z_grid, (1+rb)*b_grid, (1+ra)*a_grid) - Psi - a - b
     uc = c ** (-1 / eis)
+
+    # for GE wage Phillips curve we'll need endowment-weighted utility too
     u = e_grid[:, np.newaxis, np.newaxis] * uc
 
-    # step 7b: update guesses
+    # update derivatives of value function using envelope conditions
     Va = (1 + ra - Psi2) * uc
     Vb = (1 + rb) * uc
 
