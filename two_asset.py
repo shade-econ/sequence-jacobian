@@ -104,6 +104,26 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     return Va, Vb, a, b, c, u
 
 
+"""Supporting functions for HA block"""
+
+
+def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
+    """Adjustment cost Psi(ap, a) and its derivatives with respect to
+    first argument (ap) and second argument (a)"""
+    a_with_return = (1 + ra) * a
+    a_change = ap - a_with_return
+    abs_a_change = np.abs(a_change)
+    sign_change = np.sign(a_change)
+
+    adj_denominator = a_with_return + chi0
+    core_factor = (abs_a_change / adj_denominator) ** (chi2 - 1)
+
+    Psi = chi1 / chi2 * abs_a_change * core_factor
+    Psi1 = chi1 * sign_change * core_factor
+    Psi2 = -(1 + ra)*(Psi1 + (chi2 - 1)*Psi/adj_denominator)
+    return Psi, Psi1, Psi2
+
+
 def matrix_times_first_dim(A, X):
     """Take matrix A times vector X[:, i1, i2, i3, ... , in] separately
     for each i1, i2, i3, ..., in. Same output as A @ X if X is 1D or 2D"""
@@ -114,22 +134,6 @@ def matrix_times_first_dim(A, X):
 def addouter(z, b, a):
     """Take outer sum of three arguments: result[i, j, k] = z[i] + b[j] + a[k]"""
     return z[:, np.newaxis, np.newaxis] + b[:, np.newaxis] + a
-
-
-def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
-    a_with_return = (1 + ra) * a
-    a_change = ap - a_with_return
-    abs_a_change = np.abs(a_change)
-    sign_change = np.sign(a_change)
-
-    adj_denominator = a_with_return + chi0
-    core_factor = (abs_a_change / adj_denominator) ** (chi2 - 1)
-
-    # Psi1 and Psi2 are derivatives of Psi wrt ap and a, respectively
-    Psi = chi1 / chi2 * abs_a_change * core_factor
-    Psi1 = chi1 * sign_change * core_factor
-    Psi2 = -(1 + ra)*(Psi1 + (chi2 - 1)*Psi/adj_denominator)
-    return Psi, Psi1, Psi2
 
 
 @njit
