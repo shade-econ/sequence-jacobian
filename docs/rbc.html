@@ -11934,7 +11934,16 @@ $$</p>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h2 id="2-Model-blocks">2 Model blocks<a class="anchor-link" href="#2-Model-blocks">&#182;</a></h2><p>The second step of solving the model is to come up with a Directed Acyclic Graph (DAG) representation for it and specify its building blocks.</p>
-<p>The 7 equations of the model can be organized as 3 simple blocks to form a Directed Acyclic Graph (DAG) in 2 unknowns $\{K, L\}$ and 2 targets, the Euler equation and goods market clearing.</p>
+<p>The 7 equations of the model can be organized as three simple blocks to form a Directed Acyclic Graph (DAG) in two unknowns $\{K, L\}$ and two targets, the euler equation and goods market clearing:</p>
+<p><img src="figures/rbc_dag.png" alt="Directed Acyclic Graph for RBC model"></p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
 <p>In our code, simple blocks are specified as regular Python functions  endowed with the decorator <code>@simple</code>. In the body of the function, we directly implement the corresponding equilibrium conditions. The decorator turns the function into an instance of <code>SimpleBlock</code>, a class that, among other things, knows how to handle time displacements such as <code>K(-1)</code> to denote 1-period lags and <code>r(+1)</code> to denote 1-period leads. In general, one can write (-s) and (+s) to denote s-period lags and leads.</p>
 
 </div>

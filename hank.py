@@ -11,10 +11,7 @@ from simple_block import simple
 
 @het(exogenous='Pi', policy='a', backward='Va')
 def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi, c_const, n_const, ssflag=False):
-    """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility.
-
-    Order of returns matters! backward_var, assets, others
-    """
+    """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility."""
     # this one is useful to do internally
     ws = w * e_grid
 
@@ -60,18 +57,9 @@ def cn(uc, w, eis, frisch, vphi):
     return uc ** (-eis), (w * uc / vphi) ** frisch
 
 
-@njit
-def netexp(log_uc, w, T, eis, frisch, vphi):
-    """Return net expenditure as a function of log uc and its derivative."""
-    c, n = cn(np.exp(log_uc), w, eis, frisch, vphi)
-    ne = c - w * n - T
-
-    # c and n have elasticities of -eis and frisch wrt log u'(c)
-    c_loguc = -eis * c
-    n_loguc = frisch * n
-    netexp_loguc = c_loguc - w * n_loguc
-
-    return ne, netexp_loguc
+def solve_cn(w, T, eis, frisch, vphi, uc_seed):
+    uc = solve_uc(w, T, eis, frisch, vphi, uc_seed)
+    return cn(uc, w, eis, frisch, vphi)
 
 
 @vectorize
@@ -93,9 +81,18 @@ def solve_uc(w, T, eis, frisch, vphi, uc_seed):
     return np.exp(log_uc)
 
 
-def solve_cn(w, T, eis, frisch, vphi, uc_seed):
-    uc = solve_uc(w, T, eis, frisch, vphi, uc_seed)
-    return cn(uc, w, eis, frisch, vphi)
+@njit
+def netexp(log_uc, w, T, eis, frisch, vphi):
+    """Return net expenditure as a function of log uc and its derivative."""
+    c, n = cn(np.exp(log_uc), w, eis, frisch, vphi)
+    ne = c - w * n - T
+
+    # c and n have elasticities of -eis and frisch wrt log u'(c)
+    c_loguc = -eis * c
+    n_loguc = frisch * n
+    netexp_loguc = c_loguc - w * n_loguc
+
+    return ne, netexp_loguc
 
 
 '''Part 2: Simple blocks and hetinput'''
@@ -135,7 +132,7 @@ def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
     return asset_mkt, labor_mkt, goods_mkt
 
 
-def transfers(pi_e, Div, Tax, e_grid, div_rule, tax_rule):    
+def transfers(pi_e, Div, Tax, div_rule, tax_rule):
     div = Div / np.sum(pi_e * div_rule) * div_rule
     tax = Tax / np.sum(pi_e * tax_rule) * tax_rule
     T = div - tax
@@ -168,7 +165,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     w = 1 / mu
     Div = (1 - w)
     Tax = r * B
-    T = transfers(pi_e, Div, Tax, e_grid, div_rule, tax_rule)
+    T = transfers(pi_e, Div, Tax, div_rule, tax_rule)
 
     # initialize guess for policy function iteration
     fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
@@ -182,9 +179,10 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         c_const_loc, n_const_loc = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi_loc, Va)
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
             raise ValueError('Clearly invalid inputs')
-        out = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc, eis=eis,
-                           Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc, c_const=c_const_loc, n_const=n_const_loc,
-                           tax_rule=tax_rule, div_rule=div_rule, ssflag=True)
+        out = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
+                                 eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc,
+                                 c_const=c_const_loc, n_const=n_const_loc, tax_rule=tax_rule, div_rule=div_rule,
+                                 ssflag=True)
         return np.array([out['A'] - B, out['NS'] - 1])
 
     # solve for beta, vphi
@@ -204,4 +202,3 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     ss.update({'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
                'walras': walras, 'ssflag': False})
     return ss
-
