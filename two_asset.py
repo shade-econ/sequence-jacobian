@@ -10,9 +10,8 @@ from simple_block import simple
 
 @het(exogenous='Pi', policy=['b', 'a'], backward=['Vb', 'Va'])  # order as in grid!
 def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2):
-    # get grid dimensions
-    nZ, nB, nA = Va_p.shape
-    nK = k_grid.shape[0]
+    # require that k is decreasing (new)
+    assert k_grid[1] < k_grid[0], 'kappas in k_grid must be decreasing!'
 
     # step 2: Wb(z, b', a') and Wa(z, b', a')
     Wb = matrix_times_first_dim(beta*Pi_p, Vb_p)
@@ -43,10 +42,11 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
                     * utils.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
 
     # step 6: a'(z, b, a) for CONSTRAINED
-    b_endo = (c_endo_con + a_endo_con + addouter(-z_grid, np.full(nK, b_grid[0]), -(1+ra)*a_grid)
+    b_endo = (c_endo_con + a_endo_con
+                + addouter(-z_grid, np.full(len(k_grid), b_grid[0]), -(1+ra)*a_grid)
                 + get_Psi_and_deriv(a_endo_con, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
-    a_con = utils.interpolate_y(b_endo[:, ::-1, :].swapaxes(1, 2), b_grid, 
-                            a_endo_con[:, ::-1, :].swapaxes(1, 2)).swapaxes(1, 2)
+    a_con = utils.interpolate_y(b_endo.swapaxes(1, 2), b_grid, 
+                                a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
 
     # step 7a: put policy functions together
     a, b = a_unc.copy(), b_unc.copy()
@@ -241,7 +241,7 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
     # set up grid
     b_grid = utils.agrid(amax=bmax, n=nB)
     a_grid = utils.agrid(amax=amax, n=nA)
-    k_grid = utils.agrid(amax=kmax, n=nK)
+    k_grid = utils.agrid(amax=kmax, n=nK)[::-1].copy()
     e_grid, pi, Pi = utils.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     # solve analytically what we can

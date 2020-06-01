@@ -21,7 +21,7 @@ def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delt
     # set up grid
     b_grid = utils.agrid(amax=bmax, n=nB)
     a_grid = utils.agrid(amax=amax, n=nA)
-    k_grid = utils.agrid(amax=kmax, n=nK)
+    k_grid = utils.agrid(amax=kmax, n=nK)[::-1].copy()
     e_grid, pi, Pi = utils.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     # solve analytically what we can
