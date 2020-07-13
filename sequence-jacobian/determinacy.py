@@ -1,6 +1,5 @@
 import numpy as np
-from numpy.fft import fftn, rfftn
-import jacobian
+from numpy.fft import rfftn
 from numba import njit
 
 

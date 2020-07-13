@@ -9,11 +9,11 @@ Interactive guide to Auclert, Bardóczy, Rognlie, Straub (2019):
 
 - [Paper](https://shade-econ.github.io/sequence-jacobian/sequence_jacobian_paper.pdf)
 - [Beamer slides](https://shade-econ.github.io/sequence-jacobian/sequence_jacobian_slides.pdf)
-- RBC notebook ([html](https://shade-econ.github.io/sequence-jacobian/rbc.html)) ([Jupyter](rbc.ipynb))
-- Krusell-Smith notebook ([html](https://shade-econ.github.io/sequence-jacobian/krusell_smith.html)) ([Jupyter](krusell_smith.ipynb))
-- One-asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/hank.html)) ([Jupyter](hank.ipynb))
-- Two-asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/two_asset.html)) ([Jupyter](two_asset.ipynb))
-- HA Jacobian notebook ([html](https://shade-econ.github.io/sequence-jacobian/het_jacobian.html)) ([Jupyter](het_jacobian.ipynb))
+- RBC notebook ([html](https://shade-econ.github.io/sequence-jacobian/rbc.html)) ([Jupyter](notebooks/rbc.ipynb))
+- Krusell-Smith notebook ([html](https://shade-econ.github.io/sequence-jacobian/krusell_smith.html)) ([Jupyter](notebooks/krusell_smith.ipynb))
+- One-asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/hank.html)) ([Jupyter](notebooks/hank.ipynb))
+- Two-asset HANK notebook ([html](https://shade-econ.github.io/sequence-jacobian/two_asset.html)) ([Jupyter](notebooks/two_asset.ipynb))
+- HA Jacobian notebook ([html](https://shade-econ.github.io/sequence-jacobian/het_jacobian.html)) ([Jupyter](notebooks/het_jacobian.ipynb))
 
 ### 1.1 RBC notebook
 

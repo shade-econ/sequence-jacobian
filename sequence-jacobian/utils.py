@@ -5,6 +5,7 @@ import scipy.linalg
 import re
 import inspect
 
+
 '''Part 1: Efficient linear interpolation exploiting monotonicity.
 
     Interpolates increasing query points xq against increasing data points x.

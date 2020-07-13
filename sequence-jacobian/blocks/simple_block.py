@@ -1,7 +1,8 @@
 import numpy as np
 from numba import njit
-import utils
-import asymptotic
+
+from .. import utils
+from .. import asymptotic
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 

@@ -1,9 +1,9 @@
 import numpy as np
-from scipy.linalg import toeplitz
 from numpy.fft import rfft, rfftn, irfft, irfftn
-from numba import njit
-import jacobian as jac
-import determinacy
+
+from . import jacobian as jac
+from . import determinacy
+
 
 class AsymptoticTimeInvariant:
     """Represents the asymptotic behavior of infinite matrix that is asymptotically time invariant,

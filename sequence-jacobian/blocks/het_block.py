@@ -1,7 +1,8 @@
 import numpy as np
-import utils
 import copy
-import asymptotic
+
+from .. import utils
+from .. import asymptotic
 
 
 def het(exogenous, policy, backward):
@@ -282,7 +283,7 @@ class HetBlock:
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
             return utils.extract_nested_dict(savedA=self.saved['J'],
-                        keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T, T))
+                                             keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T, T))
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
@@ -357,7 +358,7 @@ class HetBlock:
             curlyYs = utils.extract_nested_dict(savedA=self.saved['curlyYs'],
                                                 keys1=shock_list, keys2=output_list, shape=(T,))
             curlyDs = utils.extract_dict(savedA=self.saved['curlyDs'], keys=shock_list, shape=(T,))
-            curlyPs_old = utils.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T-1,))
+            curlyPs_old = utils.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T - 1,))
 
             # now need curlyPs that go to T+Tpost-1, not just T
             curlyPs = {}
@@ -555,7 +556,7 @@ class HetBlock:
         """Iterate policy steps backward T times for a single shock."""
         if self.hetinput is not None and input_shocked in self.hetinput_inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
-            din_dict = dict(zip(self.hetinput_outputs_order, 
+            din_dict = dict(zip(self.hetinput_outputs_order,
                                 utils.numerical_diff_symmetric(self.hetinput, ss_for_hetinput, {input_shocked: 1}, h)))
         else:
             # otherwise, we just have that one shock
@@ -595,7 +596,7 @@ class HetBlock:
         curlyPs = np.empty((T,) + o_ss.shape)
         curlyPs[0, ...] = utils.demean(o_ss)
         for t in range(1, T):
-            curlyPs[t, ...] = utils.demean(self.forward_step_transpose(curlyPs[t-1, ...], Pi, pol_i_ss, pol_pi_ss))
+            curlyPs[t, ...] = utils.demean(self.forward_step_transpose(curlyPs[t - 1, ...], Pi, pol_i_ss, pol_pi_ss))
         return curlyPs
 
     @staticmethod

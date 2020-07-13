@@ -1,8 +1,9 @@
 import numpy as np
 import scipy.optimize as opt
-import utils
-import het_block as het
-from simple_block import simple
+
+from .. import utils
+from ..blocks.het_block import het
+from ..blocks.simple_block import simple
 
 
 '''Part 1: HA block'''

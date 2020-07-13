@@ -1,8 +1,9 @@
 import numpy as np
 import copy
-import utils
-import simple_block as sim
-import asymptotic
+
+from . import utils
+from . import asymptotic
+from .blocks import simple_block as sim
 
 
 '''Part 1: High-level convenience routines: 

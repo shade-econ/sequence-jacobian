@@ -1,7 +1,6 @@
-import numpy as np
-import nonlinear
-import jacobian as jac
-from simple_block import simple
+from .. import nonlinear
+from .. import jacobian as jac
+from ..blocks.simple_block import simple
 
 
 def solved(unknowns, targets, block_list=[]):
@@ -53,7 +52,7 @@ class SolvedBlock:
         # TODO: add H_U_factored caching of some kind
         # also, inefficient since we are repeatedly starting from the steady state, need option
         # to provide a guess (not a big deal with just SimpleBlocks, of course)
-        return nonlinear.td_solve(ss, self.block_list, self.unknowns, self.targets, monotonic=monotonic, 
+        return nonlinear.td_solve(ss, self.block_list, self.unknowns, self.targets, monotonic=monotonic,
                                   returnindividual=returnindividual, noisy=noisy, **kwargs)
     
     def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):

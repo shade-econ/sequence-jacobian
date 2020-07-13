@@ -1,9 +1,9 @@
 import numpy as np
 from numba import vectorize, njit
 
-import utils
-from het_block import het
-from simple_block import simple
+from .. import utils
+from ..blocks.het_block import het
+from ..blocks.simple_block import simple
 
 
 '''Part 1: HA block'''
