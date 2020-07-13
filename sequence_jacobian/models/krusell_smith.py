@@ -2,7 +2,7 @@ import numpy as np
 import scipy.optimize as opt
 
 from .. import utils
-from ..blocks.het_block import het
+from ..blocks.het_block import HetBlock
 from ..blocks.simple_block import simple
 
 
@@ -52,7 +52,7 @@ def backward_iterate(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
     return Va, a, c
 
 
-household = het.HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
+household = HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
 
 
 '''Part 2: Simple Blocks'''
