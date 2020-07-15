@@ -102,6 +102,10 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     # Add grids, pre-specified variables/parameters, and solved variables/parameters
     num_input_args_ordered = num_input_args_ordered + [potential_args[arg_name] for arg_name in num_input_arg_names]
 
+    # *Feature to-be-implemented: Return individual policy and value functions
+    # and the cross-sectional distribution of agents (D) if the model contains a heterogeneous
+    # agent block (previously done by executing an additional household.ss() evaluation).
+
     # Build the numerical residual function programmatically, using the dag targets and the
     # numerical solution input arguments
     # *Feature to-be-implemented: Expect num_output_args to be a scalar. Generalize functionality to scalar and vectors
@@ -124,11 +128,16 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
                                 calibration_set.get_instrument_bounds()[0][1],
                                 full_output=True)
 
+    potential_args.update(dict(zip(calibration_set.get_instrument_names(), [cal_instr])))
+
     if not sol.converged:
         raise ValueError("Steady-state solver did not converge.")
 
+    # *Feature to-be-implemented: Handle Walras' Law as an additional simple block in the Model DAG and include
+    # the walras variable (in this case, 'C') as one of the return arguments
+
     # Stop early for now to check functionality
-    return cal_instr
+    return potential_args
 
     # Check that the steady state solution is compatible with the dag representation
     # by computing the dag once through with the steady state unknown values, ignoring
