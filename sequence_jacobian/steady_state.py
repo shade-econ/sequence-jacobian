@@ -2,7 +2,7 @@
 
 import numpy as np
 import scipy.optimize as opt
-from copy import copy
+from copy import copy, deepcopy
 
 import sequence_jacobian as sj
 
@@ -13,7 +13,7 @@ import sequence_jacobian as sj
 def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_variables_and_parameters,
                  calibration_set, analytic_solution=None, numerical_solution=None,
                  numerical_solution_initialization=None, walras_variable="C",
-                 validity_check=True):
+                 validity_check=True, consistency_check=True, consistency_check_tol=1e-10):
 
     if analytic_solution is None and numerical_solution is None:
         raise RuntimeError("Must provide either an analytic solution or a numerical solution method to solve"
@@ -134,12 +134,36 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     # *Feature to-be-implemented: Handle Walras' Law as an additional simple block in the Model DAG and include
     # the walras variable (in this case, 'C') as one of the return arguments
 
-    return potential_args
-
     # Check that the steady state solution is compatible with the dag representation
     # by computing the dag once through with the steady state unknown values, ignoring
     # all time displacement terms, and check that the targets are indeed hit.
+    # *Feature to-be-implemented: Handle SolvedBlocks as well
+    if consistency_check:
+        dag_args = deepcopy(potential_args)
+        topsorted = sj.utils.block_sort(model_dag.blocks)
+        for num in topsorted:
+            block = model_dag.blocks[num]
+            # Compute the variables' values implied by each non-target block along the graph
+            if block.outputs.intersection(dag_targets) == set():
+                if isinstance(block, sj.SimpleBlock):
+                    block_input_arg_names = block.input_list
+                    block_output_arg_names = block.output_list
+                    block_input_args = [dag_args[arg_name] for arg_name in block_input_arg_names]
+                    dag_args.update(zip(block_output_arg_names, [block.ss(*block_input_args)]))
+                elif isinstance(block, sj.HetBlock):
+                    block_input_arg_names = block.all_inputs
+                    block_input_args = {unprime(arg_name): potential_args[unprime(arg_name)]
+                                        for arg_name in block_input_arg_names}
+                    dag_args.update(block.ss(**block_input_args))
 
+        # Check that with these variables' values, the targets are hit
+        target_to_block = find_target_blocks(model_dag, dag_targets)
+        for i, target in enumerate(dag_targets):
+            block_input_arg_names = target_to_block[target].inputs
+            block_input_args = [potential_args[arg_name] for arg_name in block_input_arg_names]
+            assert abs(target_to_block[target].ss(*block_input_args)) < consistency_check_tol
+
+    return potential_args
 
 # Find which blocks are associated with the targets.
 # Assume that every target in the model's dag has an associated block,
