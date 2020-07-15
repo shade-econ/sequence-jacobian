@@ -88,11 +88,8 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     potential_args.update(zip(num_init_output_arg_names, [num_init_output_args]))
 
     # Manually construct the ordered list of arguments to enter into the numerical solution
-    # *Note on expected argument ordering: The expected argument ordering for the numerical_solution()
-    #   method is: calibrated instruments first, then calibrated targets, then the initial value
-    #   for the iteration procedure (e.g. V' for initializing value function iteration), and then
-    #   other relevant grids, pre-specified variables/parameters, and solved variables/parameters
-    #   (the latter 3 categories in arbitrary order)
+    # Note on expected argument ordering: In numerical_solution(), the calibrated instruments must be
+    # the first arguments for the proper construction of the residual function, res()
     num_input_arg_names = list_difference(sj.utils.input_list(numerical_solution),
                                           calibration_set.get_instrument_names())
     num_output_arg_names = sj.utils.output_list(numerical_solution)
@@ -125,10 +122,19 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     if not sol.converged:
         raise ValueError("Steady-state solver did not converge.")
 
+    # Add individual-level policy, value, and distribution functions from all heterogeneous blocks
+    for block in model_dag.blocks:
+        if isinstance(block, sj.HetBlock):
+            block_input_arg_names = block.all_inputs
+            block_input_args = {unprime(arg_name): potential_args[unprime(arg_name)]
+                                for arg_name in block_input_arg_names}
+            potential_args.update(block.ss(**block_input_args))
+        else:
+            continue
+
     # *Feature to-be-implemented: Handle Walras' Law as an additional simple block in the Model DAG and include
     # the walras variable (in this case, 'C') as one of the return arguments
 
-    # Stop early for now to check functionality
     return potential_args
 
     # Check that the steady state solution is compatible with the dag representation
@@ -160,3 +166,12 @@ def find_target_blocks(model_dag, dag_targets):
 # the list that items are being deleted from
 def list_difference(primary_list, *args):
     return [item for item in primary_list if item not in set().union(*args)]
+
+
+# Expects the notation for a variable primed to be of the standard format "var_p"
+# which will then return "var." If the variable is not primed, "ovar" then simply return it
+def unprime(s):
+    if s[-2:] == "_p":
+        return s[:-2]
+    else:
+        return s
