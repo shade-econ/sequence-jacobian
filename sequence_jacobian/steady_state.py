@@ -82,8 +82,10 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     # values to pass into the numerical_solution_initialization function.
     num_init_input_arg_names = sj.utils.input_list(numerical_solution_initialization)
     num_init_output_arg_names = sj.utils.output_list(numerical_solution_initialization)
-    num_init_args = [potential_args[arg_name] for arg_name in num_init_input_arg_names]
-    num_init_values = numerical_solution_initialization(*num_init_args)
+    num_init_input_args = [potential_args[arg_name] for arg_name in num_init_input_arg_names]
+    num_init_output_args = numerical_solution_initialization(*num_init_input_args)
+
+    potential_args.update(zip(num_init_output_arg_names, [num_init_output_args]))
 
     # Manually construct the ordered list of arguments to enter into the numerical solution
     # *Note on expected argument ordering: The expected argument ordering for the numerical_solution()
@@ -92,21 +94,9 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     #   other relevant grids, pre-specified variables/parameters, and solved variables/parameters
     #   (the latter 3 categories in arbitrary order)
     num_input_arg_names = list_difference(sj.utils.input_list(numerical_solution),
-                                          calibration_set.get_instrument_names(),
-                                          calibration_set.get_target_names(),
-                                          num_init_output_arg_names)
+                                          calibration_set.get_instrument_names())
     num_output_arg_names = sj.utils.output_list(numerical_solution)
-
-    # Add targets to the ordered input arguments
-    num_input_args_ordered = copy(calibration_set.get_target_values())
-    # Add the initial values
-    num_input_args_ordered.append(num_init_values)
-    # Add grids, pre-specified variables/parameters, and solved variables/parameters
-    num_input_args_ordered = num_input_args_ordered + [potential_args[arg_name] for arg_name in num_input_arg_names]
-
-    # *Feature to-be-implemented: Return individual policy and value functions
-    # and the cross-sectional distribution of agents (D) if the model contains a heterogeneous
-    # agent block (previously done by executing an additional household.ss() evaluation).
+    num_input_args = [potential_args[arg_name] for arg_name in num_input_arg_names]
 
     # Build the numerical residual function programmatically, using the dag targets and the
     # numerical solution input arguments
@@ -114,7 +104,7 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     def res(x):
         residuals = np.ones(len(dag_targets))
         target_to_block = find_target_blocks(model_dag, dag_targets)
-        num_output_args = numerical_solution(x, *num_input_args_ordered)
+        num_output_args = numerical_solution(x, *num_input_args)
         potential_args.update(zip(num_output_arg_names, [num_output_args]))
 
         for i, target in enumerate(dag_targets):
@@ -130,7 +120,7 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
                                 calibration_set.get_instrument_bounds()[0][1],
                                 full_output=True)
 
-    potential_args.update(dict(zip(calibration_set.get_instrument_names(), [cal_instr])))
+    potential_args.update(zip(calibration_set.get_instrument_names(), [cal_instr]))
 
     if not sol.converged:
         raise ValueError("Steady-state solver did not converge.")
