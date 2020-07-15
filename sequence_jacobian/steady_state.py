@@ -80,10 +80,12 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     # Expect that the arguments for the initialization are either grids, pre-specified variables/parameters
     # or are solved for in the analytic solution, so look through the dictionary of both sets of
     # values to pass into the numerical_solution_initialization function.
-    num_init_arg_names = sj.utils.input_list(numerical_solution_initialization)
-    num_init_args = [potential_args[arg_name] for arg_name in num_init_arg_names]
+    num_init_input_arg_names = sj.utils.input_list(numerical_solution_initialization)
+    num_init_output_arg_names = sj.utils.output_list(numerical_solution_initialization)
+    num_init_args = [potential_args[arg_name] for arg_name in num_init_input_arg_names]
     num_init_values = numerical_solution_initialization(*num_init_args)
 
+    # Manually construct the ordered list of arguments to enter into the numerical solution
     # *Note on expected argument ordering: The expected argument ordering for the numerical_solution()
     #   method is: calibrated instruments first, then calibrated targets, then the initial value
     #   for the iteration procedure (e.g. V' for initializing value function iteration), and then
@@ -92,7 +94,7 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
     num_input_arg_names = list_difference(sj.utils.input_list(numerical_solution),
                                           calibration_set.get_instrument_names(),
                                           calibration_set.get_target_names(),
-                                          ["init_val"])
+                                          num_init_output_arg_names)
     num_output_arg_names = sj.utils.output_list(numerical_solution)
 
     # Add targets to the ordered input arguments
