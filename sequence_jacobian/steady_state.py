@@ -35,13 +35,13 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
             vars_and_paras = vars_and_paras.union(block.outputs)
 
         # Remove all "*_grid" variables, "Pi" (assumed to be the standard name for the state transition matrix),
-        # and any variables contained in 'dag_targets' from vars_and_paras
+        # any variables contained in 'dag_targets' from vars_and_paras, and the variable automatically solved for
+        # by applying Walras' law
         for vp in copy(vars_and_paras):
             if "_grid" in vp or vp == "Pi" or vp in model_dag.targets or vp == walras_variable:
                 vars_and_paras.remove(vp)
 
-        # This is the total set of variables and parameters that must be solved for either
-        # analytically or numerically
+        # This is the set of variables and parameters that must be solved for either analytically or numerically
         vars_and_paras_to_be_solved = vars_and_paras.difference(prespecified_variables_and_parameters.keys())
         vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(calibration_set.get_instrument_names())
         vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(calibration_set.get_target_names())
@@ -49,12 +49,11 @@ def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_varia
         # If certain variables/parameters can be solved analytically and an analytic solution has been provided
         # remove them from the accounting of the set of variables/parameters that need to be solved.
         if analytic_solution is not None:
-            vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(
-                sj.utils.output_list(analytic_solution))
+            vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(sj.utils.output_list(analytic_solution))
 
         # The variables/parameters found via numerical methods (in the set vars_and_paras_to_be_solved_num)
-        # must be the same as the set of outputs from the function "numerical_solution"
-        # further, the "calibration instrument"s must be arguments to the "numerical solution" function
+        # must be the same as the set of outputs from the function "numerical_solution()"
+        # further, the "calibration instrument"s must be arguments to "numerical_solution()" function
         assert vars_and_paras_to_be_solved == set(sj.utils.output_list(numerical_solution))
         assert set(calibration_set.get_instrument_names()).issubset(set(sj.utils.input_list(numerical_solution)))
 
