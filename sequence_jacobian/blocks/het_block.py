@@ -79,6 +79,7 @@ class HetBlock:
 
         # aggregate outputs and inputs for utils.block_sort
         self.inputs = self.all_inputs - {k + '_p' for k in self.backward}
+        self.inputs = self.inputs.union(set(self.backward))
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
         
