@@ -79,7 +79,6 @@ class HetBlock:
 
         # aggregate outputs and inputs for utils.block_sort
         self.inputs = self.all_inputs - {k + '_p' for k in self.backward}
-        self.inputs = self.inputs.union(set(self.backward))
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
         
@@ -687,6 +686,9 @@ class HetBlock:
             outputs_as_tuple = utils.make_tuple(self.hetinput(**{k: indict[k] for k in self.hetinput_inputs if k in indict}))
             indict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
 
+        # TODO: Check whether self.all_inputs - self.inputs_p always = self.all_inputs unintentionally.
+        #   Upon observation it seems that self.inputs_p are always without "_p" whereas the corresponding
+        #   variables in self.all_inputs always have "_p".
         indict_new = {k: indict[k] for k in self.all_inputs - self.inputs_p if k in indict}
         try:
             return {**indict_new, **{k + '_p': indict[k] for k in self.inputs_p}}
