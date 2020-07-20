@@ -5,190 +5,104 @@ import scipy.optimize as opt
 from copy import copy, deepcopy
 
 import sequence_jacobian as sj
+from sequence_jacobian.utils import make_tuple
 
 
 # Find the steady state solution
-# Feature to-be-implemented: Add more flexible specification of numerical solver/required kwargs to be used for
-# the numerical solution. For now, just add optional "bounds" arguments to the steady_state.
-def steady_state(model_dag, dag_targets, idiosyncratic_grids, prespecified_variables_and_parameters,
-                 calibration_set, analytic_solution=None, numerical_solution=None,
-                 numerical_solution_initialization=None, walras_variable="C",
-                 validity_check=True, consistency_check=True, consistency_check_tol=1e-10):
+# TODO: Add more flexible specification of numerical solver/required kwargs to be used for
+#   the numerical solution. For now, just add optional "bounds" arguments to the steady_state.
+def steady_state(blocks, calibration, unknowns, targets,
+                 helper_blocks=None, solver="brentq",
+                 unknowns_initial_values=None, unknowns_bounds=None,
+                 consistency_check=True, consistency_check_tol=1e-10):
 
-    if analytic_solution is None and numerical_solution is None:
-        raise RuntimeError("Must provide either an analytic solution or a numerical solution method to solve"
-                           " for non-pre-specified variables/parameters.")
+    ss_values = deepcopy(calibration)
+    topsorted = sj.utils.block_sort(blocks)
 
-    # Validity Checks:
-    # The following code is to check the validity of the steady state calibration exercise
-    # by counting all of the variables/parameters involved as inputs/outputs in the model dag
-    # and ensuring the user has specified a means of solving for them.
-    # Can be performed optionally (allow user to bypass if they don't want to check)
-    # So probably best calculated the first time the steady state is solved for but not every time
-    # *Feature to-be-implemented: For now omitting the edge case of models that do not require *any* numerical solution
-    #   e.g. the RBC model.
-    if validity_check:
-        # Find the set of model variables and parameters that are candidates for calibration instruments and targets
-        vars_and_paras = set([])
-        for block in model_dag.blocks:
-            vars_and_paras = vars_and_paras.union(block.inputs)
-            vars_and_paras = vars_and_paras.union(block.outputs)
+    def residual(unknown_values, include_helpers=True):
+        ss_values.update(zip(unknowns, make_tuple(unknown_values)))
 
-        # Remove all "*_grid" variables, "Pi" (assumed to be the standard name for the state transition matrix),
-        # any variables contained in 'dag_targets' from vars_and_paras, and the variable automatically solved for
-        # by applying Walras' law
-        for vp in copy(vars_and_paras):
-            if "_grid" in vp or vp == "Pi" or vp in model_dag.targets or vp == walras_variable:
-                vars_and_paras.remove(vp)
+        # If the user provided helper blocks (variables/parameters that can be pre-computed from the values stored
+        # in calibration), then evaluate each of the helper blocks' steady states.
+        helper_outputs = {}
+        if helper_blocks is not None and include_helpers:
+            for block in helper_blocks:
+                helper_outputs = eval_block_ss(block, ss_values)
+                ss_values.update(helper_outputs)
 
-        # This is the set of variables and parameters that must be solved for either analytically or numerically
-        vars_and_paras_to_be_solved = vars_and_paras.difference(prespecified_variables_and_parameters.keys())
-        vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(calibration_set.get_instrument_names())
-        vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(calibration_set.get_target_names())
+        # Progress through the DAG computing the resulting steady state values based on the unknown_values
+        # provided to the residual function
+        for i in topsorted:
+            # Don't overwrite entries in ss_values corresponding to what has already
+            # been solved for in helper_blocks so we can check for consistency after-the-fact
+            outputs = eval_block_ss(blocks[i], ss_values)
+            ss_values.update(dict_diff(outputs, helper_outputs))
 
-        # If certain variables/parameters can be solved analytically and an analytic solution has been provided
-        # remove them from the accounting of the set of variables/parameters that need to be solved.
-        if analytic_solution is not None:
-            vars_and_paras_to_be_solved = vars_and_paras_to_be_solved.difference(sj.utils.output_list(analytic_solution))
+        return compute_target_values(targets, ss_values)
 
-        # The variables/parameters found via numerical methods (in the set vars_and_paras_to_be_solved_num)
-        # must be the same as the set of outputs from the function "numerical_solution()"
-        # further, the "calibration instrument"s must be arguments to "numerical_solution()" function
-        assert vars_and_paras_to_be_solved == set(sj.utils.output_list(numerical_solution))
-        assert set(calibration_set.get_instrument_names()).issubset(set(sj.utils.input_list(numerical_solution)))
-
-    # Method Body
-    # Build up the dictionary of potential arguments available to use for computing the solution to the analytic
-    # and numerical components of the steady state computation
-    calibration_targets = dict(zip(calibration_set.get_target_names(), calibration_set.get_target_values()))
-    potential_args = {**calibration_targets, **idiosyncratic_grids, **prespecified_variables_and_parameters}
-
-    if analytic_solution is not None:
-        analytic_input_arg_names = sj.utils.input_list(analytic_solution)
-        analytic_output_arg_names = sj.utils.output_list(analytic_solution)
-        analytic_input_args = [potential_args[arg_name] for arg_name in analytic_input_arg_names]
-        analytic_output_args = analytic_solution(*analytic_input_args)
-
-        potential_args.update(zip(analytic_output_arg_names, analytic_output_args))
-
-    # *Feature to-be-implemented: Expect that numerical_solution_initialization is a function. Later allow
-    #   for the possibility of providing an Array directly.
-    # *Feature to-be-implemented: For now expect the numerical solution initialization to be a single value
-    #   (so not compatible with two asset yet)
-    # Construct the initial value for the numerical solution programmatically.
-    # Expect that the arguments for the initialization are either grids, pre-specified variables/parameters
-    # or are solved for in the analytic solution, so look through the dictionary of both sets of
-    # values to pass into the numerical_solution_initialization function.
-    num_init_input_arg_names = sj.utils.input_list(numerical_solution_initialization)
-    num_init_output_arg_names = sj.utils.output_list(numerical_solution_initialization)
-    num_init_input_args = [potential_args[arg_name] for arg_name in num_init_input_arg_names]
-    num_init_output_args = numerical_solution_initialization(*num_init_input_args)
-
-    potential_args.update(zip(num_init_output_arg_names, [num_init_output_args]))
-
-    # Manually construct the ordered list of arguments to enter into the numerical solution
-    # Note on expected argument ordering: In numerical_solution(), the calibrated instruments must be
-    # the first arguments for the proper construction of the residual function, res()
-    num_input_arg_names = list_difference(sj.utils.input_list(numerical_solution),
-                                          calibration_set.get_instrument_names())
-    num_output_arg_names = sj.utils.output_list(numerical_solution)
-    num_input_args = [potential_args[arg_name] for arg_name in num_input_arg_names]
-
-    # Build the numerical residual function programmatically, using the dag targets and the
-    # numerical solution input arguments
-    # *Feature to-be-implemented: Expect num_output_args to be a scalar. Generalize functionality to scalar and vectors
-    def res(x):
-        residuals = np.ones(len(dag_targets))
-        target_to_block = find_target_blocks(model_dag, dag_targets)
-        num_output_args = numerical_solution(x, *num_input_args)
-        potential_args.update(zip(num_output_arg_names, [num_output_args]))
-
-        for i, target in enumerate(dag_targets):
-            block_input_arg_names = target_to_block[target].inputs
-            block_input_args = [potential_args[arg_name] for arg_name in block_input_arg_names]
-            residuals[i] = target_to_block[target].ss(*block_input_args)
-
-        return residuals
-
-    # *Feature to-be-implemented: Allow for generic numerical solvers and output handling.
-    #   For now expect the numerical solution to be univariate (as in krusell smith)
-    cal_instr, sol = opt.brentq(res, calibration_set.get_instrument_bounds()[0][0],
-                                calibration_set.get_instrument_bounds()[0][1],
-                                full_output=True)
-
-    potential_args.update(zip(calibration_set.get_instrument_names(), [cal_instr]))
+    if solver == "brentq":
+        lb, ub = unknowns_bounds[unknowns[0]]  # Since brentq is a univariate solver
+        unknown_solutions, sol = opt.brentq(residual, lb, ub, full_output=True)
+    else:
+        raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
 
     if not sol.converged:
         raise ValueError("Steady-state solver did not converge.")
 
-    # Add individual-level policy, value, and distribution functions from all heterogeneous blocks
-    for block in model_dag.blocks:
-        if isinstance(block, sj.HetBlock):
-            block_input_arg_names = block.all_inputs
-            block_input_args = {unprime(arg_name): potential_args[unprime(arg_name)]
-                                for arg_name in block_input_arg_names}
-            potential_args.update(block.ss(**block_input_args))
-        else:
-            continue
-
-    # *Feature to-be-implemented: Handle Walras' Law as an additional simple block in the Model DAG and include
-    # the walras variable (in this case, 'C') as one of the return arguments
-
-    # Check that the steady state solution is compatible with the dag representation
-    # by computing the dag once through with the steady state unknown values, ignoring
-    # all time displacement terms, and check that the targets are indeed hit.
-    # *Feature to-be-implemented: Handle SolvedBlocks as well
+    # Check that the solution is consistent with what would come out of the DAG without
+    # the helper blocks
     if consistency_check:
-        dag_args = deepcopy(potential_args)
-        topsorted = sj.utils.block_sort(model_dag.blocks)
-        for num in topsorted:
-            block = model_dag.blocks[num]
-            # Compute the variables' values implied by each non-target block along the graph
-            if block.outputs.intersection(dag_targets) == set():
-                if isinstance(block, sj.SimpleBlock):
-                    block_input_arg_names = block.input_list
-                    block_output_arg_names = block.output_list
-                    block_input_args = [dag_args[arg_name] for arg_name in block_input_arg_names]
-                    dag_args.update(zip(block_output_arg_names, [block.ss(*block_input_args)]))
-                elif isinstance(block, sj.HetBlock):
-                    block_input_arg_names = block.all_inputs
-                    block_input_args = {unprime(arg_name): potential_args[unprime(arg_name)]
-                                        for arg_name in block_input_arg_names}
-                    dag_args.update(block.ss(**block_input_args))
+        assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < consistency_check_tol
 
-        # Check that with these variables' values, the targets are hit
-        target_to_block = find_target_blocks(model_dag, dag_targets)
-        for i, target in enumerate(dag_targets):
-            block_input_arg_names = target_to_block[target].inputs
-            block_input_args = [potential_args[arg_name] for arg_name in block_input_arg_names]
-            assert abs(target_to_block[target].ss(*block_input_args)) < consistency_check_tol
+    # Update to set the solutions for the steady state values of the unknowns
+    ss_values.update(zip(unknowns, make_tuple(unknown_solutions)))
 
-    return potential_args
+    # TODO: Check Walras' Law
 
-# Find which blocks are associated with the targets.
-# Assume that every target in the model's dag has an associated block,
-# where the block.ss() function computes the relevant residual for the target.
-# Note that this is NOT currently the case (for instance, the notebooks tend to group all of the market clearing
-# conditions into a single block, whereas these methods expect they all be in separate blocks) so will need to be
-# remedied before it can be used
-def find_target_blocks(model_dag, dag_targets):
-    target_to_block = {}
-    for block in model_dag.blocks:
-        # If there is more than one output from a model's block, then that block is assumed not to be associated
-        # with a target, since the block's output should be the target residual.
-        if len(block.outputs) != 1:
-            continue
+    return ss_values
+
+
+def find_target_block(blocks, target):
+    for block in blocks:
+        if target in blocks.output:
+            return block
+
+
+# Allow targets to be specified in the following formats
+# 1) target = {"asset_mkt": 0} (the standard case, where the target = 0)
+# 2) target = {"r": 0.01} (allowing for the target to be non-zero)
+# 3) target = {"K": "A"} (allowing the target to be another variable in potential_args)
+def compute_target_values(targets, potential_args):
+    target_values = []
+    for t in targets:
+        v = targets[t]
+        if type(v) == str:
+            target_values.append(potential_args[t] - potential_args[v])
         else:
-            if list(block.outputs)[0] in dag_targets:
-                target_to_block[list(block.outputs)[0]] = block
+            target_values.append(potential_args[t] - v)
 
-    return target_to_block
+    # Univariate solvers require float return values (and not lists)
+    if len(targets) == 1:
+        return target_values[0]
+    else:
+        return target_values
 
 
-# Need an additional utility to compute a set-like difference for lists, but preserving the order of
-# the list that items are being deleted from
-def list_difference(primary_list, *args):
-    return [item for item in primary_list if item not in set().union(*args)]
+# Analogous to the SHADE workflow of having blocks call utils.apply(self._fss, inputs) but not as general.
+def eval_block_ss(block, potential_args):
+    input_args = {unprime(arg_name): potential_args[unprime(arg_name)] for arg_name in block.inputs}
+
+    # TODO: This is a bit ugly, but it's being explicit so that we can come back and refactor it better.
+    #   I need to understand why the grids, Pi, and the individual variables, "Va", "c", "a", are *not*
+    #   included in .outputs. Presumably, we want these to be returned.
+    if isinstance(block, sj.SimpleBlock):
+        output_args = make_tuple(block.ss(**input_args))
+        outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
+    else:  # assume it's a HetBlock. Figure out a nicer way to handle SolvedBlocks/CombinedBlocks later on
+        outputs_incl_indiv_vars = block.ss(**input_args)
+        outputs = {o: outputs_incl_indiv_vars[o] for o in block.outputs}
+
+    return outputs
 
 
 # Expects the notation for a variable primed to be of the standard format "var_p"
@@ -198,3 +112,14 @@ def unprime(s):
         return s[:-2]
     else:
         return s
+
+
+# Returns the dictionary that is the "set difference" between d1 and d2 (based on keys, not key-value pairs)
+# E.g. d1 = {"a": 1, "b": 2}, d2 = {"b": 5}, then dict_diff(d1, d2) = {"a": 1}
+def dict_diff(d1, d2):
+    o_dict = {}
+    for k in set(d1.keys()).difference(set(d2.keys())):
+        o_dict[k] = d1[k]
+
+    return o_dict
+

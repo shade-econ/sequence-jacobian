@@ -457,6 +457,11 @@ def markov_tauchen(rho, sigma, N=7, m=3):
 def markov_rouwenhorst(rho, sigma, N=7):
     """Rouwenhorst method analog to markov_tauchen"""
 
+    # Explicitly typecast N as an integer, since when the grid constructor functions
+    # (e.g. the function that makes a_grid) are implemented as blocks, they interpret the integer-valued calibration
+    # as a float.
+    N = int(N)
+
     # parametrize Rouwenhorst for n=2
     p = (1 + rho) / 2
     Pi = np.array([[p, 1 - p], [1 - p, p]])
