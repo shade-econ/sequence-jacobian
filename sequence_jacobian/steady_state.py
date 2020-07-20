@@ -2,7 +2,7 @@
 
 import numpy as np
 import scipy.optimize as opt
-from copy import copy, deepcopy
+from copy import deepcopy
 
 import sequence_jacobian as sj
 from sequence_jacobian.utils import make_tuple
@@ -43,10 +43,14 @@ def steady_state(blocks, calibration, unknowns, targets,
     if solver == "brentq":
         lb, ub = unknowns_bounds[unknowns[0]]  # Since brentq is a univariate solver
         unknown_solutions, sol = opt.brentq(residual, lb, ub, full_output=True)
+    elif solver is None:  # If the entire solution is provided by the helper blocks
+        # Call residual() once to update ss_values and to check the targets match the provided solution
+        assert abs(np.max(residual(np.zeros(len(unknowns))))) < 1e-7
+        unknown_solutions = [ss_values[arg_name] for arg_name in unknowns]
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
 
-    if not sol.converged:
+    if solver is not None and not sol.converged:
         raise ValueError("Steady-state solver did not converge.")
 
     # Check that the solution is consistent with what would come out of the DAG without
