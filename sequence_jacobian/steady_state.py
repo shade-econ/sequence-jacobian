@@ -96,15 +96,13 @@ def compute_target_values(targets, potential_args):
 def eval_block_ss(block, potential_args):
     input_args = {unprime(arg_name): potential_args[unprime(arg_name)] for arg_name in block.inputs}
 
-    # TODO: This is a bit ugly, but it's being explicit so that we can come back and refactor it better.
-    #   I need to understand why the grids, Pi, and the individual variables, "Va", "c", "a", are *not*
-    #   included in .outputs. Presumably, we want these to be returned.
+    # Simple and HetBlocks require different handling of block.ss() output since
+    # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
     if isinstance(block, sj.SimpleBlock):
         output_args = make_tuple(block.ss(**input_args))
         outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
     else:  # assume it's a HetBlock. Figure out a nicer way to handle SolvedBlocks/CombinedBlocks later on
-        outputs_incl_indiv_vars = block.ss(**input_args)
-        outputs = {o: outputs_incl_indiv_vars[o] for o in block.outputs}
+        outputs = block.ss(**input_args)
 
     return outputs
 
