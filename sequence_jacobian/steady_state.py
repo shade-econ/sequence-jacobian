@@ -5,38 +5,36 @@ import scipy.optimize as opt
 from copy import deepcopy
 
 import sequence_jacobian as sj
+from sequence_jacobian import HelperBlock
 from sequence_jacobian.utils import make_tuple
 
 
 # Find the steady state solution
 # TODO: Add more flexible specification of numerical solver/required kwargs to be used for
 #   the numerical solution. For now, just add optional "bounds" arguments to the steady_state.
-def steady_state(blocks, calibration, unknowns, targets,
-                 helper_blocks=None, solver="brentq",
+def steady_state(blocks, calibration, unknowns, targets, solver="brentq",
                  unknowns_initial_values=None, unknowns_bounds=None,
                  consistency_check=True, consistency_check_tol=1e-10):
 
     ss_values = deepcopy(calibration)
-    topsorted = sj.utils.block_sort(blocks)
+    topsorted = sj.utils.block_sort(blocks, calibration=calibration)
 
     def residual(unknown_values, include_helpers=True):
         ss_values.update(zip(unknowns, make_tuple(unknown_values)))
 
-        # If the user provided helper blocks (variables/parameters that can be pre-computed from the values stored
-        # in calibration), then evaluate each of the helper blocks' steady states.
         helper_outputs = {}
-        if helper_blocks is not None and include_helpers:
-            for block in helper_blocks:
-                helper_outputs = eval_block_ss(block, ss_values)
-                ss_values.update(helper_outputs)
 
         # Progress through the DAG computing the resulting steady state values based on the unknown_values
         # provided to the residual function
         for i in topsorted:
-            # Don't overwrite entries in ss_values corresponding to what has already
-            # been solved for in helper_blocks so we can check for consistency after-the-fact
             outputs = eval_block_ss(blocks[i], ss_values)
-            ss_values.update(dict_diff(outputs, helper_outputs))
+            if include_helpers and isinstance(blocks[i], HelperBlock):
+                helper_outputs.update(outputs)
+                ss_values.update(outputs)
+            else:
+                # Don't overwrite entries in ss_values corresponding to what has already
+                # been solved for in helper_blocks so we can check for consistency after-the-fact
+                ss_values.update(dict_diff(outputs, helper_outputs))
 
         return compute_target_values(targets, ss_values)
 
@@ -98,7 +96,7 @@ def eval_block_ss(block, potential_args):
 
     # Simple and HetBlocks require different handling of block.ss() output since
     # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
-    if isinstance(block, sj.SimpleBlock):
+    if isinstance(block, sj.SimpleBlock) or isinstance(block, sj.HelperBlock):
         output_args = make_tuple(block.ss(**input_args))
         outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
     else:  # assume it's a HetBlock. Figure out a nicer way to handle SolvedBlocks/CombinedBlocks later on
