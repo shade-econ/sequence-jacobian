@@ -5,6 +5,8 @@ import scipy.linalg
 import re
 import inspect
 
+from .blocks.helper_block import HelperBlock
+
 
 '''Part 1: Efficient linear interpolation exploiting monotonicity.
 
@@ -731,6 +733,11 @@ def block_sort(block_list, findrequired=False):
     # step 1: map outputs to blocks for topological sort
     outmap = dict()
     for num, block in enumerate(block_list):
+        # Don't account for HelperBlocks in outmap, since by construction they solve for outputs that are
+        # contained in the original set of blocks.
+        if isinstance(block, HelperBlock):
+            continue
+
         if hasattr(block, 'outputs'):
             outputs = block.outputs
         elif isinstance(block, dict):
