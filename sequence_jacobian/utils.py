@@ -724,20 +724,28 @@ def printit(it, x, y, **kwargs):
 '''Part 8: topological sort and related code'''
 
 
-def block_sort(block_list, findrequired=False):
+def block_sort(block_list, calibration=None, findrequired=False):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
     optionally return which outputs must be computed as inputs of later blocks.
 
     Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
-    inferred) that indicate their aggregate inputs and outputs"""
+    inferred) that indicate their aggregate inputs and outputs
+
+    Importantly, because including HelperBlocks in a block_list without additional measures
+    can introduce cycles within the DAG, allow the user to provide the calibration that will be used in the
+    steady_state computation to resolve these cycles.
+    e.g. Consider Krusell Smith:
+    Suppose one specifies a HelperBlock based on a calibrated value for "r", which outputs "K" (among other vars).
+    Normally block_sort would include the "firm" block as a dependency of the HelperBlock
+    because the "firm" block outputs "r", which the HelperBlock takes as an input.
+    However, it would also include the HelperBlock as a dependency of the "firm" block because the "firm" block takes
+    "K" as an input.
+    This would result in a cycle. However, if a "calibration" is provided in which "r" is included, then
+    "firm" could be removed as a dependency of HelperBlock and the cycle would be resolved.
+    """
     # step 1: map outputs to blocks for topological sort
     outmap = dict()
     for num, block in enumerate(block_list):
-        # Don't account for HelperBlocks in outmap, since by construction they solve for outputs that are
-        # contained in the original set of blocks.
-        if isinstance(block, HelperBlock):
-            continue
-
         if hasattr(block, 'outputs'):
             outputs = block.outputs
         elif isinstance(block, dict):
@@ -746,9 +754,21 @@ def block_sort(block_list, findrequired=False):
             raise ValueError(f'{block} is not recognized as block or does not provide outputs')
 
         for o in outputs:
-            if o in outmap:
+            if calibration is not None and o in calibration:
+                continue
+
+            # Because some of the outputs of a HelperBlock are, by construction, outputs that also appear in the
+            # standard blocks that comprise a DAG, ignore the fact that an output is repeated when considering
+            # throwing this ValueError
+            if o in outmap and not (isinstance(block, HelperBlock) or isinstance(block_list[outmap[o]], HelperBlock)):
                 raise ValueError(f'{o} is output twice')
-            outmap[o] = num
+
+            # Ensure that the block "outmap" maps "o" to is the actual block and not a HelperBlock if both share
+            # a given output, such that the dependency graph is constructed on the standard blocks, where possible
+            if o not in outmap or (o in outmap and not isinstance(block, HelperBlock)):
+                outmap[o] = num
+            else:
+                continue
 
     # step 2: dependency graph for topological sort and input list
     dep = {num: set() for num in range(len(block_list))}
@@ -795,7 +815,7 @@ def topological_sort(dep, names=None):
         cycle_ints = find_cycle(dep, dep.keys() - set(topsorted))
         assert cycle_ints is not None, 'topological sort failed but no cycle, THIS SHOULD NEVER EVER HAPPEN'
         cycle = [names[i] for i in cycle_ints] if names else cycle_ints
-        raise Exception(f'Topological sort failed: cyclic dependency {" -> ".join(cycle)}')
+        raise Exception(f'Topological sort failed: cyclic dependency {" -> ".join([str(n) for n in cycle])}')
 
     return topsorted
 
