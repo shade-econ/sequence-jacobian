@@ -5,16 +5,16 @@ from .. import utils
 from .. import asymptotic
 
 
-def het(exogenous, policy, backward):
+def het(exogenous, policy, backward, backward_init=None):
     def decorator(back_step_fun):
-        return HetBlock(back_step_fun, exogenous, policy, backward)
+        return HetBlock(back_step_fun, exogenous, policy, backward, backward_init=backward_init)
     return decorator
 
 
 class HetBlock:
     """Part 1: Initializer for HetBlock, intended to be called via @het() decorator on back it function."""
 
-    def __init__(self, back_step_fun, exogenous, policy, backward):
+    def __init__(self, back_step_fun, exogenous, policy, backward, backward_init=None):
         """Construct HetBlock from backward iteration function.
 
         Parameters
@@ -77,6 +77,13 @@ class HetBlock:
             if out.isupper():
                 raise ValueError("Output '{out}' is uppercase in {back_step_fun.__name__}, not allowed")
 
+        # add the backward iteration initializer function
+        if backward_init is None:
+            # TODO: Think about implementing some "automated way" of providing an initial guess for the backward iteration
+            self.backward_init = backward_init
+        else:
+            self.backward_init = backward_init
+
         # aggregate outputs and inputs for utils.block_sort
         self.inputs = self.all_inputs - {k + '_p' for k in self.backward}
         self.inputs.remove(exogenous + '_p')
@@ -87,6 +94,7 @@ class HetBlock:
         # start without a hetinput
         self.hetinput = None
         self.hetinput_inputs = set()
+        self.hetinput_outputs = set()
         self.hetinput_outputs_order = tuple()
 
         # 'saved' arguments start empty
@@ -156,8 +164,12 @@ class HetBlock:
         D_seed = kwargs.get('D', None)
         pi_seed = kwargs.get(self.exogenous + '_seed', None)
 
+        # TODO: optionally compute "static" component of the steady state, which does not need to be solved iteratively
+        #   e.g. the constrained c and n in the one asset HANK problem is not forward looking, so we can compute them
+        #   prior to running the iteration.
+
         # run backward iteration
-        sspol = self.policy_ss(kwargs, backward_tol, backward_maxit)
+        sspol = self.policy_ss(kwargs, tol=backward_tol, maxit=backward_maxit)
 
         # run forward iteration
         D = self.dist_ss(Pi, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
@@ -407,11 +419,13 @@ class HetBlock:
         newself = copy.deepcopy(self)
         newself.hetinput = hetinput
         newself.hetinput_inputs = set(utils.input_list(hetinput))
+        newself.hetinput_outputs = set(utils.output_list(hetinput))
         newself.hetinput_outputs_order = utils.output_list(hetinput)
 
         # modify inputs to include hetinput's additional inputs, remove outputs
         newself.inputs |= newself.hetinput_inputs
-        newself.inputs -= set(newself.hetinput_outputs_order)
+        # newself.inputs -= set(newself.hetinput_outputs_order)
+        newself.inputs -= newself.hetinput_outputs
         return newself
 
     '''Part 3: components of ss():
@@ -437,9 +451,10 @@ class HetBlock:
             all steady-state outputs of backward iteration, combined with inputs to backward iteration
         """
 
+        # find initial values for backward iteration and account for hetinputs
         original_ssin = ssin
         ssin = self.make_inputs(ssin)
-        
+
         old = {}
         for it in range(maxit):
             try:
@@ -554,6 +569,10 @@ class HetBlock:
     def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T, 
                                     sspol_i, sspol_pi, sspol_space, T, h=1E-4, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
+        # TODO: Might need to add a check for ss_for_hetinput if self.hetinput is not None
+        #   since unless self.hetinput_inputs is exactly equal to input_shocked, calling
+        #   self.hetinput() inside the symmetric differentiation function will throw an error.
+        #   It's probably better/more informative to throw that error out here.
         if self.hetinput is not None and input_shocked in self.hetinput_inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
             din_dict = dict(zip(self.hetinput_outputs_order,
@@ -686,11 +705,22 @@ class HetBlock:
             outputs_as_tuple = utils.make_tuple(self.hetinput(**{k: indict[k] for k in self.hetinput_inputs if k in indict}))
             indict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
 
+        # check if there are entries in indict corresponding to self.inputs_p.
+        # In particular, we are interested in knowing if an initial value
+        # for the backward iteration variable has been provided.
+        # If it has not been provided, then use self.backward_init to calculate the initial values.
+        if not self.inputs_p.issubset(set(indict.keys())):
+            initial_value_input_args = [indict[arg_name] for arg_name in utils.input_list(self.backward_init)]
+            indict.update(zip(utils.output_list(self.backward_init),
+                              utils.make_tuple(self.backward_init(*initial_value_input_args))))
+
         # TODO: Check whether self.all_inputs - self.inputs_p always = self.all_inputs unintentionally.
         #   Upon observation it seems that self.inputs_p are always without "_p" whereas the corresponding
         #   variables in self.all_inputs always have "_p".
+        # Removing all variables in self.inputs_p (such as "Va") that are meant to be unprimed
         indict_new = {k: indict[k] for k in self.all_inputs - self.inputs_p if k in indict}
         try:
+            # Adding those same removed variables in self.inputs_p but adding a prime on them
             return {**indict_new, **{k + '_p': indict[k] for k in self.inputs_p}}
         except KeyError as e:
             print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
