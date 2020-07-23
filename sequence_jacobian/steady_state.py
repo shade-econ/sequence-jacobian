@@ -27,15 +27,17 @@ def steady_state(blocks, calibration, unknowns, targets, solver=None,
         # Progress through the DAG computing the resulting steady state values based on the unknown_values
         # provided to the residual function
         for i in topsorted:
-            outputs = eval_block_ss(blocks[i], ss_values)
-            # TODO: Actually shouldn't be evaluating the helper blocks at all if include_helpers=False
-            if include_helpers and isinstance(blocks[i], HelperBlock):
-                helper_outputs.update(outputs)
-                ss_values.update(outputs)
+            if not include_helpers and isinstance(blocks[i], HelperBlock):
+                continue
             else:
-                # Don't overwrite entries in ss_values corresponding to what has already
-                # been solved for in helper_blocks so we can check for consistency after-the-fact
-                ss_values.update(dict_diff(outputs, helper_outputs))
+                outputs = eval_block_ss(blocks[i], ss_values)
+                if include_helpers and isinstance(blocks[i], HelperBlock):
+                    helper_outputs.update(outputs)
+                    ss_values.update(outputs)
+                else:
+                    # Don't overwrite entries in ss_values corresponding to what has already
+                    # been solved for in helper_blocks so we can check for consistency after-the-fact
+                    ss_values.update(dict_diff(outputs, helper_outputs))
 
         return compute_target_values(targets, ss_values)
 
@@ -131,7 +133,7 @@ def dict_diff(d1, d2):
 
 # For handling the case where keys and values may be scalars
 def smart_zip(keys, values):
-    if len(keys) == len(values) == 1:
+    if isinstance(values, float):
         return zip(keys, [values])
     else:
         return zip(keys, values)
