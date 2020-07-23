@@ -10,17 +10,15 @@ from sequence_jacobian.utils import make_tuple, broyden_solver
 
 
 # Find the steady state solution
-# TODO: Add more flexible specification of numerical solver/required kwargs to be used for
-#   the numerical solution. For now, just add optional "bounds" arguments to the steady_state.
-def steady_state(blocks, calibration, unknowns, targets, solver=None,
-                 unknowns_initial_values=None, unknowns_bounds=None,
-                 consistency_check=True, consistency_check_tol=1e-9):
+def steady_state(blocks, calibration, unknowns, targets,
+                 consistency_check=True, ttol=1e-9, ctol=1e-9,
+                 solver=None, **solver_kwargs):
 
     ss_values = deepcopy(calibration)
     topsorted = sj.utils.block_sort(blocks, calibration=calibration)
 
-    def residual(unknown_values, include_helpers=True):
-        ss_values.update(smart_zip(unknowns, unknown_values))
+    def residual(unknown_values, include_helpers=True, update_unknowns_inplace=False):
+        ss_values.update(smart_zip(unknowns.keys(), unknown_values))
 
         helper_outputs = {}
 
@@ -39,29 +37,23 @@ def steady_state(blocks, calibration, unknowns, targets, solver=None,
                     # been solved for in helper_blocks so we can check for consistency after-the-fact
                     ss_values.update(dict_diff(outputs, helper_outputs))
 
+        # Update the "unknowns" dictionary *in place* with its steady state values.
+        # i.e. the "unknowns" in the namespace in which this function is invoked will change!
+        # Useful for a) if the unknown values are updated while iterating each blocks' ss computation within the DAG,
+        # and/or b) if the user wants to update "unknowns" in place for use in other computations.
+        if update_unknowns_inplace:
+            unknowns.update(smart_zip(unknowns.keys(), [ss_values[key] for key in unknowns.keys()]))
+
+        # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
+        # dict of ss_values to compute the "unknown_solutions"
         return compute_target_values(targets, ss_values)
 
-    # TODO: Put into a solver function to clean this up
-    if solver is None:
-        raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
-    elif solver == "brentq":
-        lb, ub = unknowns_bounds[unknowns[0]]  # Since brentq is a univariate solver
-        unknown_solutions, sol = opt.brentq(residual, lb, ub, full_output=True)
-        if not sol.converged:
-            raise ValueError("Steady-state solver did not converge.")
-    elif solver == "broyden":
-        unknown_solutions, _ = broyden_solver(residual, np.array(list(unknowns_initial_values.values())), noisy=False)
-    elif solver is "solved":  # If the entire solution is provided by the helper blocks
-        # Call residual() once to update ss_values and to check the targets match the provided solution
-        assert abs(np.max(residual(np.zeros(len(unknowns))))) < 1e-7
-        unknown_solutions = [ss_values[arg_name] for arg_name in unknowns]
-    else:
-        raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
+    unknown_solutions = solve_for_unknowns(residual, unknowns, tol=ttol, solver=solver, **solver_kwargs)
 
     # Check that the solution is consistent with what would come out of the DAG without
     # the helper blocks
     if consistency_check:
-        assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < consistency_check_tol
+        assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < ctol
 
     # Update to set the solutions for the steady state values of the unknowns
     ss_values.update(zip(unknowns, make_tuple(unknown_solutions)))
@@ -112,6 +104,30 @@ def eval_block_ss(block, potential_args):
     return outputs
 
 
+def solve_for_unknowns(residual, unknowns, tol=1e-9, solver=None, **solver_kwargs):
+    if solver is None:
+        raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
+    elif solver == "brentq":
+        lb, ub = list(unknowns.values())[0]  # Since brentq is a univariate solver can assume unknowns is a size 1 dict
+        unknown_solutions, sol = opt.brentq(residual, lb, ub, xtol=tol, **solver_kwargs)
+        if not sol.converged:
+            raise ValueError("Steady-state solver did not converge.")
+    elif solver == "broyden":
+        init_values = np.array(list(unknowns.values()))
+        unknown_solutions, _ = broyden_solver(residual, init_values, tol=tol, **solver_kwargs)
+    elif solver is "solved":
+        # If the entire solution is provided by the helper blocks
+        # Call residual() once to update ss_values and to check the targets match the provided solution.
+        # The initial value passed into residual (np.zeros()) in this case is irrelevant, but something
+        # must still be passed in since the residual function requires an argument.
+        assert abs(np.max(residual(smart_zeros(len(unknowns)), update_unknowns_inplace=True))) < tol
+        unknown_solutions = list(unknowns.values())
+    else:
+        raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
+
+    return unknown_solutions
+
+
 # Expects the notation for a variable primed to be of the standard format "var_p"
 # which will then return "var." If the variable is not primed, "ovar" then simply return it
 def unprime(s):
@@ -137,3 +153,11 @@ def smart_zip(keys, values):
         return zip(keys, [values])
     else:
         return zip(keys, values)
+
+
+# Return either the float 0. or a np.ndarray of length 0 depending on whether n > 1
+def smart_zeros(n):
+    if n > 1:
+        return np.zeros(n)
+    else:
+        return 0.
