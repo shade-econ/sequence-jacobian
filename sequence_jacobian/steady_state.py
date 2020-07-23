@@ -6,21 +6,21 @@ from copy import deepcopy
 
 import sequence_jacobian as sj
 from sequence_jacobian import HelperBlock
-from sequence_jacobian.utils import make_tuple
+from sequence_jacobian.utils import make_tuple, broyden_solver
 
 
 # Find the steady state solution
 # TODO: Add more flexible specification of numerical solver/required kwargs to be used for
 #   the numerical solution. For now, just add optional "bounds" arguments to the steady_state.
-def steady_state(blocks, calibration, unknowns, targets, solver="brentq",
+def steady_state(blocks, calibration, unknowns, targets, solver=None,
                  unknowns_initial_values=None, unknowns_bounds=None,
-                 consistency_check=True, consistency_check_tol=1e-10):
+                 consistency_check=True, consistency_check_tol=1e-9):
 
     ss_values = deepcopy(calibration)
     topsorted = sj.utils.block_sort(blocks, calibration=calibration)
 
     def residual(unknown_values, include_helpers=True):
-        ss_values.update(zip(unknowns, make_tuple(unknown_values)))
+        ss_values.update(smart_zip(unknowns, unknown_values))
 
         helper_outputs = {}
 
@@ -28,6 +28,7 @@ def steady_state(blocks, calibration, unknowns, targets, solver="brentq",
         # provided to the residual function
         for i in topsorted:
             outputs = eval_block_ss(blocks[i], ss_values)
+            # TODO: Actually shouldn't be evaluating the helper blocks at all if include_helpers=False
             if include_helpers and isinstance(blocks[i], HelperBlock):
                 helper_outputs.update(outputs)
                 ss_values.update(outputs)
@@ -38,18 +39,22 @@ def steady_state(blocks, calibration, unknowns, targets, solver="brentq",
 
         return compute_target_values(targets, ss_values)
 
-    if solver == "brentq":
+    # TODO: Put into a solver function to clean this up
+    if solver is None:
+        raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
+    elif solver == "brentq":
         lb, ub = unknowns_bounds[unknowns[0]]  # Since brentq is a univariate solver
         unknown_solutions, sol = opt.brentq(residual, lb, ub, full_output=True)
-    elif solver is None:  # If the entire solution is provided by the helper blocks
+        if not sol.converged:
+            raise ValueError("Steady-state solver did not converge.")
+    elif solver == "broyden":
+        unknown_solutions, _ = broyden_solver(residual, np.array(list(unknowns_initial_values.values())), noisy=False)
+    elif solver is "solved":  # If the entire solution is provided by the helper blocks
         # Call residual() once to update ss_values and to check the targets match the provided solution
         assert abs(np.max(residual(np.zeros(len(unknowns))))) < 1e-7
         unknown_solutions = [ss_values[arg_name] for arg_name in unknowns]
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
-
-    if solver is not None and not sol.converged:
-        raise ValueError("Steady-state solver did not converge.")
 
     # Check that the solution is consistent with what would come out of the DAG without
     # the helper blocks
@@ -75,13 +80,13 @@ def find_target_block(blocks, target):
 # 2) target = {"r": 0.01} (allowing for the target to be non-zero)
 # 3) target = {"K": "A"} (allowing the target to be another variable in potential_args)
 def compute_target_values(targets, potential_args):
-    target_values = []
-    for t in targets:
+    target_values = np.empty(len(targets))
+    for (i, t) in enumerate(targets):
         v = targets[t]
         if type(v) == str:
-            target_values.append(potential_args[t] - potential_args[v])
+            target_values[i] = potential_args[t] - potential_args[v]
         else:
-            target_values.append(potential_args[t] - v)
+            target_values[i] = potential_args[t] - v
 
     # Univariate solvers require float return values (and not lists)
     if len(targets) == 1:
@@ -123,3 +128,10 @@ def dict_diff(d1, d2):
 
     return o_dict
 
+
+# For handling the case where keys and values may be scalars
+def smart_zip(keys, values):
+    if len(keys) == len(values) == 1:
+        return zip(keys, [values])
+    else:
+        return zip(keys, values)
