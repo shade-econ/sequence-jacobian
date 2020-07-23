@@ -164,10 +164,6 @@ class HetBlock:
         D_seed = kwargs.get('D', None)
         pi_seed = kwargs.get(self.exogenous + '_seed', None)
 
-        # TODO: optionally compute "static" component of the steady state, which does not need to be solved iteratively
-        #   e.g. the constrained c and n in the one asset HANK problem is not forward looking, so we can compute them
-        #   prior to running the iteration.
-
         # run backward iteration
         sspol = self.policy_ss(kwargs, tol=backward_tol, maxit=backward_maxit)
 
