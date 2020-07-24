@@ -87,8 +87,6 @@ def steady_state(blocks, calibration, unknowns, targets,
     # Update to set the solutions for the steady state values of the unknowns
     ss_values.update(zip(unknowns, make_tuple(unknown_solutions)))
 
-    # TODO: Check Walras' Law
-
     return ss_values
 
 
