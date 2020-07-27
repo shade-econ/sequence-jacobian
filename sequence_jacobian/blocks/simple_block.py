@@ -38,9 +38,15 @@ class SimpleBlock:
         return f"<SimpleBlock '{self.f.__name__}'>"
 
     def ss(self, *args, **kwargs):
+        # Wrap args and kwargs in Ignore/IgnoreVector classes to be passed into the function "f"
         args = [ignore(x) for x in args]
         kwargs = {k: ignore(v) for k, v in kwargs.items()}
-        return self.f(*args, **kwargs)
+
+        # Impose the return arguments are numeric primitives (float or np.ndarray) and not Ignore/IgnoreVector types
+        if len(self.output_list) > 1:
+            return tuple([numeric_primitive(o) for o in self.f(*args, **kwargs)])
+        else:
+            return numeric_primitive(self.f(*args, **kwargs))
 
     def td(self, ss, **kwargs):
         kwargs_new = {}
@@ -366,14 +372,18 @@ def multiply_rs_matrix(indices, xs, A):
 '''Part 3: helper classes used by SimpleBlock for .ss, .td, and .jac evaluation'''
 
 
+def numeric_primitive(instance):
+    return instance.real if issubclass(type(instance), float) else instance.base
+
+
 def overload_operators(Class, operators):
     """Overload the provided set of operators for a given class (that is a child class of a parent class
     having well-defined behavior for the provided set of operators) to return an instance of the child class.
     e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore"""
 
-    # Find the attribute associated to Class that returns the base primitive contained in the class,
+    # Find the attribute associated to Class that returns the base primitive contained in the class.
     # e.g. The base_value of Ignore, which is a child class of float, is "real", since invoking
-    # a.real on a = Ignore(1.5) returns 1.5 the float primitive contained in a.
+    # a.real on a = Ignore(1.5) returns 1.5, the float primitive contained in a.
     primitive = "real" if issubclass(Class, float) else "base"
 
     # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
