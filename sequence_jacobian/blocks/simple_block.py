@@ -371,10 +371,15 @@ def overload_operators(Class, operators):
     having well-defined behavior for the provided set of operators) to return an instance of the child class.
     e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore"""
 
+    # Find the attribute associated to Class that returns the base primitive contained in the class,
+    # e.g. The base_value of Ignore, which is a child class of float, is "real", since invoking
+    # a.real on a = Ignore(1.5) returns 1.5 the float primitive contained in a.
+    primitive = "real" if issubclass(Class, float) else "base"
+
     # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
     # following the standard promotion behavior.
     def _make_func(name):
-        return lambda self, *args: Class(getattr(self.real, name)(*args))
+        return lambda self, *args: Class(getattr(getattr(self, primitive), name)(*args))
 
     for name in operators:
         setattr(Class, name, _make_func(name))
