@@ -414,7 +414,7 @@ class Ignore(float):
         return self
 
 overload_operators(Ignore, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
-                 "__div__", "__rdiv__", "__pow__", "__rpow__", "__neg__", "__pos__"])
+                   "__div__", "__rdiv__", "__pow__", "__rpow__", "__neg__", "__pos__"])
 
 
 class IgnoreVector(np.ndarray):
