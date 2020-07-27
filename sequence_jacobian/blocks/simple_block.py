@@ -1,4 +1,5 @@
 import numpy as np
+import numbers
 from numba import njit
 
 from .. import utils
@@ -37,8 +38,8 @@ class SimpleBlock:
         return f"<SimpleBlock '{self.f.__name__}'>"
 
     def ss(self, *args, **kwargs):
-        args = [Ignore(x) for x in args]
-        kwargs = {k: Ignore(v) for k, v in kwargs.items()}
+        args = [ignore(x) for x in args]
+        kwargs = {k: ignore(v) for k, v in kwargs.items()}
         return self.f(*args, **kwargs)
 
     def td(self, ss, **kwargs):
@@ -365,11 +366,57 @@ def multiply_rs_matrix(indices, xs, A):
 '''Part 3: helper classes used by SimpleBlock for .ss, .td, and .jac evaluation'''
 
 
+def overload_operators(Class, operators):
+    """Overload the provided set of operators for a given class (that is a child class of a parent class
+    having well-defined behavior for the provided set of operators) to return an instance of the child class.
+    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore"""
+
+    # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
+    # following the standard promotion behavior.
+    def _make_func(name):
+        return lambda self, *args: Class(getattr(self.real, name)(*args))
+
+    for name in operators:
+        setattr(Class, name, _make_func(name))
+
+
+def ignore(x):
+    if isinstance(x, numbers.Real):
+        return Ignore(x)
+    elif isinstance(x, np.ndarray):
+        return IgnoreVector(x)
+    else:
+        raise TypeError(f"{type(x)} is not supported. Must provide either a float or an nd.array as an argument")
+
+
 class Ignore(float):
-    """This class ignores time displacements of a scalar."""
+    """This class ignores time displacements of a scalar.
+    Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
+    any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore
+    """
 
     def __call__(self, index):
         return self
+
+overload_operators(Ignore, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
+                 "__div__", "__rdiv__", "__pow__", "__rpow__", "__neg__", "__pos__"])
+
+
+class IgnoreVector(np.ndarray):
+    """This class ignores time displacements of a np.ndarray.
+       See NumPy documentation on "Subclassing ndarray" for more details on the use of __new__
+       for this implementation.
+       Operators overloaded similarly to the analogous scalar version of this class, Ignore."""
+
+    def __new__(cls, x):
+        obj = np.asarray(x).view(cls)
+        return obj
+
+    def __call__(self, index):
+        return self
+
+overload_operators(IgnoreVector, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
+                   "__div__", "__rdiv__", "__neg__", "__pos__"])
 
 
 class Displace(np.ndarray):
