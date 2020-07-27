@@ -373,26 +373,60 @@ def multiply_rs_matrix(indices, xs, A):
 
 
 def numeric_primitive(instance):
-    return instance.real if issubclass(type(instance), float) else instance.base
+    # If it is already a primitive, just return it
+    if type(instance) in {int, float, np.ndarray}:
+        return instance
+    else:
+        return instance.real if issubclass(type(instance), numbers.Real) else instance.base
 
 
-def overload_operators(Class, operators):
+# Assumes "op" is an actual well-defined arithmetic operator. If necessary, implement more stringent checks
+# on the "op" being passed in so nonsense doesn't come out.
+# i.e. reverse_op("__round__") doesn't return reverse_op("__ound__")
+def reverse_op(op):
+    if op[2] == "r":
+        return op[0:2] + op[3:]
+    else:
+        return op[0:2] + "r" + op[2:]
+
+
+def apply_binary_op_to_primitives(op, a1, a2):
+    a1_p = numeric_primitive(a1)
+    a2_p = numeric_primitive(a2)
+
+    if getattr(a1_p, op)(a2_p) is not NotImplemented:
+        return getattr(a1_p, op)(a2_p)
+    elif getattr(a2_p, reverse_op(op))(a1_p) is not NotImplemented:
+        return getattr(a2_p, reverse_op(op))(a1_p)
+    else:
+        raise NotImplementedError(f"{op} cannot be performed between {a1} and {a2} directly, and no"
+                                  f" valid reverse operation exists either.")
+
+
+def overload_operators(Class, operators, constructor=None, **constructor_kwargs):
     """Overload the provided set of operators for a given class (that is a child class of a parent class
     having well-defined behavior for the provided set of operators) to return an instance of the child class.
-    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore"""
+    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore.
 
-    # Find the attribute associated to Class that returns the base primitive contained in the class.
-    # e.g. The base_value of Ignore, which is a child class of float, is "real", since invoking
-    # a.real on a = Ignore(1.5) returns 1.5, the float primitive contained in a.
-    primitive = "real" if issubclass(Class, float) else "base"
+    Class: `str`
+        The name of the class whose operators we want to overload
+    operators: `list`
+        A list of `str` with the names of the operators, e.g. "__add__", that we hope to overload
+    constructor: `function`
+        If provided, an alternative constructor for converting the primitive resulting from a conducted operation
+        into an instance of Class.
+    """
 
     # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
     # following the standard promotion behavior.
-    def _make_func(name):
-        return lambda self, *args: Class(getattr(getattr(self, primitive), name)(*args))
+    def _make_func(op):
+        if constructor is not None:
+            return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other), **constructor_kwargs)
+        else:
+            return lambda self, other: Class(apply_binary_op_to_primitives(op, self, other))
 
-    for name in operators:
-        setattr(Class, name, _make_func(name))
+    for op in operators:
+        setattr(Class, op, _make_func(op))
 
 
 def ignore(x):
@@ -414,7 +448,7 @@ class Ignore(float):
         return self
 
 overload_operators(Ignore, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
-                   "__div__", "__rdiv__", "__pow__", "__rpow__", "__neg__", "__pos__"])
+                   "__div__", "__rdiv__", "__pow__", "__rpow__", "__neg__", "__pos__"], constructor=ignore)
 
 
 class IgnoreVector(np.ndarray):
@@ -431,7 +465,7 @@ class IgnoreVector(np.ndarray):
         return self
 
 overload_operators(IgnoreVector, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
-                   "__div__", "__rdiv__", "__neg__", "__pos__"])
+                   "__div__", "__rdiv__", "__neg__", "__pos__"], constructor=ignore)
 
 
 class Displace(np.ndarray):
