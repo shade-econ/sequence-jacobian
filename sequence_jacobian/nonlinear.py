@@ -90,6 +90,11 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, *
     if sort is None:
         sort = utils.block_sort(block_list)
 
+    # TODO: Seems a bit weird that you pass variables ad hoc from the top-level
+    #   e.g. calling nonlinear.td_solve() with rstar as a kwarg in one asset HANK.
+    #   look more into why this is done and if it could be done better.
+    # TODO: Rename the various references to kwargs/results to be more informative
+    #   if we do end up keeping this top-level functionality for passing in variables
     # initialize results
     results = kwargs
     for n in sort:
