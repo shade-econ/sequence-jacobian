@@ -48,6 +48,9 @@ class SimpleBlock:
         else:
             return numeric_primitive(self.f(*args, **kwargs))
 
+    # TODO: Tested in the master branch that there is a lot of silent type promotion happening with Displace
+    #   in the .td calculation, s.t. the output from calling non_linear.td_solve actually returns Displace objects.
+    #   This doesn't seem like a desirable feature/could introduce some bad behavior, so look into this.
     def td(self, ss, **kwargs):
         kwargs_new = {}
         for k, v in kwargs.items():
