@@ -171,7 +171,7 @@ def _solve_for_unknowns(residual, unknowns, tol=1e-9, solver=None, **solver_kwar
     solver_kwargs:
         Refer to the `steady_state` function docstring for the "solver_kwargs" variable
 
-    :return: The root[s] of the residual function
+    :return: The root[s] of the residual function as either a scalar (float) or a list of floats
     """
     if solver is None:
         raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
@@ -183,6 +183,7 @@ def _solve_for_unknowns(residual, unknowns, tol=1e-9, solver=None, **solver_kwar
     elif solver == "broyden":
         init_values = np.array(list(unknowns.values()))
         unknown_solutions, _ = broyden_solver(residual, init_values, tol=tol, **solver_kwargs)
+        unknown_solutions = list(unknown_solutions)
     elif solver is "solved":
         # If the entire solution is provided by the helper blocks
         # Call residual() once to update ss_values and to check the targets match the provided solution.
