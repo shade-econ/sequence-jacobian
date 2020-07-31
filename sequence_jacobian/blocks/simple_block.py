@@ -390,6 +390,11 @@ def reverse_op(op):
         return op[0:2] + "r" + op[2:]
 
 
+def apply_unary_op_to_primitives(op, a):
+    a_p = numeric_primitive(a)
+    return getattr(a_p, op)()
+
+
 def apply_binary_op_to_primitives(op, a1, a2):
     a1_p = numeric_primitive(a1)
     a2_p = numeric_primitive(a2)
@@ -421,9 +426,16 @@ def overload_operators(Class, operators, constructor=None, **constructor_kwargs)
     # following the standard promotion behavior.
     def _make_func(op):
         if constructor is not None:
-            return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other), **constructor_kwargs)
+            if op in {"__pos__", "__neg__"}:
+                return lambda self: constructor(apply_unary_op_to_primitives(op, self), **constructor_kwargs)
+            else:
+                return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other),
+                                                       **constructor_kwargs)
         else:
-            return lambda self, other: Class(apply_binary_op_to_primitives(op, self, other))
+            if op in {"__pos__", "__neg__"}:
+                return lambda self: Class(apply_unary_op_to_primitives(op, self))
+            else:
+                return lambda self, other: Class(apply_binary_op_to_primitives(op, self, other))
 
     for op in operators:
         setattr(Class, op, _make_func(op))
