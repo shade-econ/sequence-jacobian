@@ -746,7 +746,13 @@ def block_sort(block_list, calibration=None, findrequired=False):
     # step 1: map outputs to blocks for topological sort
     outmap = dict()
     for num, block in enumerate(block_list):
-        if hasattr(block, 'outputs'):
+        # TODO: This is temporary to force the DAG to account for heterogeneous outputs (e.g. the individual
+        #   household policy functions). Later just generalize those to always be accounted for as potential
+        #   objects to be passed around in the DAG
+        if hasattr(block, 'all_outputs_order'):
+            # Include the backward iteration variable, individual household policy functions, and aggregate equivalents
+            outputs = set(block.all_outputs_order) | set({k.upper() for k in block.non_back_outputs})
+        elif hasattr(block, 'outputs'):
             outputs = block.outputs
         elif isinstance(block, dict):
             outputs = block.keys()

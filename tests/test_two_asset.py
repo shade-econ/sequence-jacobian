@@ -1,6 +1,9 @@
-import utils
+"""Test the two asset HANK steady state computation"""
+
 import numpy as np
-import two_asset
+
+from sequence_jacobian.models import two_asset
+from sequence_jacobian import utils
 
 
 def test_hank_ss():
