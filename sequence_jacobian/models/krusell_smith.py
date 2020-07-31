@@ -2,45 +2,40 @@ import numpy as np
 import scipy.optimize as opt
 
 from .. import utils
-from ..blocks.het_block import HetBlock
 from ..blocks.simple_block import simple
+from ..blocks.het_block import het
+from ..blocks.helper_block import helper
 
 
 '''Part 1: HA block'''
 
 
-def backward_iterate(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
-    """Single backward iteration step using endogenous gridpoint method for households with CRRA utility.
+def household_init(a_grid, e_grid, r, w, eis):
+    coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis]
+    Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
+    return Va
 
-    Order of returns matters! backward_var, assets, others
+
+@het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
+def household(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
+    """Single backward iteration step using endogenous gridpoint method for households with CRRA utility.
 
     Parameters
     ----------
-    Va_p : np.ndarray
-        marginal value of assets tomorrow
-    Pi_p : np.ndarray
-        Markov transition matrix for skills tomorrow
-    a_grid : np.ndarray
-        asset grid
-    e_grid : np.ndarray
-        skill grid
-    r : float
-        ex-post interest rate
-    w : float
-        wage
-    beta : float
-        discount rate today
-    eis : float
-        elasticity of intertemporal substitution
+    Va_p     : array (S*A), marginal value of assets tomorrow
+    Pi_p     : array (S*S), Markov matrix for skills tomorrow
+    a_grid   : array (A), asset grid
+    e_grid   : array (A), skill grid
+    r        : scalar, ex-post real interest rate
+    w        : scalar, wage
+    beta     : scalar, discount rate today
+    eis      : scalar, elasticity of intertemporal substitution
 
     Returns
     ----------
-    Va : np.ndarray, shape(nS, nA)
-        marginal value of assets today
-    a : np.ndarray, shape(nS, nA)
-        asset policy today
-    c : np.ndarray, shape(nS, nA)
-        consumption policy today
+    Va : array (S*A), marginal value of assets today
+    a  : array (S*A), asset policy today
+    c  : array (S*A), consumption policy today
     """
     uc_nextgrid = (beta * Pi_p) @ Va_p
     c_nextgrid = uc_nextgrid ** (-eis)
@@ -50,9 +45,6 @@ def backward_iterate(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
     c = coh - a
     Va = (1 + r) * c ** (-1 / eis)
     return Va, a, c
-
-
-household = HetBlock(backward_iterate, exogenous='Pi', policy='a', backward='Va')
 
 
 '''Part 2: Simple Blocks'''
@@ -67,15 +59,40 @@ def firm(K, L, Z, alpha, delta):
 
 
 @simple
-def mkt_clearing(K, A):
-    asset_mkt = K - A
-    return asset_mkt
+def mkt_clearing(K, A, Y, C, delta):
+    asset_mkt = A - K
+    goods_mkt = Y - C - delta * K
+    return asset_mkt, goods_mkt
+
+
+@simple
+def income_state_vars(rho, sigma, nS):
+    e_grid, _, Pi = utils.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
+    return e_grid, Pi
+
+
+@simple
+def asset_state_vars(amax, nA):
+    a_grid = utils.agrid(amax=amax, n=nA)
+    return a_grid
+
+
+@helper
+def firm_steady_state_solution(r, delta, alpha):
+    rk = r + delta
+    Z = (rk / alpha) ** alpha  # normalize so that Y=1
+    K = (alpha * Z / rk) ** (1 / (1 - alpha))
+    Y = Z * K ** alpha
+    w = (1 - alpha) * Z * (alpha * Z / rk) ** (alpha / (1 - alpha))
+
+    return Z, K, Y, w
 
 
 '''Part 3: Steady state'''
 
 
-def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, sigma=0.5, nS=7, nA=500, amax=200):
+def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, sigma=0.5,
+          nS=7, nA=500, amax=200):
     """Solve steady state of full GE model. Calibrate beta to hit target for interest rate."""
     # set up grid
     a_grid = utils.agrid(amax=amax, n=nA)
@@ -102,6 +119,7 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
 
     # extra evaluation to report variables
     ss = household.ss(Pi=Pi, a_grid=a_grid, e_grid=e_grid, r=r, w=w, beta=beta, eis=eis, Va=Va)
-    ss.update({'Z': Z, 'K': K, 'L': 1, 'Y': Y, 'alpha': alpha, 'delta': delta, 'goods_mkt': Y - ss['C'] - delta * K})
+    ss.update({'Z': Z, 'K': K, 'L': 1, 'Y': Y, 'alpha': alpha, 'delta': delta, 'goods_mkt': Y - ss['C'] - delta * K,
+               'nA': nA, 'amax': amax, 'sigma': sigma, 'rho': rho, 'nS': nS, 'asset_mkt': ss["A"] - K})
 
     return ss

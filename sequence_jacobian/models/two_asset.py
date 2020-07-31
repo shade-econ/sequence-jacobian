@@ -3,14 +3,23 @@ import numpy as np
 from numba import njit, guvectorize
 
 from .. import utils
-from ..blocks.het_block import het
 from ..blocks.simple_block import simple
+from ..blocks.het_block import het
+from ..blocks.helper_block import helper
 
 
 '''Part 1: HA block'''
 
 
-@het(exogenous='Pi', policy=['b', 'a'], backward=['Vb', 'Va'])  # order as in grid!
+def household_init(b_grid, a_grid, e_grid, eis, tax, w):
+    z_grid = income(e_grid, tax, w, 1)
+    Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
+    Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
+
+    return z_grid, Va, Vb
+
+
+@het(exogenous='Pi', policy=['b', 'a'], backward=['Vb', 'Va'], backward_init=household_init)  # order as in grid!
 def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2):
     # require that k is decreasing (new)
     assert k_grid[1] < k_grid[0], 'kappas in k_grid must be decreasing!'
@@ -254,9 +263,29 @@ def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
 
 
 @simple
-def mkt_clearing(p, A, B, Bg):
+def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
     asset_mkt = p + Bg - B - A
-    return asset_mkt
+    labor_mkt = vphi - muw * (1 - tax) * w * U
+    goods_mkt = C + I + G + Chi + omega * B - 1
+    return asset_mkt, labor_mkt, goods_mkt
+
+
+@simple
+def adjustment_costs(a, a_grid, r, chi0, chi1, chi2, D):
+    chi = get_Psi_and_deriv(a, a_grid, r, chi0, chi1, chi2)[0]
+    Chi = np.vdot(D, chi)
+
+    return chi, Chi
+
+
+@simple
+def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
+    b_grid = utils.agrid(amax=bmax, n=nB)
+    a_grid = utils.agrid(amax=amax, n=nA)
+    k_grid = utils.agrid(amax=kmax, n=nK)[::-1].copy()
+    e_grid, _, Pi = utils.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+
+    return b_grid, a_grid, k_grid, e_grid, Pi
 
 
 def income(e_grid, tax, w, N):
@@ -267,12 +296,30 @@ def income(e_grid, tax, w, N):
 household_inc = household.attach_hetinput(income)
 
 
+@helper
+def partial_steady_state_solution(delta, K, r, tot_wealth, Bh, Bg, G, omega):
+    I = delta * K
+    mc = 1 - r * (tot_wealth - Bg - K)
+    alpha = (r + delta) * K / mc
+    mup = 1 / mc
+    Z = K ** (-alpha)
+    w = (1 - alpha) * mc
+    tax = (r * Bg + G) / w
+    div = 1 - w - I
+    p = div / r
+    ra = r
+    rb = r - omega
+    pshare = p / (tot_wealth - Bh)
+
+    return I, mc, alpha, mup, Z, w, tax, div, p, ra, rb, pshare
+
+
 '''Part 3: Steady state'''
 
 
-def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
-            muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi2=2, epsI=4, omega=0.005, kappaw=0.1,
-            phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, noisy=True):
+def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
+                 muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi2=2, epsI=4, omega=0.005, kappaw=0.1,
+                 phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, noisy=True):
     """Solve steady state of full GE model. Calibrate (beta, vphi, chi1, alpha, mup, Z) to hit targets for
        (r, tot_wealth, Bh, K, Y=N=1).
     """
@@ -332,5 +379,11 @@ def hank_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wea
                'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'Chi': Chi, 'goods_mkt': goods_mkt, 'chi': chi, 'phi': phi,
                'beta': beta, 'vphi': vphi, 'omega': omega, 'alpha': alpha, 'delta': delta, 'mup': mup, 'muw': muw,
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'z_grid': z_grid, 'e_grid': e_grid,
-               'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r})
+               'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r,
+               'tot_wealth': tot_wealth, 'fisher': 0, 'nZ': nZ, 'Bh': Bh, 'psiw': 0, 'psip': 0, 'inv': 0,
+               'labor_mkt': vphi - muw * (1 - tax) * w * ss["U"],
+               'equity': div + p - p * (1 + r), 'bmax': bmax, 'rho_z': rho_z, 'asset_mkt': p + Bg - ss["B"] - ss["A"],
+               'nA': nA, 'nB': nB, 'amax': amax, 'kmax': kmax, 'nK': nK, 'nkpc': kappap * (mc - 1/mup),
+               'wnkpc': kappaw * (vphi * ss["N"]**(1+1/frisch) - muw*(1-tax)*w*ss["N"]*ss["U"]),
+               'sigma_z': sigma_z, 'val': alpha * Z * (ss["N"] / K) ** (1-alpha) * mc - delta - r})
     return ss
