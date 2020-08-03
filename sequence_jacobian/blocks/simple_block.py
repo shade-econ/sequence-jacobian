@@ -576,14 +576,15 @@ def overload_operators(custom_class, operators, customize_attributes=None, const
 
 
 def override_default_promotion(primary_class, overriding_class, op,
-                               primary_class_constructor=None, overriding_class_constructor=None, **kwargs):
+                               primary_class_constructor=None, overriding_class_constructor=None,
+                               primary_kwargs={}, override_kwargs={}):
     def op_override(self, other):
         if isinstance(self, primary_class) and isinstance(other, overriding_class):
             constructor = overriding_class if overriding_class_constructor is None else overriding_class_constructor
-            return _overload_operator(constructor, op, **kwargs)(other, self)
+            return _overload_operator(constructor, op, **override_kwargs)(other, self)
         else:
             constructor = primary_class if primary_class_constructor is None else primary_class_constructor
-            return _overload_operator(constructor, op, **kwargs)(self, other)
+            return _overload_operator(constructor, op, **primary_kwargs)(self, other)
     return op_override
 
 
@@ -621,6 +622,6 @@ overload_operators(Displace, ["__add__", "__radd__", "__sub__", "__rsub__", "__m
                    customize_attributes=compute_displace_attributes)
 
 override_default_promotions(Ignore, Displace, binary_operators, primary_class_constructor=ignore,
-                            customize_attributes=compute_displace_attributes)
+                            override_kwargs={"customize_attributes": compute_displace_attributes})
 override_default_promotions(IgnoreVector, Displace, binary_operators, primary_class_constructor=ignore,
-                            customize_attributes=compute_displace_attributes)
+                            override_kwargs={"customize_attributes": compute_displace_attributes})
