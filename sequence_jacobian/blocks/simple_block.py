@@ -384,8 +384,6 @@ def ignore(x):
         raise TypeError(f"{type(x)} is not supported. Must provide either a float or an nd.array as an argument")
 
 
-# TODO: Decide whether Ignore + np.array (and the mirror) should = IgnoreVector
-#   Currently it's inconsistent. __add__ results in IgnoreVector, __radd__ results in np.array
 class Ignore(float):
     """This class ignores time displacements of a scalar.
     Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
