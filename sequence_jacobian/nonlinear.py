@@ -55,7 +55,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
         H_U_factored = utils.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
-    sort = utils.block_sort(block_list)
+    sort = utils.block_sort(block_list, ignore_helpers=True)
 
     # iterate until convergence
     for it in range(maxit):
@@ -88,7 +88,7 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, *
 
     # first get topological sort if none already provided
     if sort is None:
-        sort = utils.block_sort(block_list)
+        sort = utils.block_sort(block_list, ignore_helpers=True)
 
     # TODO: Seems a bit weird that you pass variables ad hoc from the top-level
     #   e.g. calling nonlinear.td_solve() with rstar as a kwarg in one asset HANK.

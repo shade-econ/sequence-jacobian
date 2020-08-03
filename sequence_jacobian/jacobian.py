@@ -230,7 +230,7 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     """
 
     # step 1: get topological sort and required
-    topsorted, required = utils.block_sort(block_list, findrequired=True)
+    topsorted, required = utils.block_sort(block_list, findrequired=True, ignore_helpers=True)
 
     # step 2: compute Jacobians and put them in right order
     curlyJs = []

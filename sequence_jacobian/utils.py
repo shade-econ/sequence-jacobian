@@ -723,8 +723,8 @@ def printit(it, x, y, **kwargs):
 
 '''Part 8: topological sort and related code'''
 
-
-def block_sort(block_list, calibration=None, findrequired=False):
+# TODO: Refactor this function. It's getting a bit bloated
+def block_sort(block_list, findrequired=False, ignore_helpers=False, calibration=None):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
     optionally return which outputs must be computed as inputs of later blocks.
 
@@ -742,10 +742,30 @@ def block_sort(block_list, calibration=None, findrequired=False):
     "K" as an input.
     This would result in a cycle. However, if a "calibration" is provided in which "r" is included, then
     "firm" could be removed as a dependency of HelperBlock and the cycle would be resolved.
+
+    block_list: `list`
+        A list of the blocks (SimpleBlock, HetBlock, HelperBlock, etc.) to sort
+    findrequired: `bool
+        A boolean indicating whether to return outputs that must be computed as inputs of later blocks
+    ignore_helpers: `bool`
+        A boolean indicating whether to account for/return the indices of HelperBlocks contained in block_list
+        Set to true when sorting for td and jac calculations
+    calibration: `dict` or `None`
+        An optional dict of variable/parameter names and their pre-specified values to help resolve any cycles
+        introduced by using HelperBlocks. Read above docstring for more detail
     """
+    if ignore_helpers and calibration is not None:
+        raise ValueError("Cannot have a non-None calibration and ignore_helpers=True. Non-None calibrations"
+                         " are only valid when sorting blocks for the purposes of computing a steady state,"
+                         " whereas ignore_helpers only makes sense when sorting blocks for the purposes"
+                         " of computing transitional dynamics or Jacobians.")
+
     # step 1: map outputs to blocks for topological sort
     outmap = dict()
     for num, block in enumerate(block_list):
+        if ignore_helpers and isinstance(block, HelperBlock):
+            continue
+
         # TODO: This is temporary to force the DAG to account for heterogeneous outputs (e.g. the individual
         #   household policy functions). Later just generalize those to always be accounted for as potential
         #   objects to be passed around in the DAG
@@ -781,6 +801,9 @@ def block_sort(block_list, calibration=None, findrequired=False):
     if findrequired:
         required = set()
     for num, block in enumerate(block_list):
+        if ignore_helpers and isinstance(block, HelperBlock):
+            continue
+
         if hasattr(block, 'inputs'):
             inputs = block.inputs
         else:
@@ -793,10 +816,16 @@ def block_sort(block_list, calibration=None, findrequired=False):
                     required.add(i)
 
     # step 3: return topological sort, also 'required' if wanted
-    if findrequired:
-        return topological_sort(dep), required
+    if ignore_helpers:
+        if findrequired:
+            return ignore_helper_block_indices(topological_sort(dep), block_list), required
+        else:
+            return ignore_helper_block_indices(topological_sort(dep), block_list)
     else:
-        return topological_sort(dep)
+        if findrequired:
+            return topological_sort(dep), required
+        else:
+            return topological_sort(dep)
 
 
 def topological_sort(dep, names=None):
@@ -824,6 +853,10 @@ def topological_sort(dep, names=None):
         raise Exception(f'Topological sort failed: cyclic dependency {" -> ".join([str(n) for n in cycle])}')
 
     return topsorted
+
+
+def ignore_helper_block_indices(topsorted, blocks):
+    return [i for i in topsorted if not isinstance(blocks[i], HelperBlock)]
 
 
 def complete_reverse_graph(gph):
