@@ -48,9 +48,6 @@ class SimpleBlock:
         else:
             return numeric_primitive(self.f(*args, **kwargs))
 
-    # TODO: Tested in the master branch that there is a lot of silent type promotion happening with Displace
-    #   in the .td calculation, s.t. the output from calling non_linear.td_solve actually returns Displace objects.
-    #   This doesn't seem like a desirable feature/could introduce some bad behavior, so look into this.
     def td(self, ss, **kwargs):
         kwargs_new = {}
         for k, v in kwargs.items():
@@ -62,7 +59,10 @@ class SimpleBlock:
             if k not in kwargs_new:
                 kwargs_new[k] = Ignore(ss[k])
 
-        return dict(zip(self.output_list, utils.make_tuple(self.f(**kwargs_new))))
+        if len(self.output_list) > 1:
+            return dict(zip(self.output_list, utils.make_tuple([numeric_primitive(o) for o in self.f(**kwargs_new)])))
+        else:
+            return dict(zip(self.output_list, numeric_primitive(self.f(**kwargs_new))))
 
     def jac(self, ss, T=None, shock_list=None, h=1E-5):
         """Assemble nested dict of Jacobians
@@ -422,14 +422,12 @@ class Displace(np.ndarray):
         if index != 0:
             if self.ss is None:
                 raise KeyError(f'Trying to call {self.name}({index}), but steady-state {self.name} not given!')
-            newx = np.empty_like(self)
+            newx = np.full(len(self), self.ss)
             if index > 0:
-                newx[:-index] = self[index:]
-                newx[-index:] = self.ss
+                newx[:-index] = numeric_primitive(self)[index:]
             else:
-                newx[-index:] = self[:index]
-                newx[:-index] = self.ss
-            return newx
+                newx[-index:] = numeric_primitive(self)[:index]
+            return Displace(newx, ss=self.ss)
         else:
             return self
 
