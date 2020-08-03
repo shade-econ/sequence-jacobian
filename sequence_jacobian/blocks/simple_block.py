@@ -576,6 +576,29 @@ def overload_operators(custom_class, operators, customize_attributes=None, const
 def override_default_promotion(primary_class, overriding_class, op,
                                primary_class_constructor=None, overriding_class_constructor=None,
                                primary_kwargs={}, override_kwargs={}):
+    """
+    Override the default promotion class when applying primary_class.op(overriding_class) from primary_class to
+    overriding_class.
+    e.g. Want Ignore(1) + Displace(np.array([1,2,3]), ss=2) = Displace(np.array([2,3,4]), ss=3) as opposed to
+    IgnoreVector(np.array([2,3,4])).
+
+    primary_class: `str`
+        The class, whose operation we are modifying to override its default promotion class
+    overriding_class: `str`
+        The class, which we impose is returned from applying the operation as opposed to the default promotion class
+    op: `str`
+        The operation being overriden
+
+    primary_class_constructor: `str` or None
+        Optional alternative constructor method. If None then will use the default constructor provided by primary_class
+    overriding_class_constructor: `str` or None
+        Optional alternative constructor method. If None then will use the default constructor provided by overriding_class
+    primary_kwargs: dict
+        The keyword arguments to provide to the primary class constructor
+    override_kwargs: dict
+        The keyword arguments to be provided to the overriding class constructor
+    return: `op_override`, a function overriding the operator to be provided to setattr
+    """
     def op_override(self, other):
         if isinstance(self, primary_class) and isinstance(other, overriding_class):
             constructor = overriding_class if overriding_class_constructor is None else overriding_class_constructor
@@ -588,6 +611,13 @@ def override_default_promotion(primary_class, overriding_class, op,
 
 def override_default_promotions(primary_class, overriding_class, operators,
                                 primary_class_constructor=None, overriding_class_constructor=None, **kwargs):
+    """
+    Override the default promotion class when applying primary_class.op(overriding_class) from primary_class to
+    overriding_class.
+
+    For details about the arguments and potential keyword arguments to be provided,
+    see docstring for override_default_promotion.
+    """
     for op in operators:
         setattr(primary_class, op, override_default_promotion(primary_class, overriding_class, op,
                                                               primary_class_constructor=primary_class_constructor,
