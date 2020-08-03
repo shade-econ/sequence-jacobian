@@ -375,75 +375,6 @@ def multiply_rs_matrix(indices, xs, A):
 '''Part 3: helper classes used by SimpleBlock for .ss, .td, and .jac evaluation'''
 
 
-def numeric_primitive(instance):
-    # If it is already a primitive, just return it
-    if type(instance) in {int, float, np.ndarray}:
-        return instance
-    else:
-        return instance.real if issubclass(type(instance), numbers.Real) else instance.base
-
-
-# Assumes "op" is an actual well-defined arithmetic operator. If necessary, implement more stringent checks
-# on the "op" being passed in so nonsense doesn't come out.
-# i.e. reverse_op("__round__") doesn't return reverse_op("__ound__")
-def reverse_op(op):
-    if op[2] == "r":
-        return op[0:2] + op[3:]
-    else:
-        return op[0:2] + "r" + op[2:]
-
-
-def apply_unary_op_to_primitives(op, a):
-    a_p = numeric_primitive(a)
-    return getattr(a_p, op)()
-
-
-def apply_binary_op_to_primitives(op, a1, a2):
-    a1_p = numeric_primitive(a1)
-    a2_p = numeric_primitive(a2)
-
-    if getattr(a1_p, op)(a2_p) is not NotImplemented:
-        return getattr(a1_p, op)(a2_p)
-    elif getattr(a2_p, reverse_op(op))(a1_p) is not NotImplemented:
-        return getattr(a2_p, reverse_op(op))(a1_p)
-    else:
-        raise NotImplementedError(f"{op} cannot be performed between {a1} and {a2} directly, and no"
-                                  f" valid reverse operation exists either.")
-
-
-def overload_operators(Class, operators, constructor=None, **constructor_kwargs):
-    """Overload the provided set of operators for a given class (that is a child class of a parent class
-    having well-defined behavior for the provided set of operators) to return an instance of the child class.
-    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore.
-
-    Class: `str`
-        The name of the class whose operators we want to overload
-    operators: `list`
-        A list of `str` with the names of the operators, e.g. "__add__", that we hope to overload
-    constructor: `function`
-        If provided, an alternative constructor for converting the primitive resulting from a conducted operation
-        into an instance of Class.
-    """
-
-    # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
-    # following the standard promotion behavior.
-    def _make_func(op):
-        if constructor is not None:
-            if op in {"__pos__", "__neg__"}:
-                return lambda self: constructor(apply_unary_op_to_primitives(op, self), **constructor_kwargs)
-            else:
-                return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other),
-                                                       **constructor_kwargs)
-        else:
-            if op in {"__pos__", "__neg__"}:
-                return lambda self: Class(apply_unary_op_to_primitives(op, self))
-            else:
-                return lambda self, other: Class(apply_binary_op_to_primitives(op, self, other))
-
-    for op in operators:
-        setattr(Class, op, _make_func(op))
-
-
 def ignore(x):
     if isinstance(x, numbers.Real):
         return Ignore(x)
@@ -464,9 +395,6 @@ class Ignore(float):
     def __call__(self, index):
         return self
 
-overload_operators(Ignore, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
-                   "__truediv__", "__rtruediv__", "__pow__", "__rpow__", "__neg__", "__pos__"], constructor=ignore)
-
 
 class IgnoreVector(np.ndarray):
     """This class ignores time displacements of a np.ndarray.
@@ -480,9 +408,6 @@ class IgnoreVector(np.ndarray):
 
     def __call__(self, index):
         return self
-
-overload_operators(IgnoreVector, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
-                   "__truediv__", "__rtruediv__", "__neg__", "__pos__"], constructor=ignore)
 
 
 class Displace(np.ndarray):
@@ -548,3 +473,154 @@ class Perturb(float):
                 return self + self.h
             else:
                 return self
+
+
+def numeric_primitive(instance):
+    # If it is already a primitive, just return it
+    if type(instance) in {int, float, np.ndarray}:
+        return instance
+    else:
+        return instance.real if issubclass(type(instance), numbers.Real) else instance.base
+
+
+# Assumes "op" is an actual well-defined arithmetic operator. If necessary, implement more stringent checks
+# on the "op" being passed in so nonsense doesn't come out.
+# i.e. reverse_op("__round__") doesn't return reverse_op("__ound__")
+def reverse_op(op):
+    if op[2] == "r":
+        return op[0:2] + op[3:]
+    else:
+        return op[0:2] + "r" + op[2:]
+
+
+def apply_op(op, *args):
+    if len(args) == 1:
+        return apply_unary_op(op, *args)
+    elif len(args) == 2:
+        return apply_binary_op(op, *args)
+    else:
+        raise ValueError(f"apply_op only supports unary or binary operators currently. {len(args)} is an invalid"
+                         f" number of arguments to provide.")
+
+
+def apply_unary_op(op, a):
+    return getattr(a, op)()
+
+
+def apply_binary_op(op, a1, a2):
+    if getattr(a1, op)(a2) is not NotImplemented:
+        return getattr(a1, op)(a2)
+    elif getattr(a2, reverse_op(op))(a1) is not NotImplemented:
+        return getattr(a2, reverse_op(op))(a1)
+    else:
+        raise NotImplementedError(f"{op} cannot be performed between {a1} and {a2} directly, and no"
+                                  f" valid reverse operation exists either.")
+
+
+def apply_unary_op_to_primitives(op, a):
+    return apply_unary_op(op, numeric_primitive(a))
+
+
+def apply_binary_op_to_primitives(op, a1, a2):
+    a1_p = numeric_primitive(a1)
+    a2_p = numeric_primitive(a2)
+    return apply_binary_op(op, a1_p, a2_p)
+
+
+# The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
+# following the standard promotion behavior.
+def _overload_operator(constructor, op, customize_attributes=None, **constructor_kwargs):
+    """Overload the provided operator for a given class (that is a child class of a parent class
+    having well-defined behavior for the provided set of operators) to return an instance of the child class.
+    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore.
+
+    constructor: `str`
+        The name of the class whose operators we want to overload or a constructor for this class
+    op: `string`
+        A `str` of the name of the operators, e.g. "__add__", that we hope to overload
+    customize_attributes: `function` or None
+        If provided, a function that maps the operator and self (and other if it is a binary operator)
+        to additional attributes desired in constructing a new instance of an object of type(self)
+        e.g. since Displace objects have a .ss attribute, customize_attributes can map the operator "__add__",
+        self, and other to a resulting Displace object with a valid .ss attribute
+    """
+    if op in {"__pos__", "__neg__"}:
+        if customize_attributes is not None:
+            return lambda self: constructor(apply_unary_op_to_primitives(op, self),
+                                            **{**customize_attributes(op, self), **constructor_kwargs})
+        else:
+            return lambda self: constructor(apply_unary_op_to_primitives(op, self), **constructor_kwargs)
+    else:
+        if customize_attributes is not None:
+            return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other),
+                                                   **{**customize_attributes(op, self, other), **constructor_kwargs})
+        else:
+            return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other),
+                                                   **constructor_kwargs)
+
+
+def overload_operators(custom_class, operators, customize_attributes=None, constructor=None, **constructor_kwargs):
+    """Overload the provided set of operators for a given class (that is a child class of a parent class
+    having well-defined behavior for the provided set of operators) to return an instance of the child class.
+    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore.
+
+    See docstring for _overload_operator for more details on arguments
+    """
+    for op in operators:
+        if constructor is None:
+            setattr(custom_class, op, _overload_operator(custom_class, op, customize_attributes=customize_attributes,
+                                                         **constructor_kwargs))
+        else:
+            setattr(custom_class, op, _overload_operator(constructor, op, customize_attributes=customize_attributes,
+                                                         **constructor_kwargs))
+
+
+def override_default_promotion(primary_class, overriding_class, op,
+                               primary_class_constructor=None, overriding_class_constructor=None, **kwargs):
+    def op_override(self, other):
+        if isinstance(self, primary_class) and isinstance(other, overriding_class):
+            constructor = overriding_class if overriding_class_constructor is None else overriding_class_constructor
+            return _overload_operator(constructor, op, **kwargs)(other, self)
+        else:
+            constructor = primary_class if primary_class_constructor is None else primary_class_constructor
+            return _overload_operator(constructor, op, **kwargs)(self, other)
+    return op_override
+
+
+def override_default_promotions(primary_class, overriding_class, operators,
+                                primary_class_constructor=None, overriding_class_constructor=None, **kwargs):
+    for op in operators:
+        setattr(primary_class, op, override_default_promotion(primary_class, overriding_class, op,
+                                                              primary_class_constructor=primary_class_constructor,
+                                                              overriding_class_constructor=overriding_class_constructor,
+                                                              **kwargs))
+
+
+# Overload operators on classes Ignore, IgnoreVector, Displace, Reporter, and Perturb
+unary_operators = ["__neg__", "__pos__"]
+binary_operators = ["__add__", "__sub__", "__mul__", "__truediv__", "__pow__",
+                    "__radd__", "__rsub__", "__rmul__", "__rtruediv__", "__rpow__"]
+operators = unary_operators + binary_operators
+
+# Custom attribute functions
+# Assume arg is either empty or of size 1 (so either a unary of binary operator)
+def compute_displace_attributes(op, self, *arg):
+    if not arg:
+        return {"ss": apply_unary_op_to_primitives(op, self.ss)}
+    else:
+        if isinstance(arg[0], Displace):
+            return {"ss": apply_binary_op_to_primitives(op, self.ss, arg[0].ss)}
+        else:
+            return {"ss": apply_binary_op_to_primitives(op, self.ss, arg[0])}
+
+
+overload_operators(Ignore, operators, constructor=ignore)
+overload_operators(IgnoreVector, operators, constructor=ignore)
+overload_operators(Displace, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
+                   "__truediv__", "__rtruediv__", "__pow__", "__rpow__", "__neg__", "__pos__"],
+                   customize_attributes=compute_displace_attributes)
+
+override_default_promotions(Ignore, Displace, binary_operators, primary_class_constructor=ignore,
+                            customize_attributes=compute_displace_attributes)
+override_default_promotions(IgnoreVector, Displace, binary_operators, primary_class_constructor=ignore,
+                            customize_attributes=compute_displace_attributes)
