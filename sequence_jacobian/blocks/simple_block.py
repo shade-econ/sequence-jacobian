@@ -581,7 +581,7 @@ def override_default_promotion(primary_class, overriding_class, op,
     def op_override(self, other):
         if isinstance(self, primary_class) and isinstance(other, overriding_class):
             constructor = overriding_class if overriding_class_constructor is None else overriding_class_constructor
-            return _overload_operator(constructor, op, **override_kwargs)(other, self)
+            return _overload_operator(constructor, reverse_op(op), **override_kwargs)(other, self)
         else:
             constructor = primary_class if primary_class_constructor is None else primary_class_constructor
             return _overload_operator(constructor, op, **primary_kwargs)(self, other)
