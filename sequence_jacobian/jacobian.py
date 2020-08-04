@@ -258,7 +258,16 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
         else:
             # doesn't have 'jac', must be nested dict that is jac directly
             jac = block
-        curlyJs.append(jac)
+
+        # Remove empty Jacobians corresponding to outputs of a block.
+        # This occurs when a block's output is not a function of any of the shocks and hence does not change with
+        # respect to them.
+        jac_nonempty = copy.deepcopy(jac)
+        for k, v in jac.items():
+            if not v:
+                del jac_nonempty[k]
+
+        curlyJs.append(jac_nonempty)
 
     return curlyJs, required
 
