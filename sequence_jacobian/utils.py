@@ -723,7 +723,6 @@ def printit(it, x, y, **kwargs):
 
 '''Part 8: topological sort and related code'''
 
-# TODO: Refactor this function. It's getting a bit bloated
 def block_sort(block_list, findrequired=False, ignore_helpers=False, calibration=None):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
     optionally return which outputs must be computed as inputs of later blocks.
@@ -754,76 +753,22 @@ def block_sort(block_list, findrequired=False, ignore_helpers=False, calibration
         An optional dict of variable/parameter names and their pre-specified values to help resolve any cycles
         introduced by using HelperBlocks. Read above docstring for more detail
     """
-    if ignore_helpers and calibration is not None:
-        raise ValueError("Cannot have a non-None calibration and ignore_helpers=True. Non-None calibrations"
-                         " are only valid when sorting blocks for the purposes of computing a steady state,"
-                         " whereas ignore_helpers only makes sense when sorting blocks for the purposes"
-                         " of computing transitional dynamics or Jacobians.")
 
     # step 1: map outputs to blocks for topological sort
-    outmap = dict()
-    for num, block in enumerate(block_list):
-        if ignore_helpers and isinstance(block, HelperBlock):
-            continue
-
-        # TODO: This is temporary to force the DAG to account for heterogeneous outputs (e.g. the individual
-        #   household policy functions). Later just generalize those to always be accounted for as potential
-        #   objects to be passed around in the DAG
-        if hasattr(block, 'all_outputs_order'):
-            # Include the backward iteration variable, individual household policy functions, and aggregate equivalents
-            outputs = set(block.all_outputs_order) | set({k.upper() for k in block.non_back_outputs})
-        elif hasattr(block, 'outputs'):
-            outputs = block.outputs
-        elif isinstance(block, dict):
-            outputs = block.keys()
-        else:
-            raise ValueError(f'{block} is not recognized as block or does not provide outputs')
-
-        for o in outputs:
-            if calibration is not None and o in calibration:
-                continue
-
-            # Because some of the outputs of a HelperBlock are, by construction, outputs that also appear in the
-            # standard blocks that comprise a DAG, ignore the fact that an output is repeated when considering
-            # throwing this ValueError
-            if o in outmap and not (isinstance(block, HelperBlock) or isinstance(block_list[outmap[o]], HelperBlock)):
-                raise ValueError(f'{o} is output twice')
-
-            # Ensure that the block "outmap" maps "o" to is the actual block and not a HelperBlock if both share
-            # a given output, such that the dependency graph is constructed on the standard blocks, where possible
-            if o not in outmap or (o in outmap and not isinstance(block, HelperBlock)):
-                outmap[o] = num
-            else:
-                continue
+    outmap = construct_output_map(block_list, calibration=calibration)
 
     # step 2: dependency graph for topological sort and input list
-    dep = {num: set() for num in range(len(block_list))}
     if findrequired:
-        required = set()
-    for num, block in enumerate(block_list):
-        if ignore_helpers and isinstance(block, HelperBlock):
-            continue
-
-        if hasattr(block, 'inputs'):
-            inputs = block.inputs
-        else:
-            inputs = set(i for o in block for i in block[o])
-
-        for i in inputs:
-            if i in outmap:
-                dep[num].add(outmap[i])
-                if findrequired:
-                    required.add(i)
-
-    # step 3: return topological sort, also 'required' if wanted
-    if ignore_helpers:
-        if findrequired:
+        dep, required = construct_dependency_graph(block_list, outmap, findrequired=findrequired,
+                                                   ignore_helpers=ignore_helpers)
+        if ignore_helpers:
             return ignore_helper_block_indices(topological_sort(dep), block_list), required
         else:
-            return ignore_helper_block_indices(topological_sort(dep), block_list)
-    else:
-        if findrequired:
             return topological_sort(dep), required
+    else:
+        dep = construct_dependency_graph(block_list, outmap, findrequired=findrequired, ignore_helpers=ignore_helpers)
+        if ignore_helpers:
+            return ignore_helper_block_indices(topological_sort(dep), block_list)
         else:
             return topological_sort(dep)
 
@@ -857,6 +802,82 @@ def topological_sort(dep, names=None):
 
 def ignore_helper_block_indices(topsorted, blocks):
     return [i for i in topsorted if not isinstance(blocks[i], HelperBlock)]
+
+
+def construct_output_map(block_list, ignore_helpers=False, calibration=None):
+    """Construct a map of outputs to the indices of the blocks that produce them.
+    See the docstring of block_sort for more details about the arguments.
+    """
+    outmap = dict()
+    for num, block in enumerate(block_list):
+        if ignore_helpers and isinstance(block, HelperBlock):
+            continue
+
+        # Find the relevant set of outputs corresponding to a block
+        # TODO: This is temporary to force the DAG to account for heterogeneous outputs (e.g. the individual
+        #   household policy functions). Later just generalize those to always be accounted for as potential
+        #   objects to be passed around in the DAG
+        if hasattr(block, 'all_outputs_order'):
+            # Include the backward iteration variable, individual household policy functions, and aggregate equivalents
+            # when adding a HetBlock's outputs to the output map
+            outputs = set(block.all_outputs_order) | set({k.upper() for k in block.non_back_outputs})
+        elif hasattr(block, 'outputs'):
+            outputs = block.outputs
+        elif isinstance(block, dict):
+            outputs = block.keys()
+        else:
+            raise ValueError(f'{block} is not recognized as block or does not provide outputs')
+
+        for o in outputs:
+            # If a block's output is also present in the provided calibration, then it is not required for the
+            # construction of a dependency graph and hence we omit it
+            if calibration is not None and o in calibration:
+                continue
+
+            # Because some of the outputs of a HelperBlock are, by construction, outputs that also appear in the
+            # standard blocks that comprise a DAG, ignore the fact that an output is repeated when considering
+            # throwing this ValueError
+            if o in outmap and not (isinstance(block, HelperBlock) or isinstance(block_list[outmap[o]], HelperBlock)):
+                raise ValueError(f'{o} is output twice')
+
+            # Ensure that the block "outmap" maps "o" to is the actual block and not a HelperBlock if both share
+            # a given output, such that the dependency graph is constructed on the standard blocks, where possible
+            if o not in outmap or (o in outmap and not isinstance(block, HelperBlock)):
+                outmap[o] = num
+            else:
+                continue
+    return outmap
+
+
+def construct_dependency_graph(block_list, outmap, findrequired=False, ignore_helpers=False):
+    """Construct a dependency graph dictionary, with block indices as keys and a set of block indices as values, where
+    this set is the set of blocks that the key block is dependent on.
+
+    outmap is the output map (output to block index mapping) created by construct_output_map.
+
+    See the docstring of block_sort for more details about the other arguments.
+    """
+    dep = {num: set() for num in range(len(block_list))}
+    if findrequired:
+        required = set()
+    for num, block in enumerate(block_list):
+        if ignore_helpers and isinstance(block, HelperBlock):
+            continue
+
+        if hasattr(block, 'inputs'):
+            inputs = block.inputs
+        else:
+            inputs = set(i for o in block for i in block[o])
+
+        for i in inputs:
+            if i in outmap:
+                dep[num].add(outmap[i])
+                if findrequired:
+                    required.add(i)
+    if findrequired:
+        return dep, required
+    else:
+        return dep
 
 
 def complete_reverse_graph(gph):
