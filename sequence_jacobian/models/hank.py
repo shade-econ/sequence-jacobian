@@ -2,7 +2,7 @@ import numpy as np
 from numba import vectorize, njit
 
 from .. import utils
-from ..blocks.simple_block import simple
+from ..blocks.simple_block import simple, apply_function
 from ..blocks.het_block import het
 from ..blocks.helper_block import helper
 
@@ -105,7 +105,7 @@ def netexp(log_uc, w, T, eis, frisch, vphi):
 @simple
 def firm(Y, w, Z, pi, mu, kappa):
     L = Y / Z
-    Div = Y - w * L - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
+    Div = Y - w * L - mu/(mu-1)/(2*kappa) * apply_function(np.log, 1+pi)**2 * Y
     return L, Div
 
 
@@ -125,13 +125,14 @@ def fiscal(r, B):
 def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
     asset_mkt = A - B
     labor_mkt = NS - L
-    goods_mkt = Y - C - mu/(mu-1)/(2*kappa) * np.log(1+pi)**2 * Y
+    goods_mkt = Y - C - mu/(mu-1)/(2*kappa) * apply_function(np.log, 1+pi)**2 * Y
     return asset_mkt, labor_mkt, goods_mkt
 
 
 @simple
 def nkpc(pi, w, Z, Y, r, mu, kappa):
-    nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - np.log(1 + pi)
+    nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y *\
+               apply_function(np.log, 1 + pi(+1)) / (1 + r(+1)) - apply_function(np.log, 1 + pi)
     return nkpc_res
 
 

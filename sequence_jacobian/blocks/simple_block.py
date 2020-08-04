@@ -523,6 +523,15 @@ def apply_binary_op_to_primitives(op, a1, a2):
     return apply_binary_op(op, a1_p, a2_p)
 
 
+def apply_function(func, a, **kwargs):
+    """Ensure that for generic functions called within a block and acting on a Displace object
+    properly instantiates the steady state value of the created Displace object"""
+    if isinstance(a, Displace):
+        return Displace(func(numeric_primitive(a), **kwargs), ss=func(a.ss, **kwargs))
+    else:
+        return func(a, **kwargs)
+
+
 # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
 # following the standard promotion behavior.
 def _overload_operator(constructor, op, customize_attributes=None, **constructor_kwargs):
