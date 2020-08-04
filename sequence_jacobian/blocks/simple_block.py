@@ -62,7 +62,7 @@ class SimpleBlock:
         if len(self.output_list) > 1:
             return dict(zip(self.output_list, utils.make_tuple([numeric_primitive(o) for o in self.f(**kwargs_new)])))
         else:
-            return dict(zip(self.output_list, numeric_primitive(self.f(**kwargs_new))))
+            return dict(zip(self.output_list, utils.make_tuple(numeric_primitive(self.f(**kwargs_new)))))
 
     def jac(self, ss, T=None, shock_list=None, h=1E-5):
         """Assemble nested dict of Jacobians
