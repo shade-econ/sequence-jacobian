@@ -158,7 +158,7 @@ def transfers(pi_e, Div, Tax, e_grid, div_rule=None, tax_rule=None):
     div = Div / np.sum(pi_e * div_rule) * div_rule
     tax = Tax / np.sum(pi_e * tax_rule) * tax_rule
     T = div - tax
-    return T, div_rule, tax_rule
+    return T
 
 
 household_trans = household.attach_hetinput(transfers)
