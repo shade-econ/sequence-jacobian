@@ -422,11 +422,13 @@ class Displace(np.ndarray):
         if index != 0:
             if self.ss is None:
                 raise KeyError(f'Trying to call {self.name}({index}), but steady-state {self.name} not given!')
-            newx = np.full(len(self), self.ss)
+            newx = np.zeros(len(self))
             if index > 0:
                 newx[:-index] = numeric_primitive(self)[index:]
+                newx[-index:] = self.ss
             else:
                 newx[-index:] = numeric_primitive(self)[:index]
+                newx[:-index] = self.ss
             return Displace(newx, ss=self.ss)
         else:
             return self
