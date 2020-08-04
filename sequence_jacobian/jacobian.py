@@ -230,7 +230,8 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     """
 
     # step 1: get topological sort and required
-    topsorted, required = utils.block_sort(block_list, findrequired=True, ignore_helpers=True)
+    topsorted = utils.block_sort(block_list, ignore_helpers=True)
+    required = utils.find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=True)
 
     # step 2: compute Jacobians and put them in right order
     curlyJs = []
@@ -240,11 +241,11 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
         if hasattr(block, 'ajac'):
             # has 'ajac' function, is some block other than SimpleBlock
             if asymptotic:
-                jac = block.ajac(ss, T=T,
-                                 shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost, save=save, use_saved=use_saved)
+                jac = block.ajac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks],
+                                 Tpost=Tpost, save=save, use_saved=use_saved)
             else:
-                jac = block.jac(ss, T=T,
-                                shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved)
+                jac = block.jac(ss, T=T, shock_list=[i for i in block.inputs if i in shocks],
+                                save=save, use_saved=use_saved)
         elif hasattr(block, 'jac'):
             # has 'jac' but not 'ajac', must be SimpleBlock where no distinction (given SimpleSparse)
             jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])

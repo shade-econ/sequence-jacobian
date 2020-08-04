@@ -723,9 +723,8 @@ def printit(it, x, y, **kwargs):
 
 '''Part 8: topological sort and related code'''
 
-def block_sort(block_list, findrequired=False, ignore_helpers=False, calibration=None):
-    """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
-    optionally return which outputs must be computed as inputs of later blocks.
+def block_sort(block_list, ignore_helpers=False, calibration=None):
+    """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort.
 
     Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
     inferred) that indicate their aggregate inputs and outputs
@@ -744,8 +743,6 @@ def block_sort(block_list, findrequired=False, ignore_helpers=False, calibration
 
     block_list: `list`
         A list of the blocks (SimpleBlock, HetBlock, HelperBlock, etc.) to sort
-    findrequired: `bool
-        A boolean indicating whether to return outputs that must be computed as inputs of later blocks
     ignore_helpers: `bool`
         A boolean indicating whether to account for/return the indices of HelperBlocks contained in block_list
         Set to true when sorting for td and jac calculations
@@ -758,19 +755,11 @@ def block_sort(block_list, findrequired=False, ignore_helpers=False, calibration
     outmap = construct_output_map(block_list, calibration=calibration)
 
     # step 2: dependency graph for topological sort and input list
-    if findrequired:
-        dep, required = construct_dependency_graph(block_list, outmap, findrequired=findrequired,
-                                                   ignore_helpers=ignore_helpers)
-        if ignore_helpers:
-            return ignore_helper_block_indices(topological_sort(dep), block_list), required
-        else:
-            return topological_sort(dep), required
+    dep = construct_dependency_graph(block_list, outmap, ignore_helpers=ignore_helpers)
+    if ignore_helpers:
+        return ignore_helper_block_indices(topological_sort(dep), block_list)
     else:
-        dep = construct_dependency_graph(block_list, outmap, findrequired=findrequired, ignore_helpers=ignore_helpers)
-        if ignore_helpers:
-            return ignore_helper_block_indices(topological_sort(dep), block_list)
-        else:
-            return topological_sort(dep)
+        return topological_sort(dep)
 
 
 def topological_sort(dep, names=None):
@@ -806,7 +795,15 @@ def ignore_helper_block_indices(topsorted, blocks):
 
 def construct_output_map(block_list, ignore_helpers=False, calibration=None):
     """Construct a map of outputs to the indices of the blocks that produce them.
-    See the docstring of block_sort for more details about the arguments.
+
+    block_list: `list`
+        A list of the blocks (SimpleBlock, HetBlock, HelperBlock, etc.) to sort
+    ignore_helpers: `bool`
+        A boolean indicating whether to account for/return the indices of HelperBlocks contained in block_list
+        Set to true when sorting for td and jac calculations
+    calibration: `dict` or `None`
+        An optional dict of variable/parameter names and their pre-specified values to help resolve any cycles
+        introduced by using HelperBlocks. Read above docstring for more detail
     """
     outmap = dict()
     for num, block in enumerate(block_list):
@@ -849,7 +846,7 @@ def construct_output_map(block_list, ignore_helpers=False, calibration=None):
     return outmap
 
 
-def construct_dependency_graph(block_list, outmap, findrequired=False, ignore_helpers=False):
+def construct_dependency_graph(block_list, outmap, ignore_helpers=False):
     """Construct a dependency graph dictionary, with block indices as keys and a set of block indices as values, where
     this set is the set of blocks that the key block is dependent on.
 
@@ -858,26 +855,38 @@ def construct_dependency_graph(block_list, outmap, findrequired=False, ignore_he
     See the docstring of block_sort for more details about the other arguments.
     """
     dep = {num: set() for num in range(len(block_list))}
-    if findrequired:
-        required = set()
     for num, block in enumerate(block_list):
         if ignore_helpers and isinstance(block, HelperBlock):
             continue
-
         if hasattr(block, 'inputs'):
             inputs = block.inputs
         else:
             inputs = set(i for o in block for i in block[o])
-
         for i in inputs:
             if i in outmap:
                 dep[num].add(outmap[i])
-                if findrequired:
-                    required.add(i)
-    if findrequired:
-        return dep, required
-    else:
-        return dep
+    return dep
+
+
+def find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=False, calibration=None):
+    """Find outputs of the blocks in block_list that are inputs to other blocks in block_list.
+    This is useful to ensure that all of the relevant curlyJ Jacobians (of all inputs to all outputs) are computed.
+
+    See the docstring of construct_output_map for more details about the arguments.
+    """
+    required = set()
+    outmap = construct_output_map(block_list, ignore_helpers=ignore_helpers, calibration=calibration)
+    for block in block_list:
+        if ignore_helpers and isinstance(block, HelperBlock):
+            continue
+        if hasattr(block, 'inputs'):
+            inputs = block.inputs
+        else:
+            inputs = set(i for o in block for i in block[o])
+        for i in inputs:
+            if i in outmap:
+                required.add(i)
+    return required
 
 
 def complete_reverse_graph(gph):
