@@ -233,6 +233,12 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     topsorted = utils.block_sort(block_list, ignore_helpers=True)
     required = utils.find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=True)
 
+    # Remove any vector-valued outputs that are intermediate inputs, since we don't want
+    # to compute Jacobians with respect to vector-valued variables
+    if ss is not None:
+        vv_vars = set([k for k, v in ss.items() if np.size(v) > 1])
+        required -= vv_vars
+
     # step 2: compute Jacobians and put them in right order
     curlyJs = []
     shocks = set(inputs) | required
