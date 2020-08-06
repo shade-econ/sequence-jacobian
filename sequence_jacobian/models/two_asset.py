@@ -3,9 +3,10 @@ import numpy as np
 from numba import njit, guvectorize
 
 from .. import utils
-from ..blocks.simple_block import simple
+from ..blocks.simple_block import simple, apply_function, Displace
 from ..blocks.het_block import het
 from ..blocks.helper_block import helper
+from ..blocks.solved_block import solved
 
 
 '''Part 1: HA block'''
@@ -117,7 +118,6 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
 """Supporting functions for HA block"""
 
-
 def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
     """Adjustment cost Psi(ap, a) and its derivatives with respect to
     first argument (ap) and second argument (a)"""
@@ -196,7 +196,7 @@ def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
 
 @simple
 def pricing(pi, mc, r, Y, kappap, mup):
-    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - np.log(1 + pi)
+    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - apply_function(np.log, 1 + pi)
     return nkpc
 
 
@@ -223,7 +223,7 @@ def investment(Q, K, r, N, mc, Z, delta, epsI, alpha):
 
 @simple
 def dividend(Y, w, N, K, pi, mup, kappap, delta):
-    psip = mup / (mup - 1) / 2 / kappap * np.log(1 + pi) ** 2 * Y
+    psip = mup / (mup - 1) / 2 / kappap * apply_function(np.log, 1 + pi) ** 2 * Y
     I = K - (1 - delta) * K(-1)
     div = Y - w * N - I - psip
     return psip, I, div
@@ -252,13 +252,14 @@ def finance(i, p, pi, r, div, omega, pshare):
 @simple
 def wage(pi, w, N, muw, kappaw):
     piw = (1 + pi) * w / w(-1) - 1
-    psiw = muw / (1 - muw) / 2 / kappaw * np.log(1 + piw) ** 2 * N
+    psiw = muw / (1 - muw) / 2 / kappaw * apply_function(np.log, 1 + piw) ** 2 * N
     return piw, psiw
 
 
 @simple
 def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
-    wnkpc = kappaw * (vphi * N**(1+1/frisch) - muw*(1-tax)*w*N*U) + beta * np.log(1 + piw(+1)) - np.log(1 + piw)
+    wnkpc = kappaw * (vphi * N**(1+1/frisch) - muw*(1-tax)*w*N*U) + beta *\
+            apply_function(np.log, 1 + piw(+1)) - apply_function(np.log, 1 + piw)
     return wnkpc
 
 
@@ -272,10 +273,19 @@ def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
 
 @simple
 def adjustment_costs(a, a_grid, r, chi0, chi1, chi2, D):
-    chi = get_Psi_and_deriv(a, a_grid, r, chi0, chi1, chi2)[0]
-    Chi = np.vdot(D, chi)
+    chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, r, chi0, chi1, chi2)
+    # TODO: Currently chi becomes a 4-d (nZ x nB x nA x Time) Displace object when solving for the transitional
+    #   dynamics of the two asset model (since r is a Displace, which is affected by the rstar shock),
+    #   where D remains a 3-d IgnoreVector, since it is unaffected directly
+    #   by any of the shocks, and hence never gets converted to a Displace object with a time dimension.
+    #   In steady state since the dimensions of D and chi are the same, np.vdot is a valid operation;
+    #   however, for transitional dynamics, we actually need the np.ndim(D)-axis tensor product of D and chi
+    #   to return Chi, a vector of length Time.
+    #   In the future, we should find a more general way of accounting for this possibility, so the user does
+    #   not have to directly write a tensor product into their code...
+    Chi = np.tensordot(D, chi, axes=np.ndim(D)) if isinstance(D, Displace) or isinstance(chi, Displace) else np.vdot(D, chi)
 
-    return chi, Chi
+    return Chi
 
 
 @simple
@@ -387,3 +397,22 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
                'wnkpc': kappaw * (vphi * ss["N"]**(1+1/frisch) - muw*(1-tax)*w*ss["N"]*ss["U"]),
                'sigma_z': sigma_z, 'val': alpha * Z * (ss["N"] / K) ** (1-alpha) * mc - delta - r})
     return ss
+
+
+'''Part 4: Solved blocks for transition dynamics/Jacobian calculation'''
+@solved(unknowns=['pi'], targets=['nkpc'])
+def pricing_solved(pi, mc, r, Y, kappap, mup):
+    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * apply_function(np.log, 1 + pi(+1)) / \
+           (1 + r(+1)) - apply_function(np.log, 1 + pi)
+    return nkpc
+
+
+@solved(unknowns=['p'], targets=['equity'])
+def arbitrage_solved(div, p, r):
+    equity = div(+1) + p(+1) - p * (1 + r(+1))
+    return equity
+
+
+production_solved = solved(block_list=[labor, investment],
+                           unknowns=['Q', 'K'],
+                           targets=['inv', 'val'])
