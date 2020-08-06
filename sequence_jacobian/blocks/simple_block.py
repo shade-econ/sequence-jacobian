@@ -37,16 +37,40 @@ class SimpleBlock:
     def __repr__(self):
         return f"<SimpleBlock '{self.f.__name__}'>"
 
+    def _output_in_ss_format(self, *args, **kwargs):
+        """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
+        numeric primitive, as opposed to Ignore/IgnoreVector objects"""
+        if len(self.output_list) > 1:
+            return tuple([numeric_primitive(o) for o in self.f(*args, **kwargs)])
+        else:
+            return numeric_primitive(self.f(*args, **kwargs))
+
     def ss(self, *args, **kwargs):
         # Wrap args and kwargs in Ignore/IgnoreVector classes to be passed into the function "f"
         args = [ignore(x) for x in args]
         kwargs = {k: ignore(v) for k, v in kwargs.items()}
 
-        # Impose the return arguments are numeric primitives (float or np.ndarray) and not Ignore/IgnoreVector types
+        return self._output_in_ss_format(*args, **kwargs)
+
+    def _output_in_td_format(self, **kwargs_new):
+        """Returns output of the method td as a dict mapping output names to numeric primitives (scalars/vectors)
+        or a single numeric primitive of output values, as opposed to Ignore/IgnoreVector/Displace objects.
+
+        Also accounts for the fact that for outputs of block.td that were *not* affected by a Displace object, i.e.
+        variables that remained at their ss value in spite of other variables within that same block being
+        affected by the Displace object (e.g. I in the mkt_clearing block of the two_asset model
+        is unchanged by a shock to rstar, being only a function of K's ss value and delta),
+        we still want to return them as paths (i.e. vectors, if they were
+        previously scalars) to impose uniformity on the dimensionality of the td returned values.
+        """
+        out = self.f(**kwargs_new)
         if len(self.output_list) > 1:
-            return tuple([numeric_primitive(o) for o in self.f(*args, **kwargs)])
+            # Because we know at least one of the outputs in `out` must be of length T
+            T = np.max([np.size(o) for o in out])
+            out_unif_dim = [np.full(T, numeric_primitive(o)) if np.isscalar(o) else numeric_primitive(o) for o in out]
+            return dict(zip(self.output_list, utils.make_tuple(out_unif_dim)))
         else:
-            return numeric_primitive(self.f(*args, **kwargs))
+            return dict(zip(self.output_list, utils.make_tuple(numeric_primitive(out))))
 
     def td(self, ss, **kwargs):
         kwargs_new = {}
@@ -57,12 +81,9 @@ class SimpleBlock:
 
         for k in self.input_list:
             if k not in kwargs_new:
-                kwargs_new[k] = Ignore(ss[k])
+                kwargs_new[k] = ignore(ss[k])
 
-        if len(self.output_list) > 1:
-            return dict(zip(self.output_list, utils.make_tuple([numeric_primitive(o) for o in self.f(**kwargs_new)])))
-        else:
-            return dict(zip(self.output_list, utils.make_tuple(numeric_primitive(self.f(**kwargs_new)))))
+        return self._output_in_td_format(**kwargs_new)
 
     def jac(self, ss, T=None, shock_list=None, h=1E-5):
         """Assemble nested dict of Jacobians
@@ -94,7 +115,7 @@ class SimpleBlock:
         # initialize dict of default inputs k on which we'll evaluate simple blocks
         # each element is 'Ignore' object containing ss value of input k that ignores
         # time displacement, i.e. k(3) in a simple block will evaluate to just ss k
-        x_ss_new = {k: Ignore(ss[k]) for k in self.input_list}
+        x_ss_new = {k: ignore(ss[k]) for k in self.input_list}
 
         # loop over all inputs k which we want to differentiate
         for k in shock_list:
@@ -128,7 +149,7 @@ class SimpleBlock:
                         sparsederiv[i] = (y_up - y_down) / (2 * h)
             
             # replace our Perturb object for k with Ignore object, so we can run with other k
-            x_ss_new[k] = Ignore(ss[k])
+            x_ss_new[k] = ignore(ss[k])
 
         # process raw_derivatives to return either SimpleSparse objects or (if T provided) matrices
         J = {o: {} for o in self.output_list}
@@ -418,17 +439,21 @@ class Displace(np.ndarray):
         obj.name = name
         return obj
 
+    # TODO: Implemented a very preliminary generalization of Displace to higher-dimensional (>1) ndarrays
+    #   however the rigorous operator overloading/testing has not been checked for higher dimensions.
+    #   Should also implement some checks for the dimension of .ss, to ensure that it's always N-1
+    #   where we also assume that the *last* dimension is the time dimension
     def __call__(self, index):
         if index != 0:
             if self.ss is None:
                 raise KeyError(f'Trying to call {self.name}({index}), but steady-state {self.name} not given!')
-            newx = np.zeros(len(self))
+            newx = np.zeros(np.shape(self))
             if index > 0:
-                newx[:-index] = numeric_primitive(self)[index:]
-                newx[-index:] = self.ss
+                newx[..., :-index] = numeric_primitive(self)[..., index:]
+                newx[..., -index:] = self.ss
             else:
-                newx[-index:] = numeric_primitive(self)[:index]
-                newx[:-index] = self.ss
+                newx[..., -index:] = numeric_primitive(self)[..., :index]
+                newx[..., :-index] = self.ss
             return Displace(newx, ss=self.ss)
         else:
             return self
@@ -478,7 +503,7 @@ def numeric_primitive(instance):
     if type(instance) in {int, float, np.ndarray}:
         return instance
     else:
-        return instance.real if issubclass(type(instance), numbers.Real) else instance.base
+        return instance.real if np.isscalar(instance) else instance.base
 
 
 # Assumes "op" is an actual well-defined arithmetic operator. If necessary, implement more stringent checks
@@ -525,13 +550,48 @@ def apply_binary_op_to_primitives(op, a1, a2):
     return apply_binary_op(op, a1_p, a2_p)
 
 
-def apply_function(func, a, **kwargs):
+def shift_first_dim_to_last(v):
+    """For `v`, an np.ndarray, shift the first dimension to the last dimension,
+    e.g. if np.shape(v) = (3, 4, 5), then shift_first_dim_to_last(v) returns the same data as v
+    but in shape (4, 5, 3).
+    This is useful since in apply_function, the default behavior of iterating across the time dimension and then
+    calling np.array on the resulting list of arrays returns the time dimension in the first index (but we want
+    it in the last index)
+    """
+    if np.ndim(v) > 1:
+        return np.moveaxis(v, 0, -1)
+    else:
+        return v
+
+
+def vectorize_func_over_time(func, *args):
+    """In `args` some arguments will be Displace objects and others will be Ignore/IgnoreVector objects.
+    The Displace objects will have an extra time dimension (as its last dimension).
+    We need to ensure that `func` is evaluated at the non-time dependent steady-state value of
+    the Ignore/IgnoreVectors and at each of the time-dependent values, t, of the Displace objects or in other
+    words along its time path.
+    """
+    d_inds = [i for i in range(len(args)) if isinstance(args[i], Displace)]
+    x_path = []
+    # np.shape(args[d_inds[0]])[-1] is T, the size of the last dimension of the first Displace object
+    # provided in args (assume all Displaces are the same shape s.t. they're conformable)
+    for t in range(np.shape(args[d_inds[0]])[-1]):
+        x_path.append(func(*[args[i][t] if i in d_inds else args[i] for i in range(len(args))]))
+
+    # Need an extra call to shift_first_dim_to_last, since the way Python collects a list of arrays through np.array
+    # (the list's elements are across the time dimension) by default is to add it as the first
+    # dimension, but we want time to be the last dimension so need to move that axis
+    return shift_first_dim_to_last(np.array(x_path))
+
+
+def apply_function(func, *args, **kwargs):
     """Ensure that for generic functions called within a block and acting on a Displace object
     properly instantiates the steady state value of the created Displace object"""
-    if isinstance(a, Displace):
-        return Displace(func(numeric_primitive(a), **kwargs), ss=func(a.ss, **kwargs))
+    if np.any([isinstance(x, Displace) for x in args]):
+        x_path = vectorize_func_over_time(func, *args)
+        return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args]))
     else:
-        return func(a, **kwargs)
+        return func(*args, **kwargs)
 
 
 # The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
