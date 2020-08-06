@@ -267,7 +267,8 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
             if not v:
                 del jac_nonempty[k]
 
-        curlyJs.append(jac_nonempty)
+        if jac_nonempty:
+            curlyJs.append(jac_nonempty)
 
     return curlyJs, required
 
