@@ -53,7 +53,7 @@ def one_asset_hank_model():
     # Steady State
     calibration = {"r": 0.005, "rstar": 0.005, "eis": 0.5, "frisch": 0.5, "mu": 1.2, "B_Y": 5.6,
                    "rho_s": 0.966, "sigma_s": 0.5, "kappa": 0.1, "phi": 1.5, "Y": 1, "Z": 1, "L": 1,
-                   "pi": 0, "nS": 2, "amax": 150, "nA": 10, "div_rule": None, "tax_rule": None}
+                   "pi": 0, "nS": 2, "amax": 150, "nA": 10}
     ss_unknowns = {"beta": 0.986, "vphi": 0.8}
     ss_targets = {"asset_mkt": 0, "labor_mkt": 0}
     ss = steady_state(blocks, calibration, ss_unknowns, ss_targets,

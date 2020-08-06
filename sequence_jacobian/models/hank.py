@@ -148,13 +148,9 @@ def asset_state_vars(amax, nA):
     return a_grid
 
 
-def transfers(pi_e, Div, Tax, e_grid, div_rule=None, tax_rule=None):
+def transfers(pi_e, Div, Tax, e_grid):
     # default incidence rules are proportional to skill
-    if tax_rule is None:
-        tax_rule = e_grid  # scale does not matter, will be normalized anyway
-    if div_rule is None:
-        div_rule = e_grid
-    assert len(tax_rule) == len(div_rule) == len(e_grid), 'Incidence rules are inconsistent with income grid.'
+    tax_rule, div_rule = e_grid, e_grid  # scale does not matter, will be normalized anyway
 
     div = Div / np.sum(pi_e * div_rule) * div_rule
     tax = Tax / np.sum(pi_e * tax_rule) * tax_rule
@@ -179,7 +175,7 @@ def partial_steady_state_solution(B_Y, mu, r):
 
 
 def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1.2, B_Y=5.6, rho_s=0.966, sigma_s=0.5,
-            kappa=0.1, phi=1.5, nS=7, amax=150, nA=500, tax_rule=None, div_rule=None):
+            kappa=0.1, phi=1.5, nS=7, amax=150, nA=500):
     """Solve steady state of full GE model. Calibrate (beta, vphi) to hit target for interest rate and Y."""
 
     # set up grid
@@ -191,7 +187,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     w = 1 / mu
     Div = (1 - w)
     Tax = r * B
-    T, div_rule, tax_rule = transfers(pi_e, Div, Tax, e_grid, div_rule, tax_rule)
+    T = transfers(pi_e, Div, Tax, e_grid)
 
     # initialize guess for policy function iteration
     fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
@@ -207,7 +203,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
             raise ValueError('Clearly invalid inputs')
         out = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
                                  eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc,
-                                 c_const=c_const_loc, n_const=n_const_loc, tax_rule=tax_rule, div_rule=div_rule)
+                                 c_const=c_const_loc, n_const=n_const_loc)
         return np.array([out['A'] - B, out['NS'] - 1])
 
     # solve for beta, vphi
@@ -216,8 +212,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     # extra evaluation for reporting
     c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
     ss = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
-                            Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const,
-                            tax_rule=tax_rule, div_rule=div_rule)
+                            Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const)
     
     # check Walras's law
     goods_mkt = 1 - ss['C']
