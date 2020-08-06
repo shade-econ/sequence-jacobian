@@ -86,8 +86,13 @@ def two_asset_hank_model():
                       solver="broyden", consistency_check=True, noisy=False)
 
     # Transitional Dynamics/Jacobian Calculation
+    blocks_w_solved = [two_asset.household_inc, two_asset.make_grids,
+                       two_asset.pricing_solved, two_asset.arbitrage_solved, two_asset.production_solved,
+                       two_asset.dividend, two_asset.taylor, two_asset.fiscal,
+                       two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing,
+                       two_asset.adjustment_costs, two_asset.partial_steady_state_solution]
     exogenous = ["rstar", "Z", "G"]
     dynamic_unknowns = ["r", "w", "Y"]
     dynamic_targets = ["asset_mkt", "fisher", "wnkpc"]
 
-    return blocks, exogenous, dynamic_unknowns, dynamic_targets, ss
+    return blocks_w_solved, exogenous, dynamic_unknowns, dynamic_targets, ss
