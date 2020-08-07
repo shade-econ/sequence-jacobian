@@ -400,19 +400,20 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
 
 
 '''Part 4: Solved blocks for transition dynamics/Jacobian calculation'''
-@solved(unknowns=['pi'], targets=['nkpc'])
+@solved(unknowns={'pi': (-0.1, 0.1)}, targets=['nkpc'], solver="brentq")
 def pricing_solved(pi, mc, r, Y, kappap, mup):
     nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * apply_function(np.log, 1 + pi(+1)) / \
            (1 + r(+1)) - apply_function(np.log, 1 + pi)
     return nkpc
 
 
-@solved(unknowns=['p'], targets=['equity'])
+@solved(unknowns={'p': (10, 15)}, targets=['equity'], solver="brentq")
 def arbitrage_solved(div, p, r):
     equity = div(+1) + p(+1) - p * (1 + r(+1))
     return equity
 
 
 production_solved = solved(block_list=[labor, investment],
-                           unknowns=['Q', 'K'],
-                           targets=['inv', 'val'])
+                           unknowns={'Q': 1, 'K': 10},
+                           targets=['inv', 'val'],
+                           solver="broyden", solver_kwargs={"noisy": False})

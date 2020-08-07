@@ -4,9 +4,9 @@ import numpy as np
 import scipy.optimize as opt
 from copy import deepcopy
 
-import sequence_jacobian as sj
-from sequence_jacobian import HelperBlock
-from sequence_jacobian.utils import make_tuple, broyden_solver
+from . import utils
+from .blocks.simple_block import SimpleBlock
+from .blocks.helper_block import HelperBlock
 
 
 # Find the steady state solution
@@ -44,7 +44,7 @@ def steady_state(blocks, calibration, unknowns, targets,
     """
 
     ss_values = deepcopy(calibration)
-    topsorted = sj.utils.block_sort(blocks, calibration=calibration)
+    topsorted = utils.block_sort(blocks, calibration=calibration)
 
     def residual(unknown_values, include_helpers=True, update_unknowns_inplace=False):
         ss_values.update(smart_zip(unknowns.keys(), unknown_values))
@@ -85,7 +85,7 @@ def steady_state(blocks, calibration, unknowns, targets,
         assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < ctol
 
     # Update to set the solutions for the steady state values of the unknowns
-    ss_values.update(zip(unknowns, make_tuple(unknown_solutions)))
+    ss_values.update(zip(unknowns, utils.make_tuple(unknown_solutions)))
 
     return ss_values
 
@@ -97,7 +97,7 @@ def find_target_block(blocks, target):
 
 
 # Allow targets to be specified in the following formats
-# 1) target = {"asset_mkt": 0} (the standard case, where the target = 0)
+# 1) target = {"asset_mkt": 0} or ["asset_mkt"] (the standard case, where the target = 0)
 # 2) target = {"r": 0.01} (allowing for the target to be non-zero)
 # 3) target = {"K": "A"} (allowing the target to be another variable in potential_args)
 def compute_target_values(targets, potential_args):
@@ -112,7 +112,7 @@ def compute_target_values(targets, potential_args):
     """
     target_values = np.empty(len(targets))
     for (i, t) in enumerate(targets):
-        v = targets[t]
+        v = targets[t] if isinstance(targets, dict) else 0
         if type(v) == str:
             target_values[i] = potential_args[t] - potential_args[v]
         else:
@@ -142,8 +142,8 @@ def eval_block_ss(block, potential_args):
 
     # Simple and HetBlocks require different handling of block.ss() output since
     # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
-    if isinstance(block, sj.SimpleBlock) or isinstance(block, sj.HelperBlock):
-        output_args = make_tuple(block.ss(**input_args))
+    if isinstance(block, SimpleBlock) or isinstance(block, HelperBlock):
+        output_args = utils.make_tuple(block.ss(**input_args))
         outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
     else:  # assume it's a HetBlock. Figure out a nicer way to handle SolvedBlocks/CombinedBlocks later on
         outputs = block.ss(**input_args)
@@ -177,12 +177,12 @@ def _solve_for_unknowns(residual, unknowns, tol=1e-9, solver=None, **solver_kwar
         raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
     elif solver == "brentq":
         lb, ub = list(unknowns.values())[0]  # Since brentq is a univariate solver can assume unknowns is a size 1 dict
-        unknown_solutions, sol = opt.brentq(residual, lb, ub, xtol=tol, **solver_kwargs)
+        unknown_solutions, sol = opt.brentq(residual, lb, ub, xtol=tol, full_output=True, **solver_kwargs)
         if not sol.converged:
             raise ValueError("Steady-state solver did not converge.")
     elif solver == "broyden":
         init_values = np.array(list(unknowns.values()))
-        unknown_solutions, _ = broyden_solver(residual, init_values, tol=tol, **solver_kwargs)
+        unknown_solutions, _ = utils.broyden_solver(residual, init_values, tol=tol, **solver_kwargs)
         unknown_solutions = list(unknown_solutions)
     elif solver is "solved":
         # If the entire solution is provided by the helper blocks

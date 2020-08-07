@@ -1,9 +1,10 @@
 from .. import nonlinear
 from .. import jacobian as jac
+from ..steady_state import steady_state
 from ..blocks.simple_block import simple
 
 
-def solved(unknowns, targets, block_list=[]):
+def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}):
     """Creates SolvedBlocks. Can be applied in two ways, both of which return a SolvedBlock:
         - as @solved(unknowns=..., targets=...) decorator on a single SimpleBlock
         - as function solved(blocklist=..., unknowns=..., targets=...) where blocklist
@@ -12,12 +13,12 @@ def solved(unknowns, targets, block_list=[]):
 
     if block_list:
         # ordinary call, not as decorator
-        return SolvedBlock(block_list, unknowns, targets)
+        return SolvedBlock(block_list, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
     else:
         # call as decorator, return function of function
-        def solver(f):
-            return SolvedBlock([simple(f)], unknowns, targets)
-        return solver
+        def singleton_solved_block(f):
+            return SolvedBlock([simple(f)], unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
+        return singleton_solved_block
 
 
 class SolvedBlock:
@@ -33,35 +34,38 @@ class SolvedBlock:
     nonlinear transition path such that all internal targets of the mini SHADE model are zero.
     """
 
-    def __init__(self, block_list, unknowns, targets):
+    def __init__(self, block_list, unknowns, targets, solver=None, solver_kwargs={}):
         self.block_list = block_list
         self.unknowns = unknowns
         self.targets = targets
+        self.solver = solver
+        self.solver_kwargs = solver_kwargs
 
         # need to have inputs and outputs!!!
-        self.outputs = (set.union(*(b.outputs for b in block_list)) | set(self.unknowns)) - set(self.targets)
+        self.outputs = (set.union(*(b.outputs for b in block_list)) | set(list(self.unknowns.keys()))) - set(self.targets)
         self.inputs = set.union(*(b.inputs for b in block_list)) - self.outputs
 
-    def ss(self, *args, **kwargs):
-        # implementing steady-state for general solved block would be tantamount to providing 
-        # a general method to solve for the steady state of any SHADE model
-        # this is not our focus for now, since our methodological contributions are on dynamic side
-        raise NotImplementedError('Cannot evaluate steady state for a SolvedBlock!')
+    def ss(self, **calibration):
+        if self.solver is None:
+            raise RuntimeError("Cannot call the ss method on this SolvedBlock without specifying a solver.")
+        else:
+            return steady_state(self.block_list, calibration, self.unknowns, self.targets, solver=self.solver,
+                                **self.solver_kwargs)
 
     def td(self, ss, monotonic=False, returnindividual=False, noisy=False, **kwargs):
         # TODO: add H_U_factored caching of some kind
         # also, inefficient since we are repeatedly starting from the steady state, need option
         # to provide a guess (not a big deal with just SimpleBlocks, of course)
-        return nonlinear.td_solve(ss, self.block_list, self.unknowns, self.targets, monotonic=monotonic,
+        return nonlinear.td_solve(ss, self.block_list, list(self.unknowns.keys()), self.targets, monotonic=monotonic,
                                   returnindividual=returnindividual, noisy=noisy, **kwargs)
     
     def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):
         # H_U_factored caching could be helpful here too
-        return jac.get_G(self.block_list, shock_list, self.unknowns, self.targets,
+        return jac.get_G(self.block_list, shock_list, list(self.unknowns.keys()), self.targets,
                          T, ss, output_list, save=save, use_saved=use_saved)
 
     def ajac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False, Tpost=None):
         if Tpost is None:
             Tpost = 2*T
-        return jac.get_G_asymptotic(self.block_list, shock_list, self.unknowns,
-                self.targets, T, ss, output_list, save=save, use_saved=use_saved, Tpost=Tpost)
+        return jac.get_G_asymptotic(self.block_list, shock_list, list(self.unknowns.keys()),
+                                    self.targets, T, ss, output_list, save=save, use_saved=use_saved, Tpost=Tpost)
