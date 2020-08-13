@@ -196,7 +196,8 @@ def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
 
 @simple
 def pricing(pi, mc, r, Y, kappap, mup):
-    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1)) - apply_function(np.log, 1 + pi)
+    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * apply_function(np.log, 1 + pi(+1))\
+           / (1 + r(+1)) - apply_function(np.log, 1 + pi)
     return nkpc
 
 
