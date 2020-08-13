@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from sequence_jacobian import nonlinear, jacobian, utils
+from sequence_jacobian import two_asset, nonlinear, jacobian, utils
 
 # TODO: Figure out a more robust way to check similarity of the linear and non-linear solution.
 #   As of now just checking that the tolerance for difference (by infinity norm) is below a manually checked threshold
@@ -87,3 +87,35 @@ def test_two_asset_td(two_asset_hank_model):
         dY_lin = shock_size * 100 * G['Y']['rstar'] @ drstar
 
         assert np.linalg.norm(dY_nonlin - dY_lin, np.inf) < tol
+
+
+def test_two_asset_solved_v_simple_td(two_asset_hank_model):
+    blocks, exogenous, unknowns, targets, ss = two_asset_hank_model
+
+    blocks_simple = [two_asset.household_inc, two_asset.make_grids,
+                     two_asset.pricing, two_asset.arbitrage, two_asset.labor, two_asset.investment,
+                     two_asset.dividend, two_asset.taylor, two_asset.fiscal,
+                     two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing,
+                     two_asset.adjustment_costs, two_asset.partial_steady_state_solution]
+    unknowns_simple = ["r", "w", "Y", "pi", "p", "Q", "K"]
+    targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
+
+    T = 30
+    G = jacobian.get_G(blocks, exogenous, unknowns, targets, T, ss=ss, save=True)
+    G_simple = jacobian.get_G(blocks_simple, exogenous, unknowns_simple, targets_simple, T, ss=ss, save=True)
+
+    drstar = -0.0025 * 0.6 ** np.arange(T)
+
+    dY = 100 * G['Y']['rstar'] @ drstar
+    td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets,
+                                   rstar=ss['r']+drstar, use_saved=True, noisy=False)
+    dY_nonlin = 100 * (td_nonlin['Y'] - 1)
+
+    dY_simple = 100 * G_simple['Y']['rstar'] @ drstar
+    td_nonlin_simple = nonlinear.td_solve(ss, blocks_simple, unknowns_simple, targets_simple,
+                                          rstar=ss['r']+drstar, use_saved=True, noisy=False)
+
+    dY_nonlin_simple = 100 * (td_nonlin_simple['Y'] - 1)
+
+    assert np.linalg.norm(dY_nonlin - dY_nonlin_simple, np.inf) < 2e-7
+    assert np.linalg.norm(dY - dY_simple, np.inf) < 0.02
