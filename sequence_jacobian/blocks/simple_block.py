@@ -2,6 +2,7 @@ import numpy as np
 import numbers
 from copy import copy
 from numba import njit
+from warnings import warn
 
 from .. import utils
 from .. import asymptotic
@@ -392,12 +393,82 @@ class Ignore(float):
     def __call__(self, index):
         return self
 
+    def __pos__(self):
+        return self
+
+    def __neg__(self):
+        return ignore(-numeric_primitive(self))
+
+    # Tried using the multipledispatch package but @dispatch requires the classes being dispatched on to be defined
+    # prior to the use of the decorator @dispatch("ClassName"), hence making it impossible to overload in this way,
+    # as opposed to how isinstance() is evaluated at runtime, so it is valid to check isinstance even if in this module
+    # the class is defined later on in the module.
+    # Thus, we need to specially overload the left operations to check if `other` is a Displace to promote properly
+    def __add__(self, other):
+        if isinstance(other, Displace):
+            return other.__radd__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) + other)
+
+    def __radd__(self, other):
+        if isinstance(other, Displace):
+            return other.__add__(numeric_primitive(self))
+        else:
+            return ignore(other + numeric_primitive(self))
+
+    def __sub__(self, other):
+        if isinstance(other, Displace):
+            return other.__rsub__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) - other)
+
+    def __rsub__(self, other):
+        if isinstance(other, Displace):
+            return other.__sub__(numeric_primitive(self))
+        else:
+            return ignore(other - numeric_primitive(self))
+
+    def __mul__(self, other):
+        if isinstance(other, Displace):
+            return other.__rmul__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) * other)
+
+    def __rmul__(self, other):
+        if isinstance(other, Displace):
+            return other.__mul__(numeric_primitive(self))
+        else:
+            return ignore(other * numeric_primitive(self))
+
+    def __truediv__(self, other):
+        if isinstance(other, Displace):
+            return other.__rtruediv__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self)/other)
+
+    def __rtruediv__(self, other):
+        if isinstance(other, Displace):
+            return other.__truediv__(numeric_primitive(self))
+        else:
+            return ignore(other/numeric_primitive(self))
+
+    def __pow__(self, power, modulo=None):
+        if isinstance(power, Displace):
+            return power.__rpow__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self)**power)
+
+    def __rpow__(self, other):
+        if isinstance(other, Displace):
+            return other.__pow__(numeric_primitive(self))
+        else:
+            return ignore(other**numeric_primitive(self))
+
 
 class IgnoreVector(np.ndarray):
     """This class ignores time displacements of a np.ndarray.
        See NumPy documentation on "Subclassing ndarray" for more details on the use of __new__
-       for this implementation.
-       Operators overloaded similarly to the analogous scalar version of this class, Ignore."""
+       for this implementation."""
 
     def __new__(cls, x):
         obj = np.asarray(x).view(cls)
@@ -405,6 +476,66 @@ class IgnoreVector(np.ndarray):
 
     def __call__(self, index):
         return self
+
+    def __add__(self, other):
+        if isinstance(other, Displace):
+            return other.__radd__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) + other)
+
+    def __radd__(self, other):
+        if isinstance(other, Displace):
+            return other.__add__(numeric_primitive(self))
+        else:
+            return ignore(other + numeric_primitive(self))
+
+    def __sub__(self, other):
+        if isinstance(other, Displace):
+            return other.__rsub__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) - other)
+
+    def __rsub__(self, other):
+        if isinstance(other, Displace):
+            return other.__sub__(numeric_primitive(self))
+        else:
+            return ignore(other - numeric_primitive(self))
+
+    def __mul__(self, other):
+        if isinstance(other, Displace):
+            return other.__rmul__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) * other)
+
+    def __rmul__(self, other):
+        if isinstance(other, Displace):
+            return other.__mul__(numeric_primitive(self))
+        else:
+            return ignore(other * numeric_primitive(self))
+
+    def __truediv__(self, other):
+        if isinstance(other, Displace):
+            return other.__rtruediv__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self)/other)
+
+    def __rtruediv__(self, other):
+        if isinstance(other, Displace):
+            return other.__truediv__(numeric_primitive(self))
+        else:
+            return ignore(other/numeric_primitive(self))
+
+    def __pow__(self, power, modulo=None):
+        if isinstance(power, Displace):
+            return power.__rpow__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self)**power)
+
+    def __rpow__(self, other):
+        if isinstance(other, Displace):
+            return other.__pow__(numeric_primitive(self))
+        else:
+            return ignore(other**numeric_primitive(self))
 
 
 class Displace(np.ndarray):
@@ -435,6 +566,143 @@ class Displace(np.ndarray):
             return Displace(newx, ss=self.ss)
         else:
             return self
+
+    def __pos__(self):
+        return self
+
+    def __neg__(self):
+        return Displace(-numeric_primitive(self), ss=-self.ss)
+
+    def __add__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(self) + numeric_primitive(other),
+                            ss=self.ss + other.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(self) + numeric_primitive(other),
+                            ss=self.ss + numeric_primitive(other))
+        else:
+            # TODO: See if there is a different, systematic way we want to handle this case.
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(self) + numeric_primitive(other),
+                            ss=self.ss)
+
+    def __radd__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(other) + numeric_primitive(self),
+                            ss=other.ss + self.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(other) + numeric_primitive(self),
+                            ss=numeric_primitive(other) + self.ss)
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(other) + numeric_primitive(self),
+                            ss=self.ss)
+
+    def __sub__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(self) - numeric_primitive(other),
+                            ss=self.ss - other.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(self) - numeric_primitive(other),
+                            ss=self.ss - numeric_primitive(other))
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(self) - numeric_primitive(other),
+                            ss=self.ss)
+
+    def __rsub__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(other) - numeric_primitive(self),
+                            ss=other.ss - self.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(other) - numeric_primitive(self),
+                            ss=numeric_primitive(other) - self.ss)
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(other) - numeric_primitive(self),
+                            ss=self.ss)
+
+    def __mul__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(self) * numeric_primitive(other),
+                            ss=self.ss * other.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(self) * numeric_primitive(other),
+                            ss=self.ss * numeric_primitive(other))
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(self) * numeric_primitive(other),
+                            ss=self.ss)
+
+    def __rmul__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(other) * numeric_primitive(self),
+                            ss=other.ss * self.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(other) * numeric_primitive(self),
+                            ss=numeric_primitive(other) * self.ss)
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(other) * numeric_primitive(self),
+                            ss=self.ss)
+
+    def __truediv__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(self) / numeric_primitive(other),
+                            ss=self.ss / other.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(self) / numeric_primitive(other),
+                            ss=self.ss / numeric_primitive(other))
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(self) / numeric_primitive(other),
+                            ss=self.ss)
+
+    def __rtruediv__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(other) / numeric_primitive(self),
+                            ss=other.ss / self.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(other) / numeric_primitive(self),
+                            ss=numeric_primitive(other) / self.ss)
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(other) / numeric_primitive(self),
+                            ss=self.ss)
+
+    def __pow__(self, power):
+        if isinstance(power, Displace):
+            return Displace(numeric_primitive(self) ** numeric_primitive(power),
+                            ss=self.ss ** power.ss)
+        elif np.isscalar(power):
+            return Displace(numeric_primitive(self) ** numeric_primitive(power),
+                            ss=self.ss ** numeric_primitive(power))
+        else:
+            warn("\n" + f"Applying operation to {power}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(self) ** numeric_primitive(power),
+                            ss=self.ss)
+
+    def __rpow__(self, other):
+        if isinstance(other, Displace):
+            return Displace(numeric_primitive(other) ** numeric_primitive(self),
+                            ss=other.ss ** self.ss)
+        elif np.isscalar(other):
+            return Displace(numeric_primitive(other) ** numeric_primitive(self),
+                            ss=numeric_primitive(other) ** self.ss)
+        else:
+            warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
+                 f"The resulting Displace object will retain the steady-state value of the original Displace object.")
+            return Displace(numeric_primitive(other) ** numeric_primitive(self),
+                            ss=self.ss)
 
 
 class DerivativeMap:
@@ -613,50 +881,6 @@ def numeric_primitive(instance):
         return instance.real if np.isscalar(instance) else instance.base
 
 
-# Assumes "op" is an actual well-defined arithmetic operator. If necessary, implement more stringent checks
-# on the "op" being passed in so nonsense doesn't come out.
-# i.e. reverse_op("__round__") doesn't return reverse_op("__ound__")
-def reverse_op(op):
-    if op[2] == "r":
-        return op[0:2] + op[3:]
-    else:
-        return op[0:2] + "r" + op[2:]
-
-
-def apply_op(op, *args):
-    if len(args) == 1:
-        return apply_unary_op(op, *args)
-    elif len(args) == 2:
-        return apply_binary_op(op, *args)
-    else:
-        raise ValueError(f"apply_op only supports unary or binary operators currently. {len(args)} is an invalid"
-                         f" number of arguments to provide.")
-
-
-def apply_unary_op(op, a):
-    return getattr(a, op)()
-
-
-def apply_binary_op(op, a1, a2):
-    if getattr(a1, op)(a2) is not NotImplemented:
-        return getattr(a1, op)(a2)
-    elif getattr(a2, reverse_op(op))(a1) is not NotImplemented:
-        return getattr(a2, reverse_op(op))(a1)
-    else:
-        raise NotImplementedError(f"{op} cannot be performed between {a1} and {a2} directly, and no"
-                                  f" valid reverse operation exists either.")
-
-
-def apply_unary_op_to_primitives(op, a):
-    return apply_unary_op(op, numeric_primitive(a))
-
-
-def apply_binary_op_to_primitives(op, a1, a2):
-    a1_p = numeric_primitive(a1)
-    a2_p = numeric_primitive(a2)
-    return apply_binary_op(op, a1_p, a2_p)
-
-
 def shift_first_dim_to_last(v):
     """For `v`, an np.ndarray, shift the first dimension to the last dimension,
     e.g. if np.shape(v) = (3, 4, 5), then shift_first_dim_to_last(v) returns the same data as v
@@ -699,133 +923,3 @@ def apply_function(func, *args, **kwargs):
         return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args]))
     else:
         return func(*args, **kwargs)
-
-
-# The following lines overload the standard arithmetic operators of Ignore to return an Ignore type as opposed to
-# following the standard promotion behavior.
-def _overload_operator(constructor, op, customize_attributes=None, **constructor_kwargs):
-    """Overload the provided operator for a given class (that is a child class of a parent class
-    having well-defined behavior for the provided set of operators) to return an instance of the child class.
-    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore.
-
-    constructor: `str`
-        The name of the class whose operators we want to overload or a constructor for this class
-    op: `string`
-        A `str` of the name of the operators, e.g. "__add__", that we hope to overload
-    customize_attributes: `function` or None
-        If provided, a function that maps the operator and self (and other if it is a binary operator)
-        to additional attributes desired in constructing a new instance of an object of type(self)
-        e.g. since Displace objects have a .ss attribute, customize_attributes can map the operator "__add__",
-        self, and other to a resulting Displace object with a valid .ss attribute
-    """
-    if op in {"__pos__", "__neg__"}:
-        if customize_attributes is not None:
-            return lambda self: constructor(apply_unary_op_to_primitives(op, self),
-                                            **{**customize_attributes(op, self), **constructor_kwargs})
-        else:
-            return lambda self: constructor(apply_unary_op_to_primitives(op, self), **constructor_kwargs)
-    else:
-        if customize_attributes is not None:
-            return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other),
-                                                   **{**customize_attributes(op, self, other), **constructor_kwargs})
-        else:
-            return lambda self, other: constructor(apply_binary_op_to_primitives(op, self, other),
-                                                   **constructor_kwargs)
-
-
-def overload_operators(custom_class, operators, customize_attributes=None, constructor=None, **constructor_kwargs):
-    """Overload the provided set of operators for a given class (that is a child class of a parent class
-    having well-defined behavior for the provided set of operators) to return an instance of the child class.
-    e.g. type(Ignore(1) + 1) is Ignore, if overload_operators is used to overload __add__ for the class Ignore.
-
-    See docstring for _overload_operator for more details on arguments
-    """
-    for op in operators:
-        if constructor is None:
-            setattr(custom_class, op, _overload_operator(custom_class, op, customize_attributes=customize_attributes,
-                                                         **constructor_kwargs))
-        else:
-            setattr(custom_class, op, _overload_operator(constructor, op, customize_attributes=customize_attributes,
-                                                         **constructor_kwargs))
-
-
-def override_default_promotion(primary_class, overriding_class, op,
-                               primary_class_constructor=None, overriding_class_constructor=None,
-                               primary_kwargs={}, override_kwargs={}):
-    """
-    Override the default promotion class when applying primary_class.op(overriding_class) from primary_class to
-    overriding_class.
-    e.g. Want Ignore(1) + Displace(np.array([1,2,3]), ss=2) = Displace(np.array([2,3,4]), ss=3) as opposed to
-    IgnoreVector(np.array([2,3,4])).
-
-    primary_class: `str`
-        The class, whose operation we are modifying to override its default promotion class
-    overriding_class: `str`
-        The class, which we impose is returned from applying the operation as opposed to the default promotion class
-    op: `str`
-        The operation being overriden
-
-    primary_class_constructor: `str` or None
-        Optional alternative constructor method. If None then will use the default constructor provided by primary_class
-    overriding_class_constructor: `str` or None
-        Optional alternative constructor method. If None then will use the default constructor provided by overriding_class
-    primary_kwargs: dict
-        The keyword arguments to provide to the primary class constructor
-    override_kwargs: dict
-        The keyword arguments to be provided to the overriding class constructor
-    return: `op_override`, a function overriding the operator to be provided to setattr
-    """
-    def op_override(self, other):
-        if isinstance(self, primary_class) and isinstance(other, overriding_class):
-            constructor = overriding_class if overriding_class_constructor is None else overriding_class_constructor
-            return _overload_operator(constructor, reverse_op(op), **override_kwargs)(other, self)
-        else:
-            constructor = primary_class if primary_class_constructor is None else primary_class_constructor
-            return _overload_operator(constructor, op, **primary_kwargs)(self, other)
-    return op_override
-
-
-def override_default_promotions(primary_class, overriding_class, operators,
-                                primary_class_constructor=None, overriding_class_constructor=None, **kwargs):
-    """
-    Override the default promotion class when applying primary_class.op(overriding_class) from primary_class to
-    overriding_class.
-
-    For details about the arguments and potential keyword arguments to be provided,
-    see docstring for override_default_promotion.
-    """
-    for op in operators:
-        setattr(primary_class, op, override_default_promotion(primary_class, overriding_class, op,
-                                                              primary_class_constructor=primary_class_constructor,
-                                                              overriding_class_constructor=overriding_class_constructor,
-                                                              **kwargs))
-
-
-# Overload operators on classes Ignore, IgnoreVector, Displace, Reporter, and Perturb
-unary_operators = ["__neg__", "__pos__"]
-binary_operators = ["__add__", "__sub__", "__mul__", "__truediv__", "__pow__",
-                    "__radd__", "__rsub__", "__rmul__", "__rtruediv__", "__rpow__"]
-operators = unary_operators + binary_operators
-
-# Custom attribute functions
-# Assume arg is either empty or of size 1 (so either a unary of binary operator)
-def compute_displace_attributes(op, self, *arg):
-    if not arg:
-        return {"ss": apply_unary_op_to_primitives(op, self.ss)}
-    else:
-        if isinstance(arg[0], Displace):
-            return {"ss": apply_binary_op_to_primitives(op, self.ss, arg[0].ss)}
-        else:
-            return {"ss": apply_binary_op_to_primitives(op, self.ss, arg[0])}
-
-
-overload_operators(Ignore, operators, constructor=ignore)
-overload_operators(IgnoreVector, operators, constructor=ignore)
-overload_operators(Displace, ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
-                   "__truediv__", "__rtruediv__", "__pow__", "__rpow__", "__neg__", "__pos__"],
-                   customize_attributes=compute_displace_attributes)
-
-override_default_promotions(Ignore, Displace, binary_operators, primary_class_constructor=ignore,
-                            override_kwargs={"customize_attributes": compute_displace_attributes})
-override_default_promotions(IgnoreVector, Displace, binary_operators, primary_class_constructor=ignore,
-                            override_kwargs={"customize_attributes": compute_displace_attributes})
