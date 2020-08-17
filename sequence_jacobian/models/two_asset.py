@@ -196,8 +196,8 @@ def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
 
 @simple
 def pricing(pi, mc, r, Y, kappap, mup):
-    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * apply_function(np.log, 1 + pi(+1))\
-           / (1 + r(+1)) - apply_function(np.log, 1 + pi)
+    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log)\
+           / (1 + r(+1)) - (1 + pi).apply(np.log)
     return nkpc
 
 
@@ -224,7 +224,7 @@ def investment(Q, K, r, N, mc, Z, delta, epsI, alpha):
 
 @simple
 def dividend(Y, w, N, K, pi, mup, kappap, delta):
-    psip = mup / (mup - 1) / 2 / kappap * apply_function(np.log, 1 + pi) ** 2 * Y
+    psip = mup / (mup - 1) / 2 / kappap * (1 + pi).apply(np.log) ** 2 * Y
     I = K - (1 - delta) * K(-1)
     div = Y - w * N - I - psip
     return psip, I, div
@@ -253,14 +253,14 @@ def finance(i, p, pi, r, div, omega, pshare):
 @simple
 def wage(pi, w, N, muw, kappaw):
     piw = (1 + pi) * w / w(-1) - 1
-    psiw = muw / (1 - muw) / 2 / kappaw * apply_function(np.log, 1 + piw) ** 2 * N
+    psiw = muw / (1 - muw) / 2 / kappaw * (1 + piw).apply(np.log) ** 2 * N
     return piw, psiw
 
 
 @simple
 def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
     wnkpc = kappaw * (vphi * N**(1+1/frisch) - muw*(1-tax)*w*N*U) + beta *\
-            apply_function(np.log, 1 + piw(+1)) - apply_function(np.log, 1 + piw)
+            (1 + piw(+1)).apply(np.log) - (1 + piw).apply(np.log)
     return wnkpc
 
 
@@ -403,8 +403,8 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
 '''Part 4: Solved blocks for transition dynamics/Jacobian calculation'''
 @solved(unknowns={'pi': (-0.1, 0.1)}, targets=['nkpc'], solver="brentq")
 def pricing_solved(pi, mc, r, Y, kappap, mup):
-    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * apply_function(np.log, 1 + pi(+1)) / \
-           (1 + r(+1)) - apply_function(np.log, 1 + pi)
+    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / \
+           (1 + r(+1)) - (1 + pi).apply(np.log)
     return nkpc
 
 
