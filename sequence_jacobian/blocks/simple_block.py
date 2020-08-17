@@ -405,61 +405,61 @@ class Ignore(float):
     # the class is defined later on in the module.
     # Thus, we need to specially overload the left operations to check if `other` is a Displace to promote properly
     def __add__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__rtruediv__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self)/other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__truediv__(numeric_primitive(self))
         else:
             return ignore(other/numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace):
+        if isinstance(power, Displace) or isinstance(power, DerivativeMap):
             return power.__rpow__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self)**power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__pow__(numeric_primitive(self))
         else:
             return ignore(other**numeric_primitive(self))
@@ -478,61 +478,61 @@ class IgnoreVector(np.ndarray):
         return self
 
     def __add__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__rtruediv__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self)/other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__truediv__(numeric_primitive(self))
         else:
             return ignore(other/numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace):
+        if isinstance(power, Displace) or isinstance(power, DerivativeMap):
             return power.__rpow__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self)**power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace):
+        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
             return other.__pow__(numeric_primitive(self))
         else:
             return ignore(other**numeric_primitive(self))
@@ -724,20 +724,8 @@ class DerivativeMap:
 
     # Treat it as if the operator Q_(i, 0) is being applied to Q_(j, n), following the notation in the paper
     # s.t. Q_(i, 0) Q_(j, n) = Q(k,l)
-    def __call__(self, shift):
-        def compute_l(i, j, n):
-            if i >= 0 and j >= 0:
-                return max(-j, n)
-            elif i >= 0 and j <= 0:
-                return max(0, n) + min(i, -j)
-            elif i <= 0 and j >= 0 and i + j >= 0:
-                return max(-i - j, n)
-            elif i <= 0 and j >= 0 and i + j <= 0:
-                return max(n + i + j, 0)
-            else:
-                return max(0, n + i)
-
-        keys = [(j + shift, compute_l(shift, j, n)) for j, n in self._keys]
+    def __call__(self, i):
+        keys = [(i + j, compute_l(i, 0, j, n)) for j, n in self._keys]
         return DerivativeMap(elements=dict(zip(keys, self._values)))
 
     def __pos__(self):
@@ -862,6 +850,8 @@ class DerivativeMap:
         if np.isscalar(power):
             return DerivativeMap(elements=dict(zip(self._keys, self._values**numeric_primitive(power))),
                                  ss=self.ss**numeric_primitive(power))
+        elif isinstance(power, DerivativeMap):
+            return NotImplemented
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -869,8 +859,25 @@ class DerivativeMap:
         if np.isscalar(other):
             return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other)**self._values)),
                                  ss=numeric_primitive(other)**self.ss)
+        elif isinstance(other, DerivativeMap):
+            return NotImplemented
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+
+def compute_l(i, m, j, n):
+    """Computes the `l` index from the composition of shift operators, Q_{i, m} Q_{j, n} = Q_{k, l} in Proposition 2
+    of the paper (regarding efficient multiplication of simple Jacobians)."""
+    if i >= 0 and j >= 0:
+        return max(m - j, n)
+    elif i >= 0 and j <= 0:
+        return max(m, n) + min(i, -j)
+    elif i <= 0 and j >= 0 and i + j >= 0:
+        return max(m - i - j, n)
+    elif i <= 0 and j >= 0 and i + j <= 0:
+        return max(n + i + j, m)
+    else:
+        return max(m, n + i)
 
 
 def numeric_primitive(instance):

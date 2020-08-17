@@ -2,7 +2,7 @@
 import numpy as np
 
 from sequence_jacobian.blocks.simple_block import (
-    Ignore, IgnoreVector, Displace, numeric_primitive
+    Ignore, IgnoreVector, Displace, DerivativeMap, numeric_primitive
 )
 
 # Define useful helper functions for testing
@@ -59,6 +59,10 @@ def test_ignore():
             assert np.all(numeric_primitive(apply_op(op, t1, t2)) == apply_op(op, numeric_primitive(t1),
                                                                               numeric_primitive(t2)))
 
+    # Test call
+    for t1 in arg_singles:
+        assert numeric_primitive(t1) == numeric_primitive(t1(+1))
+
 
 def test_ignore_vector():
     # Test unary operations
@@ -88,6 +92,10 @@ def test_ignore_vector():
             assert type(apply_op(op, t1, t2)) == IgnoreVector
             assert np.all(numeric_primitive(apply_op(op, t1, t2)) == apply_op(op, numeric_primitive(t1),
                                                                               numeric_primitive(t2)))
+
+    # Test call
+    for t1 in arg_singles:
+        assert np.all(numeric_primitive(t1) == numeric_primitive(t1(+1)))
 
 
 def test_displace():
@@ -121,3 +129,44 @@ def test_displace():
             assert np.all(numeric_primitive(apply_op(op, t1, t2).ss) ==\
                    apply_op(op, t1.ss if isinstance(t1, Displace) else numeric_primitive(t1),
                             t2.ss if isinstance(t2, Displace) else numeric_primitive(t2)))
+
+    # Test call
+    for t1 in arg_singles:
+        t1_manual_displace = np.zeros(len(t1))
+        t1_manual_displace[:-1] = numeric_primitive(t1)[1:]
+        t1_manual_displace[-1:] = t1.ss
+        assert np.all(numeric_primitive(t1(1)) == t1_manual_displace)
+
+
+def test_derivative_map():
+    # Test unary operations
+    arg_singles = [DerivativeMap(), DerivativeMap()(-1), DerivativeMap(elements={(1, 1): 2.}, ss=2.)]
+    for t1 in arg_singles:
+        for op in ["__neg__", "__pos__"]:
+            assert type(apply_op(op, t1)) == DerivativeMap
+            assert np.all(np.fromiter(apply_op(op, t1).elements.values(), dtype=float) ==
+                          np.array([apply_op(op, v) for v in t1.elements.values()]))
+
+    # TODO: Only test against scalars as of now. Will need to revisit this to test against vectors
+    #   e.g. IgnoreVector, once hetinput/hetoutput functionality is enhanced
+    # Test binary operations
+    arg_pairs = [(DerivativeMap(elements={(1, 1): 2.}, ss=2.), 1),
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.), Ignore(1)),
+                 (1, DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
+                 (Ignore(1), DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
+
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), 1),
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), Ignore(1)),
+                 (1, DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1)),
+                 (Ignore(1), DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1))]
+    for pair in arg_pairs:
+        t1, t2 = pair
+        for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
+                   "__truediv__", "__rtruediv__", "__pow__", "__rpow__"]:
+            assert type(apply_op(op, t1, t2)) == DerivativeMap
+            if isinstance(t1, DerivativeMap):
+                assert list(apply_op(op, t1, t2).elements.values())[0] == apply_op(op, list(t1.elements.values())[0],
+                                                                          numeric_primitive(t2))
+            else:
+                assert list(apply_op(op, t1, t2).elements.values())[0] == apply_op(op, numeric_primitive(t1),
+                                                                          list(t2.elements.values())[0])
