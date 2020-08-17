@@ -109,8 +109,6 @@ class SimpleBlock:
             This Jacobian is a SimpleSparse object or, if T specific, a T*T matrix, omitted by convention
             if zero
         """
-        if shock_list is None:
-            shock_list = self.input_list
 
         invertedJ = {shock_name: {} for shock_name in shock_list}
 
@@ -124,7 +122,13 @@ class SimpleBlock:
         J = {o: {} for o in self.output_list}
         for o in self.output_list:
             for i in shock_list:
-                J[o][i] = invertedJ[i][o]
+                # Remove empty Jacobians corresponding to outputs of a block.
+                # This occurs when a block's output is not a function of any of the shocks and hence does not change with
+                # respect to them.
+                if not invertedJ[i][o]:
+                    continue
+                else:
+                    J[o][i] = invertedJ[i][o]
 
         return J
 
