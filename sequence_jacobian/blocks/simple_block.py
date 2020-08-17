@@ -1,5 +1,6 @@
 import numpy as np
 import numbers
+from copy import copy
 from numba import njit
 
 from .. import utils
@@ -110,55 +111,32 @@ class SimpleBlock:
         if shock_list is None:
             shock_list = self.input_list
 
-        raw_derivatives = {o: {} for o in self.output_list}
-
-        # initialize dict of default inputs k on which we'll evaluate simple blocks
-        # each element is 'Ignore' object containing ss value of input k that ignores
-        # time displacement, i.e. k(3) in a simple block will evaluate to just ss k
-        x_ss_new = {k: ignore(ss[k]) for k in self.input_list}
+        invertedJ = {shock_name: {} for shock_name in shock_list}
 
         # loop over all inputs k which we want to differentiate
-        for k in shock_list:
-            # detect all non-zero time displacements i with which k(i) appears in f
-            # wrap steady-state values in Reporter class (similar to Ignore but adds any time
-            # displacements to shared set), then feed into f
-            reporter = Reporter(ss[k])
-            x_ss_new[k] = reporter
-            self.f(**x_ss_new)
-            relevant_displacements = reporter.myset
+        for shock in shock_list:
 
-            # add zero by default (Reporter can't detect, since no explicit call k(0) required)
-            relevant_displacements.add(0)
+            def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):
+                """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
+                input_args = {i: ignore(steady_state_dict[i]) for i in utils.input_list(f)}
+                input_args[shock_name] = DerivativeMap(ss=steady_state_dict[shock_name])
 
-            # evaluate derivative with respect to input at each displacement i
-            for i in relevant_displacements:
-                # perturb k(i) up by +h from steady state and evaluate f
-                x_ss_new[k] = Perturb(ss[k], h, i)
-                y_up_all = utils.make_tuple(self.f(**x_ss_new))
+                J = {o: {} for o in utils.output_list(f)}
+                for o, o_name in zip(utils.make_tuple(f(**input_args)), utils.output_list(f)):
+                    if isinstance(o, DerivativeMap):
+                        J[o_name] = SimpleSparse(o.elements) if T is None else SimpleSparse(o.elements).matrix(T)
 
-                # perturb k(i) down by -h from steady state and evaluate f
-                x_ss_new[k] = Perturb(ss[k], -h, i)
-                y_down_all = utils.make_tuple(self.f(**x_ss_new))
+                return J
 
-                # for each output o of f, if affected, store derivative in rawderivatives[o][k][i]
-                # this builds up Jacobian rawderivatives[o][k] of output o with respect to input k
-                # which is 'sparsederiv' dict mapping time displacements 'i' to derivatives
-                for y_up, y_down, o in zip(y_up_all, y_down_all, self.output_list):
-                    if y_up != y_down:
-                        sparsederiv = raw_derivatives[o].setdefault(k, {})
-                        sparsederiv[i] = (y_up - y_down) / (2 * h)
-            
-            # replace our Perturb object for k with Ignore object, so we can run with other k
-            x_ss_new[k] = ignore(ss[k])
+            invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock, T=T)
 
-        # process raw_derivatives to return either SimpleSparse objects or (if T provided) matrices
+        # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
+        # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
+        # the Jacobian curlyJ^{o,i}.
         J = {o: {} for o in self.output_list}
         for o in self.output_list:
-            for k in raw_derivatives[o].keys():
-                if T is None:
-                    J[o][k] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][k])
-                else:
-                    J[o][k] = SimpleSparse.from_simple_diagonals(raw_derivatives[o][k]).matrix(T)
+            for i in shock_list:
+                J[o][i] = invertedJ[i][o]
 
         return J
 
@@ -459,43 +437,172 @@ class Displace(np.ndarray):
             return self
 
 
-class Reporter(float):
-    """This class adds to a shared set to tell us what x[i] are accessed.
-    Needed for differentiation in SimpleBlock.jac()"""
+class DerivativeMap:
+    """A mapping (i, m) -> x, where i is the index of the non-zero diagonal relative to the main diagonal (0), where
+    m is the number of initial entries missing from the diagonal (same conceptually as in SimpleSparse).
+    The purpose of this object is to be an efficient, flexible container for accumulating derivative information
+    while calculating the Jacobian of a SimpleBlock.
+    """
 
-    def __init__(self, value):
-        self.myset = set()
+    def __init__(self, elements={(0, 0): 1.}, ss=1.):
+        self.elements = elements
+        self.ss = ss
+        self._keys = list(self.elements.keys())
+        self._values = np.fromiter(self.elements.values(), dtype=float)
 
-    def __call__(self, index):
-        self.myset.add(index)
-        return self
+    def __repr__(self):
+        formatted = '{' + ', '.join(f'({i}, {m}): {x:.3f}' for (i, m), x in self.elements.items()) + '}'
+        return f'DerivativeMap({formatted})'
 
-
-class Perturb(float):
-    """This class uses the shared set to perturb each x[i] separately, starting at steady-state values.
-    Needed for differentiation in SimpleBlock.jac()"""
-
-    def __new__(cls, value, h, index):
-        if index == 0:
-            return float.__new__(cls, value + h)
-        else:
-            return float.__new__(cls, value)
-
-    def __init__(self, value, h, index):
-        self.h = h
-        self.index = index
-
-    def __call__(self, index):
-        if self.index == 0:
-            if index == 0:
-                return self
+    # Treat it as if the operator Q_(i, 0) is being applied to Q_(j, n), following the notation in the paper
+    # s.t. Q_(i, 0) Q_(j, n) = Q(k,l)
+    def __call__(self, shift):
+        def compute_l(i, j, n):
+            if i >= 0 and j >= 0:
+                return max(-j, n)
+            elif i >= 0 and j <= 0:
+                return max(0, n) + min(i, -j)
+            elif i <= 0 and j >= 0 and i + j >= 0:
+                return max(-i - j, n)
+            elif i <= 0 and j >= 0 and i + j <= 0:
+                return max(n + i + j, 0)
             else:
-                return self - self.h
+                return max(0, n + i)
+
+        keys = [(j + shift, compute_l(shift, j, n)) for j, n in self._keys]
+        return DerivativeMap(elements=dict(zip(keys, self._values)))
+
+    def __pos__(self):
+        return DerivativeMap(elements=dict(zip(self._keys, +self._values)), ss=+self.ss)
+
+    def __neg__(self):
+        return DerivativeMap(elements=dict(zip(self._keys, -self._values)), ss=-self.ss)
+
+    def __add__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, self._values + numeric_primitive(other))),
+                                 ss=self.ss + numeric_primitive(other))
+        elif isinstance(other, DerivativeMap):
+            elements = self.elements.copy()
+            for im, x in other.elements.items():
+                if im in elements:
+                    elements[im] += x
+                    # safeguard to retain sparsity: disregard extremely small elements (num error)
+                    if abs(elements[im]) < 1E-14:
+                        del elements[im]
+                else:
+                    elements[im] = x
+
+            return DerivativeMap(elements=elements, ss=self.ss + other.ss)
         else:
-            if self.index == index:
-                return self + self.h
-            else:
-                return self
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __radd__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) + self._values)),
+                                 ss=numeric_primitive(other) + self.ss)
+        elif isinstance(other, DerivativeMap):
+            elements = other.elements.copy()
+            for im, x in self.elements.items():
+                if im in elements:
+                    elements[im] += x
+                    # safeguard to retain sparsity: disregard extremely small elements (num error)
+                    if abs(elements[im]) < 1E-14:
+                        del elements[im]
+                else:
+                    elements[im] = x
+
+            return DerivativeMap(elements=elements, ss=other.ss + self.ss)
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __sub__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, self._values - numeric_primitive(other))),
+                                 ss=self.ss - numeric_primitive(other))
+        elif isinstance(other, DerivativeMap):
+            elements = self.elements.copy()
+            for im, x in other.elements.items():
+                if im in elements:
+                    elements[im] -= x
+                    # safeguard to retain sparsity: disregard extremely small elements (num error)
+                    if abs(elements[im]) < 1E-14:
+                        del elements[im]
+                else:
+                    elements[im] = x
+
+            return DerivativeMap(elements=elements, ss=self.ss - other.ss)
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __rsub__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) - self._values)),
+                                 ss=numeric_primitive(other) - self.ss)
+        elif isinstance(other, DerivativeMap):
+            elements = other.elements.copy()
+            for im, x in self.elements.items():
+                if im in elements:
+                    elements[im] -= x
+                    # safeguard to retain sparsity: disregard extremely small elements (num error)
+                    if abs(elements[im]) < 1E-14:
+                        del elements[im]
+                else:
+                    elements[im] = x
+
+            return DerivativeMap(elements=elements, ss=other.ss - self.ss)
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __mul__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, self._values * numeric_primitive(other))),
+                                 ss=self.ss * numeric_primitive(other))
+        elif isinstance(other, DerivativeMap):
+            return self * other.ss + other * self.ss
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __rmul__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) * self._values)),
+                                 ss=numeric_primitive(other) * self.ss)
+        elif isinstance(other, DerivativeMap):
+            return other * self.ss + self * other.ss
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __truediv__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, self._values/numeric_primitive(other))),
+                                 ss=self.ss/numeric_primitive(other))
+        elif isinstance(other, DerivativeMap):
+            return (other.ss * self - self.ss * other.ss)/(other.ss**2)
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __rtruediv__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other)/self._values)),
+                                 ss=numeric_primitive(other)/self.ss)
+        elif isinstance(other, DerivativeMap):
+            return (self.ss * other - other.ss * self)/(self.ss**2)
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __pow__(self, power, modulo=None):
+        if np.isscalar(power):
+            return DerivativeMap(elements=dict(zip(self._keys, self._values**numeric_primitive(power))),
+                                 ss=self.ss**numeric_primitive(power))
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
+
+    def __rpow__(self, other):
+        if np.isscalar(other):
+            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other)**self._values)),
+                                 ss=numeric_primitive(other)**self.ss)
+        else:
+            raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
 
 def numeric_primitive(instance):
