@@ -87,7 +87,7 @@ class SimpleBlock:
 
         return self._output_in_td_format(**kwargs_new)
 
-    def jac(self, ss, T=None, shock_list=None):
+    def jac(self, ss, T=None, shock_list=[]):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -110,27 +110,34 @@ class SimpleBlock:
             if zero
         """
 
-        invertedJ = {shock_name: {} for shock_name in shock_list}
+        relevant_shocks = [i for i in self.inputs if i in shock_list]
 
-        # Loop over all inputs/shocks which we want to differentiate with respect to
-        for shock in shock_list:
-            invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock, T=T)
+        # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
+        # are an input into the block), then return an empty dict
+        if not relevant_shocks:
+            return {}
+        else:
+            invertedJ = {shock_name: {} for shock_name in relevant_shocks}
 
-        # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
-        # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
-        # the Jacobian curlyJ^{o,i}.
-        J = {o: {} for o in self.output_list}
-        for o in self.output_list:
-            for i in shock_list:
-                # Remove empty Jacobians corresponding to outputs of a block.
-                # This occurs when a block's output is not a function of any of the shocks and hence does not change with
-                # respect to them.
-                if not invertedJ[i][o]:
-                    continue
-                else:
-                    J[o][i] = invertedJ[i][o]
+            # Loop over all inputs/shocks which we want to differentiate with respect to
+            for shock in relevant_shocks:
+                invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock, T=T)
 
-        return J
+            # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
+            # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
+            # the Jacobian curlyJ^{o,i}.
+            J = {o: {} for o in self.output_list}
+            for o in self.output_list:
+                for i in relevant_shocks:
+                    # Remove empty Jacobians corresponding to outputs of a block.
+                    # This occurs when one of the block's outputs is not a function of any of the shocks
+                    # and hence does not change with respect to them.
+                    if not invertedJ[i][o]:
+                        continue
+                    else:
+                        J[o][i] = invertedJ[i][o]
+
+            return J
 
 
 def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):

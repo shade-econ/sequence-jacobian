@@ -60,12 +60,16 @@ class SolvedBlock:
                                   returnindividual=returnindividual, noisy=noisy, **kwargs)
     
     def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):
+        relevant_shocks = [i for i in self.inputs if i in shock_list]
+
         # H_U_factored caching could be helpful here too
-        return jac.get_G(self.block_list, shock_list, list(self.unknowns.keys()), self.targets,
+        return jac.get_G(self.block_list, relevant_shocks, list(self.unknowns.keys()), self.targets,
                          T, ss, output_list, save=save, use_saved=use_saved)
 
     def ajac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False, Tpost=None):
+        relevant_shocks = [i for i in self.inputs if i in shock_list]
+
         if Tpost is None:
             Tpost = 2*T
-        return jac.get_G_asymptotic(self.block_list, shock_list, list(self.unknowns.keys()),
+        return jac.get_G_asymptotic(self.block_list, relevant_shocks, list(self.unknowns.keys()),
                                     self.targets, T, ss, output_list, save=save, use_saved=use_saved, Tpost=Tpost)

@@ -288,10 +288,12 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_outputs
 
+        relevant_shocks = [i for i in self.inputs if i in shock_list]
+
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
             return utils.extract_nested_dict(savedA=self.saved['J'],
-                                             keys1=[o.upper() for o in output_list], keys2=shock_list, shape=(T, T))
+                                             keys1=[o.upper() for o in output_list], keys2=relevant_shocks, shape=(T, T))
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
@@ -300,7 +302,7 @@ class HetBlock:
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
-        for i in shock_list:
+        for i in relevant_shocks:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, ssin_dict, ssout_list,
                                                 ss['D'], Pi.T.copy(), sspol_i, sspol_pi, sspol_space, T, h,
                                                 ss_for_hetinput)
@@ -316,12 +318,12 @@ class HetBlock:
         F = {o.upper(): {} for o in output_list}
         J = {o.upper(): {} for o in output_list}
         for o in output_list:
-            for i in shock_list:
+            for i in relevant_shocks:
                 F[o.upper()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
 
         if save:
-            self.saved_shock_list, self.saved_output_list = shock_list, output_list
+            self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
             self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
 
         return J
@@ -339,6 +341,8 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_outputs
 
+        relevant_shocks = [i for i in self.inputs if i in shock_list]
+
         # if Tpost not provided, assume it is 2*T by default
         if Tpost is None:
             Tpost = 2*T
@@ -350,7 +354,7 @@ class HetBlock:
             asympJ = {}
             for o in output_list:
                 asympJ[o.upper()] = {}
-                for i in shock_list:
+                for i in relevant_shocks:
                     asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
                                                 self.saved['asympJ'][o.upper()][i][-(Tpost-1): Tpost])
             return asympJ
@@ -364,8 +368,8 @@ class HetBlock:
         if use_saved and 'curlyYs' in self.saved:
             # was saved by jac, first copy curlyYs, curlyDs, curlyPs
             curlyYs = utils.extract_nested_dict(savedA=self.saved['curlyYs'],
-                                                keys1=shock_list, keys2=output_list, shape=(T,))
-            curlyDs = utils.extract_dict(savedA=self.saved['curlyDs'], keys=shock_list, shape=(T,))
+                                                keys1=relevant_shocks, keys2=output_list, shape=(T,))
+            curlyDs = utils.extract_dict(savedA=self.saved['curlyDs'], keys=relevant_shocks, shape=(T,))
             curlyPs_old = utils.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T - 1,))
 
             # now need curlyPs that go to T+Tpost-1, not just T
@@ -378,7 +382,7 @@ class HetBlock:
             # was not saved at all, get curlyYs, curlyDs, curlyPs for ourselves
             # step 1: compute curlyY and curlyD (backward iteration) for each input i (same as jac)
             curlyYs, curlyDs = {}, {}
-            for i in shock_list:
+            for i in relevant_shocks:
                 curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, 
                                                     ssin_dict, ssout_list, ss['D'], Pi.T.copy(), sspol_i, 
                                                     sspol_pi, sspol_space, T, h, ss_for_hetinput)
@@ -393,7 +397,7 @@ class HetBlock:
         J = {o.upper(): {} for o in output_list}
         asympJ = {o.upper(): {} for o in output_list}
         for o in output_list:
-            for i in shock_list:
+            for i in relevant_shocks:
                 F = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.upper()][i] = HetBlock.J_from_F(F)
                 asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
@@ -401,7 +405,7 @@ class HetBlock:
 
         # if supposed to save, record J and asympJ for use by jac or ajac
         if save:
-            self.saved_shock_list, self.saved_output_list = shock_list, output_list
+            self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
             self.saved = {'J' : J, 'asympJ' : asympJ}
 
         return asympJ
