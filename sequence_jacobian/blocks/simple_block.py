@@ -1,6 +1,6 @@
 import numpy as np
 import numbers
-from copy import copy
+import copy
 from numba import njit
 from warnings import warn
 
@@ -393,6 +393,9 @@ class Ignore(float):
     def __call__(self, index):
         return self
 
+    def apply(self, f, **kwargs):
+        return ignore(f(numeric_primitive(self), **kwargs))
+
     def __pos__(self):
         return self
 
@@ -476,6 +479,9 @@ class IgnoreVector(np.ndarray):
 
     def __call__(self, index):
         return self
+
+    def apply(self, f, **kwargs):
+        return ignore(f(numeric_primitive(self), **kwargs))
 
     def __add__(self, other):
         if isinstance(other, Displace) or isinstance(other, DerivativeMap):
@@ -566,6 +572,9 @@ class Displace(np.ndarray):
             return Displace(newx, ss=self.ss)
         else:
             return self
+
+    def apply(self, f, **kwargs):
+        return Displace(f(numeric_primitive(self), **kwargs), ss=f(self.ss))
 
     def __pos__(self):
         return self
@@ -727,6 +736,10 @@ class DerivativeMap:
     def __call__(self, i):
         keys = [(i + j, compute_l(i, 0, j, n)) for j, n in self._keys]
         return DerivativeMap(elements=dict(zip(keys, self._values)), ss=self.ss)
+
+    def apply(self, f, **kwargs):
+        return DerivativeMap(elements=dict(zip(self._keys, [f(x, **kwargs) for x in self._values])),
+                             ss=f(self.ss, **kwargs))
 
     def __pos__(self):
         return DerivativeMap(elements=dict(zip(self._keys, +self._values)), ss=+self.ss)
@@ -929,5 +942,7 @@ def apply_function(func, *args, **kwargs):
     if np.any([isinstance(x, Displace) for x in args]):
         x_path = vectorize_func_over_time(func, *args)
         return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args]))
+    elif np.any([isinstance(x, DerivativeMap) for x in args]):
+        raise NotImplementedError("Have not yet implemented general apply_function functionality for DerivativeMaps")
     else:
         return func(*args, **kwargs)
