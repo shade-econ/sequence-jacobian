@@ -129,13 +129,15 @@ class SimpleBlock:
             J = {o: {} for o in self.output_list}
             for o in self.output_list:
                 for i in relevant_shocks:
-                    # Remove empty Jacobians corresponding to outputs of a block.
-                    # This occurs when one of the block's outputs is not a function of any of the shocks
-                    # and hence does not change with respect to them.
+                    # Do not write an entry into J if shock `i` did not affect output `o`
                     if not invertedJ[i][o]:
                         continue
                     else:
                         J[o][i] = invertedJ[i][o]
+                # If output `o` is entirely unaffected by all of the shocks passed in, then
+                # remove the empty Jacobian corresponding to `o` from J
+                if not J[o]:
+                    del J[o]
 
             return J
 
@@ -748,9 +750,14 @@ class DerivativeMap:
         keys = [(i + j, compute_l(i, 0, j, n)) for j, n in self._keys]
         return DerivativeMap(elements=dict(zip(keys, self._values)), ss=self.ss)
 
-    def apply(self, f, **kwargs):
-        return DerivativeMap(elements=dict(zip(self._keys, [f(x, **kwargs) for x in self._values])),
-                             ss=f(self.ss, **kwargs))
+    def apply(self, f, h=1e-5, **kwargs):
+        if f == np.log:
+            return DerivativeMap(elements=dict(zip(self._keys, [1/x for x in self._values])),
+                                 ss=f(self.ss, **kwargs))
+        else:
+            return DerivativeMap(elements=dict(zip(self._keys, [(f(x + h, **kwargs) - f(x - h, **kwargs))/(2*h)
+                                                                for x in self._values])),
+                                 ss=f(self.ss, **kwargs))
 
     def __pos__(self):
         return DerivativeMap(elements=dict(zip(self._keys, +self._values)), ss=+self.ss)
@@ -809,7 +816,7 @@ class DerivativeMap:
                     if abs(elements[im]) < 1E-14:
                         del elements[im]
                 else:
-                    elements[im] = x
+                    elements[im] = -x
 
             return DerivativeMap(elements=elements, ss=self.ss - other.ss)
         else:
@@ -828,7 +835,7 @@ class DerivativeMap:
                     if abs(elements[im]) < 1E-14:
                         del elements[im]
                 else:
-                    elements[im] = x
+                    elements[im] = -x
 
             return DerivativeMap(elements=elements, ss=other.ss - self.ss)
         else:
@@ -857,7 +864,7 @@ class DerivativeMap:
             return DerivativeMap(elements=dict(zip(self._keys, self._values/numeric_primitive(other))),
                                  ss=self.ss/numeric_primitive(other))
         elif isinstance(other, DerivativeMap):
-            return (other.ss * self - self.ss * other.ss)/(other.ss**2)
+            return (other.ss * self - self.ss * other)/(other.ss**2)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
