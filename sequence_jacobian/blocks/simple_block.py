@@ -87,7 +87,7 @@ class SimpleBlock:
 
         return self._output_in_td_format(**kwargs_new)
 
-    def jac(self, ss, T=None, shock_list=None, h=1E-5):
+    def jac(self, ss, T=None, shock_list=None):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -114,21 +114,8 @@ class SimpleBlock:
 
         invertedJ = {shock_name: {} for shock_name in shock_list}
 
-        # loop over all inputs k which we want to differentiate
+        # Loop over all inputs/shocks which we want to differentiate with respect to
         for shock in shock_list:
-
-            def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):
-                """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
-                input_args = {i: ignore(steady_state_dict[i]) for i in utils.input_list(f)}
-                input_args[shock_name] = DerivativeMap(ss=steady_state_dict[shock_name])
-
-                J = {o: {} for o in utils.output_list(f)}
-                for o, o_name in zip(utils.make_tuple(f(**input_args)), utils.output_list(f)):
-                    if isinstance(o, DerivativeMap):
-                        J[o_name] = SimpleSparse(o.elements) if T is None else SimpleSparse(o.elements).matrix(T)
-
-                return J
-
             invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock, T=T)
 
         # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
@@ -140,6 +127,19 @@ class SimpleBlock:
                 J[o][i] = invertedJ[i][o]
 
         return J
+
+
+def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):
+    """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
+    input_args = {i: ignore(steady_state_dict[i]) for i in utils.input_list(f)}
+    input_args[shock_name] = DerivativeMap(ss=steady_state_dict[shock_name])
+
+    J = {o: {} for o in utils.output_list(f)}
+    for o, o_name in zip(utils.make_tuple(f(**input_args)), utils.output_list(f)):
+        if isinstance(o, DerivativeMap):
+            J[o_name] = SimpleSparse(o.elements) if T is None else SimpleSparse(o.elements).matrix(T)
+
+    return J
 
 
 '''Part 2: SimpleSparse class to represent and work with sparse Jacobians of SimpleBlocks'''
@@ -714,7 +714,7 @@ class DerivativeMap:
 
     def __init__(self, elements={(0, 0): 1.}, ss=1.):
         self.elements = elements
-        self.ss = ss
+        self.ss = ss  # Track the ss value of the DerivativeMap so we can properly apply the chain rule if needed
         self._keys = list(self.elements.keys())
         self._values = np.fromiter(self.elements.values(), dtype=float)
 
@@ -726,7 +726,7 @@ class DerivativeMap:
     # s.t. Q_(i, 0) Q_(j, n) = Q(k,l)
     def __call__(self, i):
         keys = [(i + j, compute_l(i, 0, j, n)) for j, n in self._keys]
-        return DerivativeMap(elements=dict(zip(keys, self._values)))
+        return DerivativeMap(elements=dict(zip(keys, self._values)), ss=self.ss)
 
     def __pos__(self):
         return DerivativeMap(elements=dict(zip(self._keys, +self._values)), ss=+self.ss)
@@ -736,7 +736,7 @@ class DerivativeMap:
 
     def __add__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values + numeric_primitive(other))),
+            return DerivativeMap(elements=dict(zip(self._keys, self._values)),
                                  ss=self.ss + numeric_primitive(other))
         elif isinstance(other, DerivativeMap):
             elements = self.elements.copy()
@@ -755,7 +755,7 @@ class DerivativeMap:
 
     def __radd__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) + self._values)),
+            return DerivativeMap(elements=dict(zip(self._keys, self._values)),
                                  ss=numeric_primitive(other) + self.ss)
         elif isinstance(other, DerivativeMap):
             elements = other.elements.copy()
@@ -774,7 +774,7 @@ class DerivativeMap:
 
     def __sub__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values - numeric_primitive(other))),
+            return DerivativeMap(elements=dict(zip(self._keys, self._values)),
                                  ss=self.ss - numeric_primitive(other))
         elif isinstance(other, DerivativeMap):
             elements = self.elements.copy()
@@ -793,7 +793,7 @@ class DerivativeMap:
 
     def __rsub__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) - self._values)),
+            return DerivativeMap(elements=dict(zip(self._keys, -self._values)),
                                  ss=numeric_primitive(other) - self.ss)
         elif isinstance(other, DerivativeMap):
             elements = other.elements.copy()
@@ -848,7 +848,8 @@ class DerivativeMap:
 
     def __pow__(self, power, modulo=None):
         if np.isscalar(power):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values**numeric_primitive(power))),
+            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(power) *
+                                                   self.ss**numeric_primitive(power - 1) * self._values)),
                                  ss=self.ss**numeric_primitive(power))
         elif isinstance(power, DerivativeMap):
             return NotImplemented
@@ -857,7 +858,7 @@ class DerivativeMap:
 
     def __rpow__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other)**self._values)),
+            return DerivativeMap(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other)**self._values)),
                                  ss=numeric_primitive(other)**self.ss)
         elif isinstance(other, DerivativeMap):
             return NotImplemented
