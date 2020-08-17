@@ -130,10 +130,10 @@ class SimpleBlock:
             for o in self.output_list:
                 for i in relevant_shocks:
                     # Do not write an entry into J if shock `i` did not affect output `o`
-                    if not invertedJ[i][o]:
+                    if not invertedJ[i][o] or invertedJ[i][o].iszero:
                         continue
                     else:
-                        J[o][i] = invertedJ[i][o]
+                        J[o][i] = invertedJ[i][o].nonzero()
                 # If output `o` is entirely unaffected by all of the shocks passed in, then
                 # remove the empty Jacobian corresponding to `o` from J
                 if not J[o]:
@@ -226,6 +226,18 @@ class SimpleSparse:
     def T(self):
         """Transpose"""
         return SimpleSparse({(-i, m): x for (i, m), x in self.elements.items()})
+
+    @property
+    def iszero(self):
+        return not self.nonzero().elements
+
+    def nonzero(self):
+        elements = self.elements.copy()
+        for im, x in self.elements.items():
+            # safeguard to retain sparsity: disregard extremely small elements (num error)
+            if abs(elements[im]) < 1E-14:
+                del elements[im]
+        return SimpleSparse(elements)
 
     def __pos__(self):
         return self
@@ -870,7 +882,7 @@ class DerivativeMap:
 
     def __rtruediv__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other)/self._values)),
+            return DerivativeMap(elements=dict(zip(self._keys, -numeric_primitive(other)/(self._values)**2)),
                                  ss=numeric_primitive(other)/self.ss)
         elif isinstance(other, DerivativeMap):
             return (self.ss * other - other.ss * self)/(self.ss**2)
