@@ -265,7 +265,14 @@ def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
 
 
 @simple
-def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
+def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U):
+    asset_mkt = p + Bg - B - A
+    labor_mkt = vphi - muw * (1 - tax) * w * U
+    return asset_mkt, labor_mkt
+
+
+@simple
+def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
     asset_mkt = p + Bg - B - A
     labor_mkt = vphi - muw * (1 - tax) * w * U
     goods_mkt = C + I + G + Chi + omega * B - 1
@@ -387,7 +394,8 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
     assert np.abs(goods_mkt) < 1E-7
 
     ss.update({'pi': 0, 'piw': 0, 'Q': 1, 'Y': 1, 'N': 1, 'mc': mc, 'K': K, 'Z': Z, 'I': I, 'w': w, 'tax': tax,
-               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'Chi': Chi, 'goods_mkt': goods_mkt, 'phi': phi,
+               # 'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'Chi': Chi, 'goods_mkt': goods_mkt, 'phi': phi,
+               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'phi': phi,
                'beta': beta, 'vphi': vphi, 'omega': omega, 'alpha': alpha, 'delta': delta, 'mup': mup, 'muw': muw,
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'z_grid': z_grid, 'e_grid': e_grid,
                'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r,
