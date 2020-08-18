@@ -150,23 +150,74 @@ def test_derivative_map():
     # TODO: Only test against scalars as of now. Will need to revisit this to test against vectors
     #   e.g. IgnoreVector, once hetinput/hetoutput functionality is enhanced
     # Test binary operations
-    arg_pairs = [(DerivativeMap(elements={(1, 1): 2.}, ss=2.), 1),
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.), Ignore(1)),
-                 (1, DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
-                 (Ignore(1), DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
+    arg_pairs = [(DerivativeMap(elements={(1, 1): 2.}, ss=2.), 3),
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.), Ignore(3)),
+                 (3, DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
+                 (Ignore(3), DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.),
+                  DerivativeMap(elements={(1, 1): 4.}, ss=5.)),
+                 # TODO: Implement test for elements not in the same (i, m)
+                 # (DerivativeMap(elements={(1, 1): 2.}, ss=2.),
+                 #  DerivativeMap(elements={(1, 0): 4.}, ss=5.)),
 
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), 1),
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), Ignore(1)),
-                 (1, DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1)),
-                 (Ignore(1), DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1))]
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), 3),
+                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), Ignore(3)),
+                 (3, DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1)),
+                 (Ignore(3), DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1))]
+
+    def get_single_element_from_dmap(x):
+        return list(x.elements.values())[0]
+
     for pair in arg_pairs:
         t1, t2 = pair
         for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
                    "__truediv__", "__rtruediv__", "__pow__", "__rpow__"]:
+
             assert type(apply_op(op, t1, t2)) == DerivativeMap
-            if isinstance(t1, DerivativeMap):
-                assert list(apply_op(op, t1, t2).elements.values())[0] == apply_op(op, list(t1.elements.values())[0],
-                                                                          numeric_primitive(t2))
+
+            result = get_single_element_from_dmap(apply_op(op, t1, t2))
+
+            if isinstance(t1, DerivativeMap) and isinstance(t2, DerivativeMap):
+                assert apply_op(op, t1, t2).ss == apply_op(op, t1.ss, t2.ss)
+
+                if op in ["__add__", "__radd__", "__sub__", "__rsub__"]:
+                    assert result == apply_op(op, get_single_element_from_dmap(t1), get_single_element_from_dmap(t2))
+                elif op in ["__mul__", "__rmul__"]:
+                    assert result == get_single_element_from_dmap(t1) * t2.ss + t1.ss * get_single_element_from_dmap(t2)
+                elif op == "__truediv__":
+                    assert result == (t2.ss * get_single_element_from_dmap(t1) - t1.ss * get_single_element_from_dmap(t2))/t2.ss**2
+                elif op == "__rtruediv__":
+                    assert result == (t1.ss * get_single_element_from_dmap(t2) - t2.ss * get_single_element_from_dmap(t1))/t1.ss**2
+                elif op == "__pow__":
+                    assert result == (t1.ss ** (t2.ss - 1)) * (t2.ss * get_single_element_from_dmap(t1) +\
+                                                               t1.ss * np.log(t1.ss) * get_single_element_from_dmap(t2))
+                else:  # op == "__rpow__":
+                    assert result == (t2.ss ** (t1.ss - 1)) * (t1.ss * get_single_element_from_dmap(t2) +\
+                                                               t2.ss * np.log(t2.ss) * get_single_element_from_dmap(t1))
             else:
-                assert list(apply_op(op, t1, t2).elements.values())[0] == apply_op(op, numeric_primitive(t1),
-                                                                          list(t2.elements.values())[0])
+                assert apply_op(op, t1, t2).ss == apply_op(op, t1.ss, numeric_primitive(t2))\
+                    if isinstance(t1, DerivativeMap) else apply_op(op, numeric_primitive(t1), t2.ss)
+
+                if op in ["__add__", "__radd__", "__sub__"]:
+                    assert result == get_single_element_from_dmap(t1) if\
+                        isinstance(t1, DerivativeMap) else get_single_element_from_dmap(t2)
+                elif op == "__rsub__":
+                    assert result == -get_single_element_from_dmap(t1) if \
+                        isinstance(t1, DerivativeMap) else -get_single_element_from_dmap(t2)
+                elif op in ["__mul__", "__rmul__"]:
+                    assert result == numeric_primitive(t2) * get_single_element_from_dmap(t1) if isinstance(t1, DerivativeMap) else\
+                        numeric_primitive(t1) * get_single_element_from_dmap(t2)
+                elif op == "__truediv__":
+                    assert result == get_single_element_from_dmap(t1)/numeric_primitive(t2) if isinstance(t1, DerivativeMap)\
+                        else -numeric_primitive(t1)/get_single_element_from_dmap(t2)**2
+                elif op == "__rtruediv__":
+                    assert result == -numeric_primitive(t2)/get_single_element_from_dmap(t1)**2 if isinstance(t1, DerivativeMap)\
+                        else get_single_element_from_dmap(t2)/numeric_primitive(t1)
+                elif op == "__pow__":
+                    assert result == numeric_primitive(t2) * t1.ss ** (numeric_primitive(t2) - 1) * get_single_element_from_dmap(t1)\
+                        if isinstance(t1, DerivativeMap) else\
+                        np.log(numeric_primitive(t1)) * numeric_primitive(t1) ** get_single_element_from_dmap(t2)
+                else:  # op == "__rpow__"
+                    assert result == np.log(numeric_primitive(t2)) * numeric_primitive(t2) ** get_single_element_from_dmap(t1)\
+                        if isinstance(t1, DerivativeMap) else\
+                        numeric_primitive(t1) * t2.ss ** (numeric_primitive(t1) - 1) * get_single_element_from_dmap(t2)
