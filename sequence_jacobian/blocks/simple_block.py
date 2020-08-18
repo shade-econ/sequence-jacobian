@@ -512,10 +512,16 @@ class DerivativeMap:
         formatted = '{' + ', '.join(f'({i}, {m}): {x:.3f}' for (i, m), x in self.elements.items()) + '}'
         return f'DerivativeMap({formatted})'
 
-    # Treat it as if the operator Q_(i, 0) is being applied to Q_(j, n), following the notation in the paper
-    # s.t. Q_(i, 0) Q_(j, n) = Q(k,l)
+    # TODO: Rewrite this comment for clarity once confirmed that the paper's notation will change
+    #   (i, m)/(j, n) correspond to the Q_(-i, m), Q_(-j, n) operators defined for
+    #   Proposition 2 of the Sequence Space Jacobian paper.
+    #   The flipped sign in the code is so that the index 'i' matches the k(i) notation
+    #   for writing SimpleBlock functions. Thus, it follows the same convention as SimpleSparse.
+    #   Also because __call__ on a DerivativeMap is a simple shift operator, it will take the form
+    #   Q_(-i, 0) being applied to Q_(-j, n) (following the notation in the paper)
+    #   s.t. Q_(-i, 0) Q_(-j, n) = Q(k,l)
     def __call__(self, i):
-        keys = [(i + j, compute_l(i, 0, j, n)) for j, n in self._keys]
+        keys = [(i + j, compute_l(-i, 0, -j, n)) for j, n in self._keys]
         return DerivativeMap(elements=dict(zip(keys, self._values)), ss=self.ss)
 
     def apply(self, f, h=1e-5, **kwargs):
