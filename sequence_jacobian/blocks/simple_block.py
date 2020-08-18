@@ -858,7 +858,8 @@ class DerivativeMap:
             return DerivativeMap(elements=dict(zip(self._keys, self._values * numeric_primitive(other))),
                                  ss=self.ss * numeric_primitive(other))
         elif isinstance(other, DerivativeMap):
-            return self * other.ss + other * self.ss
+            return DerivativeMap(elements=(self * other.ss + other * self.ss).elements,
+                                 ss=self.ss * other.ss)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -867,7 +868,8 @@ class DerivativeMap:
             return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) * self._values)),
                                  ss=numeric_primitive(other) * self.ss)
         elif isinstance(other, DerivativeMap):
-            return other * self.ss + self * other.ss
+            return DerivativeMap(elements=(other * self.ss + self * other.ss).elements,
+                                 ss=other.ss * self.ss)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -876,7 +878,8 @@ class DerivativeMap:
             return DerivativeMap(elements=dict(zip(self._keys, self._values/numeric_primitive(other))),
                                  ss=self.ss/numeric_primitive(other))
         elif isinstance(other, DerivativeMap):
-            return (other.ss * self - self.ss * other)/(other.ss**2)
+            return DerivativeMap(elements=((other.ss * self - self.ss * other)/(other.ss**2)).elements,
+                                 ss=self.ss/other.ss)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -885,7 +888,8 @@ class DerivativeMap:
             return DerivativeMap(elements=dict(zip(self._keys, -numeric_primitive(other)/(self._values)**2)),
                                  ss=numeric_primitive(other)/self.ss)
         elif isinstance(other, DerivativeMap):
-            return (self.ss * other - other.ss * self)/(self.ss**2)
+            return DerivativeMap(elements=((self.ss * other - other.ss * self)/(self.ss**2)).elements,
+                                 ss=other.ss/self.ss)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -895,7 +899,8 @@ class DerivativeMap:
                                                    self.ss**numeric_primitive(power - 1) * self._values)),
                                  ss=self.ss**numeric_primitive(power))
         elif isinstance(power, DerivativeMap):
-            return NotImplemented
+            return DerivativeMap(elements=(self.ss ** (power.ss - 1) * (power.ss * self + power * self.ss * np.log(self.ss))).elements,
+                                 ss=self.ss ** power.ss)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -904,7 +909,8 @@ class DerivativeMap:
             return DerivativeMap(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other)**self._values)),
                                  ss=numeric_primitive(other)**self.ss)
         elif isinstance(other, DerivativeMap):
-            return NotImplemented
+            return DerivativeMap(elements=(other.ss ** (self.ss - 1) * (self.ss * other + self * other.ss * np.log(other.ss))).elements,
+                                 ss=other.ss ** self.ss)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
