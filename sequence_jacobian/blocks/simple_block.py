@@ -764,11 +764,11 @@ class DerivativeMap:
 
     def apply(self, f, h=1e-5, **kwargs):
         if f == np.log:
-            return DerivativeMap(elements=dict(zip(self._keys, [1/x for x in self._values])),
-                                 ss=f(self.ss, **kwargs))
+            return DerivativeMap(elements=dict(zip(self._keys, [1/self.ss * x for x in self._values])),
+                                 ss=np.log(self.ss))
         else:
-            return DerivativeMap(elements=dict(zip(self._keys, [(f(x + h, **kwargs) - f(x - h, **kwargs))/(2*h)
-                                                                for x in self._values])),
+            return DerivativeMap(elements=dict(zip(self._keys, [(f(self.ss + h, **kwargs) - f(self.ss - h, **kwargs))\
+                                                                /(2*h) * x for x in self._values])),
                                  ss=f(self.ss, **kwargs))
 
     def __pos__(self):
@@ -885,7 +885,7 @@ class DerivativeMap:
 
     def __rtruediv__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, -numeric_primitive(other)/(self._values)**2)),
+            return DerivativeMap(elements=dict(zip(self._keys, -numeric_primitive(other)/(self.ss)**2 * self._values)),
                                  ss=numeric_primitive(other)/self.ss)
         elif isinstance(other, DerivativeMap):
             return DerivativeMap(elements=((self.ss * other - other.ss * self)/(self.ss**2)).elements,
@@ -906,7 +906,7 @@ class DerivativeMap:
 
     def __rpow__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other)**self._values)),
+            return DerivativeMap(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other)**self.ss * self._values)),
                                  ss=numeric_primitive(other)**self.ss)
         elif isinstance(other, DerivativeMap):
             return DerivativeMap(elements=(other.ss ** (self.ss - 1) * (self.ss * other + self * other.ss * np.log(other.ss))).elements,

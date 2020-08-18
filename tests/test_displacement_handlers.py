@@ -209,15 +209,15 @@ def test_derivative_map():
                         numeric_primitive(t1) * get_single_element_from_dmap(t2)
                 elif op == "__truediv__":
                     assert result == get_single_element_from_dmap(t1)/numeric_primitive(t2) if isinstance(t1, DerivativeMap)\
-                        else -numeric_primitive(t1)/get_single_element_from_dmap(t2)**2
+                        else -numeric_primitive(t1)/t2.ss**2 * get_single_element_from_dmap(t2)
                 elif op == "__rtruediv__":
-                    assert result == -numeric_primitive(t2)/get_single_element_from_dmap(t1)**2 if isinstance(t1, DerivativeMap)\
+                    assert result == -numeric_primitive(t2)/t1.ss**2 * get_single_element_from_dmap(t1) if isinstance(t1, DerivativeMap)\
                         else get_single_element_from_dmap(t2)/numeric_primitive(t1)
                 elif op == "__pow__":
                     assert result == numeric_primitive(t2) * t1.ss ** (numeric_primitive(t2) - 1) * get_single_element_from_dmap(t1)\
                         if isinstance(t1, DerivativeMap) else\
-                        np.log(numeric_primitive(t1)) * numeric_primitive(t1) ** get_single_element_from_dmap(t2)
+                        np.log(numeric_primitive(t1)) * numeric_primitive(t1) ** t2.ss * get_single_element_from_dmap(t2)
                 else:  # op == "__rpow__"
-                    assert result == np.log(numeric_primitive(t2)) * numeric_primitive(t2) ** get_single_element_from_dmap(t1)\
+                    assert result == np.log(numeric_primitive(t2)) * numeric_primitive(t2) ** t1.ss * get_single_element_from_dmap(t1)\
                         if isinstance(t1, DerivativeMap) else\
                         numeric_primitive(t1) * t2.ss ** (numeric_primitive(t1) - 1) * get_single_element_from_dmap(t2)
