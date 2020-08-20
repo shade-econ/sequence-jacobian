@@ -284,7 +284,8 @@ class HetBlock:
         J : dict of {str: dict of {str: array(T,T)}}
             J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
-        # default outputs are just all outputs of back it function except backward variables
+        # The default set of outputs are all outputs of the backward iteration function
+        # except for the backward iteration variables themselves
         if output_list is None:
             output_list = self.non_back_outputs
 
@@ -293,7 +294,8 @@ class HetBlock:
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
             return utils.extract_nested_dict(savedA=self.saved['J'],
-                                             keys1=[o.upper() for o in output_list], keys2=relevant_shocks, shape=(T, T))
+                                             keys1=[o.upper() for o in output_list],
+                                             keys2=relevant_shocks, shape=(T, T))
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
@@ -656,8 +658,7 @@ class HetBlock:
         sspol_pi        : dict, weights on lower bracketing gridpoint for all in self.policy
         sspol_space     : dict, space between lower and upper bracketing gridpoints for all in self.policy
         """
-        output_names = ('ssin_dict', 'Pi', 'ssout_list',
-                            'ss_for_hetinput', 'sspol_i', 'sspol_pi', 'sspol_space')
+        output_names = ('ssin_dict', 'Pi', 'ssout_list', 'ss_for_hetinput', 'sspol_i', 'sspol_pi', 'sspol_space')
 
         if use_saved:
             if self.prelim_saved:
@@ -687,6 +688,7 @@ class HetBlock:
         toreturn = (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
         if save:
             self.prelim_saved = {k: v for (k, v) in zip(output_names, toreturn)}
+
         return toreturn
 
     def clear_saved(self):
@@ -698,30 +700,37 @@ class HetBlock:
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
-    def make_inputs(self, indict):
-        """Extract from indict exactly the inputs needed for self.back_step_fun,
-        process stuff through hetinput first if it's there"""
-        if self.hetinput is not None:
-            outputs_as_tuple = utils.make_tuple(self.hetinput(**{k: indict[k] for k in self.hetinput_inputs if k in indict}))
-            indict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
+    def make_inputs(self, all_inputs_dict):
+        """Extract from all_inputs_dict exactly the inputs needed for self.back_step_fun,
+        process stuff through self.hetinput first if it's there.
+        """
+        input_dict = copy.deepcopy(all_inputs_dict)
 
-        # check if there are entries in indict corresponding to self.inputs_p.
+        # If this HetBlock has a hetinput, then we need to compute the outputs of the hetinput first and include
+        # them as inputs for self.back_step_fun
+        if self.hetinput is not None:
+            outputs_as_tuple = utils.make_tuple(self.hetinput(**{k: input_dict[k] for k in self.hetinput_inputs if k in input_dict}))
+            input_dict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
+
+        # Check if there are entries in indict corresponding to self.inputs_p.
         # In particular, we are interested in knowing if an initial value
         # for the backward iteration variable has been provided.
         # If it has not been provided, then use self.backward_init to calculate the initial values.
-        if not self.inputs_p.issubset(set(indict.keys())):
-            initial_value_input_args = [indict[arg_name] for arg_name in utils.input_list(self.backward_init)]
-            indict.update(zip(utils.output_list(self.backward_init),
+        if not self.inputs_p.issubset(set(input_dict.keys())):
+            initial_value_input_args = [input_dict[arg_name] for arg_name in utils.input_list(self.backward_init)]
+            input_dict.update(zip(utils.output_list(self.backward_init),
                               utils.make_tuple(self.backward_init(*initial_value_input_args))))
 
-        # TODO: Check whether self.all_inputs - self.inputs_p always = self.all_inputs unintentionally.
-        #   Upon observation it seems that self.inputs_p are always without "_p" whereas the corresponding
-        #   variables in self.all_inputs always have "_p".
-        # Removing all variables in self.inputs_p (such as "Va") that are meant to be unprimed
-        indict_new = {k: indict[k] for k in self.all_inputs - self.inputs_p if k in indict}
+        # self.inputs_p indicates all variables that enter into self.back_step_fun whose name has "_p" (read as prime)
+        # Because it's the case that inside of input_dict/all_inputs_dict the names of these variables omit the "_p",
+        # we need to swap the key from the unprimed to the primed key name, such that self.back_step_fun will
+        # properly call those variables. e.g. they key "Va" will become "Va_p", associated to the same value
+        for i_p in self.inputs_p:
+            input_dict[i_p + "_p"] = input_dict[i_p]
+            del input_dict[i_p]
+
         try:
-            # Adding those same removed variables in self.inputs_p but adding a prime on them
-            return {**indict_new, **{k + '_p': indict[k] for k in self.inputs_p}}
+            return {k: input_dict[k] for k in self.all_inputs if k in input_dict}
         except KeyError as e:
             print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
             raise
