@@ -143,11 +143,11 @@ class SimpleBlock:
 def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):
     """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
     input_args = {i: ignore(steady_state_dict[i]) for i in utils.input_list(f)}
-    input_args[shock_name] = DerivativeMap(ss=steady_state_dict[shock_name])
+    input_args[shock_name] = AccumulatedDerivative(f_value=steady_state_dict[shock_name])
 
     J = {o: {} for o in utils.output_list(f)}
     for o, o_name in zip(utils.make_tuple(f(**input_args)), utils.output_list(f)):
-        if isinstance(o, DerivativeMap):
+        if isinstance(o, AccumulatedDerivative):
             J[o_name] = jacobian.SimpleSparse(o.elements) if T is None else jacobian.SimpleSparse(o.elements).matrix(T)
 
     return J
@@ -189,64 +189,64 @@ class Ignore(float):
     # the class is defined later on in the module.
     # Thus, we need to specially overload the left operations to check if `other` is a Displace to promote properly
     def __add__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__rtruediv__(numeric_primitive(self))
         else:
-            return ignore(numeric_primitive(self)/other)
+            return ignore(numeric_primitive(self) / other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__truediv__(numeric_primitive(self))
         else:
-            return ignore(other/numeric_primitive(self))
+            return ignore(other / numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace) or isinstance(power, DerivativeMap):
+        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative):
             return power.__rpow__(numeric_primitive(self))
         else:
-            return ignore(numeric_primitive(self)**power)
+            return ignore(numeric_primitive(self) ** power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__pow__(numeric_primitive(self))
         else:
-            return ignore(other**numeric_primitive(self))
+            return ignore(other ** numeric_primitive(self))
 
 
 class IgnoreVector(np.ndarray):
@@ -265,64 +265,64 @@ class IgnoreVector(np.ndarray):
         return ignore(f(numeric_primitive(self), **kwargs))
 
     def __add__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__rtruediv__(numeric_primitive(self))
         else:
-            return ignore(numeric_primitive(self)/other)
+            return ignore(numeric_primitive(self) / other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__truediv__(numeric_primitive(self))
         else:
-            return ignore(other/numeric_primitive(self))
+            return ignore(other / numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace) or isinstance(power, DerivativeMap):
+        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative):
             return power.__rpow__(numeric_primitive(self))
         else:
-            return ignore(numeric_primitive(self)**power)
+            return ignore(numeric_primitive(self) ** power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace) or isinstance(other, DerivativeMap):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
             return other.__pow__(numeric_primitive(self))
         else:
-            return ignore(other**numeric_primitive(self))
+            return ignore(other ** numeric_primitive(self))
 
 
 class Displace(np.ndarray):
@@ -495,55 +495,74 @@ class Displace(np.ndarray):
                             ss=self.ss)
 
 
-class DerivativeMap:
-    """A mapping (i, m) -> x, where i is the index of the non-zero diagonal relative to the main diagonal (0), where
-    m is the number of initial entries missing from the diagonal (same conceptually as in SimpleSparse).
-    The purpose of this object is to be an efficient, flexible container for accumulating derivative information
-    while calculating the Jacobian of a SimpleBlock.
+class AccumulatedDerivative:
+    """A container for accumulated derivative information to help calculate the sequence space Jacobian
+    of the outputs of a SimpleBlock with respect to its inputs.
+    Uses common (i, m) -> x notation as in SimpleSparse (see its docs for more details) as a sparse representation of
+    a Jacobian of outputs Y at any time t with respect to inputs X at any time s.
+
+    Attributes:
+    `.elements`: `dict`
+      A mapping from tuples, (i, m), to floats, x, where i is the index of the non-zero diagonal
+      relative to the main diagonal (0), where m is the number of initial entries missing from the diagonal
+      (same conceptually as in SimpleSparse), and x is the value of the accumulated derivatives.
+    `.f_value`: `float`
+      The function value of the AccumulatedDerivative to be used when applying the chain rule in finding a subsequent
+      simple derivative. We can think of a SimpleBlock is a composition of simple functions
+      (either time displacements, arithmetic operators, etc.), i.e. f_i(f_{i-1}(...f_2(f_1(y))...)), where
+      at each step i as we are accumulating the derivatives through each simple function, if the derivative of any
+      f_i requires the chain rule, we will need the function value of the previous f_{i-1} to calculate that derivative.
+    `._keys`: `list`
+      The keys from the `.elements` attribute for convenience.
+    `._fp_values`: `list`
+      The values from the `.elements` attribute for convenience. `_fp_values` stands for f prime values, i.e. the actual
+      values of the accumulated derivative themselves.
     """
 
-    def __init__(self, elements={(0, 0): 1.}, ss=1.):
+    def __init__(self, elements={(0, 0): 1.}, f_value=1.):
         self.elements = elements
-        self.ss = ss  # Track the ss value of the DerivativeMap so we can properly apply the chain rule if needed
+        self.f_value = f_value
         self._keys = list(self.elements.keys())
-        self._values = np.fromiter(self.elements.values(), dtype=float)
+        self._fp_values = np.fromiter(self.elements.values(), dtype=float)
 
     def __repr__(self):
         formatted = '{' + ', '.join(f'({i}, {m}): {x:.3f}' for (i, m), x in self.elements.items()) + '}'
-        return f'DerivativeMap({formatted})'
+        return f'AccumulatedDerivative({formatted})'
 
     # TODO: Rewrite this comment for clarity once confirmed that the paper's notation will change
     #   (i, m)/(j, n) correspond to the Q_(-i, m), Q_(-j, n) operators defined for
     #   Proposition 2 of the Sequence Space Jacobian paper.
     #   The flipped sign in the code is so that the index 'i' matches the k(i) notation
     #   for writing SimpleBlock functions. Thus, it follows the same convention as SimpleSparse.
-    #   Also because __call__ on a DerivativeMap is a simple shift operator, it will take the form
+    #   Also because __call__ on a AccumulatedDerivative is a simple shift operator, it will take the form
     #   Q_(-i, 0) being applied to Q_(-j, n) (following the notation in the paper)
     #   s.t. Q_(-i, 0) Q_(-j, n) = Q(k,l)
     def __call__(self, i):
         keys = [(i + j, compute_l(-i, 0, -j, n)) for j, n in self._keys]
-        return DerivativeMap(elements=dict(zip(keys, self._values)), ss=self.ss)
+        return AccumulatedDerivative(elements=dict(zip(keys, self._fp_values)), f_value=self.f_value)
 
     def apply(self, f, h=1e-5, **kwargs):
         if f == np.log:
-            return DerivativeMap(elements=dict(zip(self._keys, [1/self.ss * x for x in self._values])),
-                                 ss=np.log(self.ss))
+            return AccumulatedDerivative(elements=dict(zip(self._keys,
+                                                           [1 / self.f_value * x for x in self._fp_values])),
+                                         f_value=np.log(self.f_value))
         else:
-            return DerivativeMap(elements=dict(zip(self._keys, [(f(self.ss + h, **kwargs) - f(self.ss - h, **kwargs))\
-                                                                /(2*h) * x for x in self._values])),
-                                 ss=f(self.ss, **kwargs))
+            return AccumulatedDerivative(elements=dict(zip(self._keys, [(f(self.f_value + h, **kwargs) -
+                                                                         f(self.f_value - h, **kwargs)) / (2 * h) * x
+                                                                        for x in self._fp_values])),
+                                         f_value=f(self.f_value, **kwargs))
 
     def __pos__(self):
-        return DerivativeMap(elements=dict(zip(self._keys, +self._values)), ss=+self.ss)
+        return AccumulatedDerivative(elements=dict(zip(self._keys, +self._fp_values)), f_value=+self.f_value)
 
     def __neg__(self):
-        return DerivativeMap(elements=dict(zip(self._keys, -self._values)), ss=-self.ss)
+        return AccumulatedDerivative(elements=dict(zip(self._keys, -self._fp_values)), f_value=-self.f_value)
 
     def __add__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values)),
-                                 ss=self.ss + numeric_primitive(other))
-        elif isinstance(other, DerivativeMap):
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
+                                         f_value=self.f_value + numeric_primitive(other))
+        elif isinstance(other, AccumulatedDerivative):
             elements = self.elements.copy()
             for im, x in other.elements.items():
                 if im in elements:
@@ -554,15 +573,15 @@ class DerivativeMap:
                 else:
                     elements[im] = x
 
-            return DerivativeMap(elements=elements, ss=self.ss + other.ss)
+            return AccumulatedDerivative(elements=elements, f_value=self.f_value + other.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __radd__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values)),
-                                 ss=numeric_primitive(other) + self.ss)
-        elif isinstance(other, DerivativeMap):
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
+                                         f_value=numeric_primitive(other) + self.f_value)
+        elif isinstance(other, AccumulatedDerivative):
             elements = other.elements.copy()
             for im, x in self.elements.items():
                 if im in elements:
@@ -573,15 +592,15 @@ class DerivativeMap:
                 else:
                     elements[im] = x
 
-            return DerivativeMap(elements=elements, ss=other.ss + self.ss)
+            return AccumulatedDerivative(elements=elements, f_value=other.f_value + self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __sub__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values)),
-                                 ss=self.ss - numeric_primitive(other))
-        elif isinstance(other, DerivativeMap):
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
+                                         f_value=self.f_value - numeric_primitive(other))
+        elif isinstance(other, AccumulatedDerivative):
             elements = self.elements.copy()
             for im, x in other.elements.items():
                 if im in elements:
@@ -592,15 +611,15 @@ class DerivativeMap:
                 else:
                     elements[im] = -x
 
-            return DerivativeMap(elements=elements, ss=self.ss - other.ss)
+            return AccumulatedDerivative(elements=elements, f_value=self.f_value - other.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rsub__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, -self._values)),
-                                 ss=numeric_primitive(other) - self.ss)
-        elif isinstance(other, DerivativeMap):
+            return AccumulatedDerivative(elements=dict(zip(self._keys, -self._fp_values)),
+                                         f_value=numeric_primitive(other) - self.f_value)
+        elif isinstance(other, AccumulatedDerivative):
             elements = other.elements.copy()
             for im, x in self.elements.items():
                 if im in elements:
@@ -611,68 +630,73 @@ class DerivativeMap:
                 else:
                     elements[im] = -x
 
-            return DerivativeMap(elements=elements, ss=other.ss - self.ss)
+            return AccumulatedDerivative(elements=elements, f_value=other.f_value - self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __mul__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values * numeric_primitive(other))),
-                                 ss=self.ss * numeric_primitive(other))
-        elif isinstance(other, DerivativeMap):
-            return DerivativeMap(elements=(self * other.ss + other * self.ss).elements,
-                                 ss=self.ss * other.ss)
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values * numeric_primitive(other))),
+                                         f_value=self.f_value * numeric_primitive(other))
+        elif isinstance(other, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=(self * other.f_value + other * self.f_value).elements,
+                                         f_value=self.f_value * other.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rmul__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(other) * self._values)),
-                                 ss=numeric_primitive(other) * self.ss)
-        elif isinstance(other, DerivativeMap):
-            return DerivativeMap(elements=(other * self.ss + self * other.ss).elements,
-                                 ss=other.ss * self.ss)
+            return AccumulatedDerivative(elements=dict(zip(self._keys, numeric_primitive(other) * self._fp_values)),
+                                         f_value=numeric_primitive(other) * self.f_value)
+        elif isinstance(other, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=(other * self.f_value + self * other.f_value).elements,
+                                         f_value=other.f_value * self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __truediv__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, self._values/numeric_primitive(other))),
-                                 ss=self.ss/numeric_primitive(other))
-        elif isinstance(other, DerivativeMap):
-            return DerivativeMap(elements=((other.ss * self - self.ss * other)/(other.ss**2)).elements,
-                                 ss=self.ss/other.ss)
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values / numeric_primitive(other))),
+                                         f_value=self.f_value / numeric_primitive(other))
+        elif isinstance(other, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=((other.f_value * self - self.f_value * other) /
+                                                   (other.f_value ** 2)).elements,
+                                         f_value=self.f_value / other.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rtruediv__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, -numeric_primitive(other)/(self.ss)**2 * self._values)),
-                                 ss=numeric_primitive(other)/self.ss)
-        elif isinstance(other, DerivativeMap):
-            return DerivativeMap(elements=((self.ss * other - other.ss * self)/(self.ss**2)).elements,
-                                 ss=other.ss/self.ss)
+            return AccumulatedDerivative(elements=dict(zip(self._keys, -numeric_primitive(other) /
+                                                           self.f_value ** 2 * self._fp_values)),
+                                         f_value=numeric_primitive(other) / self.f_value)
+        elif isinstance(other, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=((self.f_value * other - other.f_value * self) /
+                                                   (self.f_value ** 2)).elements, f_value=other.f_value / self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __pow__(self, power, modulo=None):
         if np.isscalar(power):
-            return DerivativeMap(elements=dict(zip(self._keys, numeric_primitive(power) *
-                                                   self.ss**numeric_primitive(power - 1) * self._values)),
-                                 ss=self.ss**numeric_primitive(power))
-        elif isinstance(power, DerivativeMap):
-            return DerivativeMap(elements=(self.ss ** (power.ss - 1) * (power.ss * self + power * self.ss * np.log(self.ss))).elements,
-                                 ss=self.ss ** power.ss)
+            return AccumulatedDerivative(elements=dict(zip(self._keys, numeric_primitive(power) * self.f_value
+                                                           ** numeric_primitive(power - 1) * self._fp_values)),
+                                         f_value=self.f_value ** numeric_primitive(power))
+        elif isinstance(power, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=(self.f_value ** (power.f_value - 1) * (
+                                         power.f_value * self + power * self.f_value * np.log(self.f_value))).elements,
+                                         f_value=self.f_value ** power.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rpow__(self, other):
         if np.isscalar(other):
-            return DerivativeMap(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other)**self.ss * self._values)),
-                                 ss=numeric_primitive(other)**self.ss)
-        elif isinstance(other, DerivativeMap):
-            return DerivativeMap(elements=(other.ss ** (self.ss - 1) * (self.ss * other + self * other.ss * np.log(other.ss))).elements,
-                                 ss=other.ss ** self.ss)
+            return AccumulatedDerivative(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other) **
+                                                           self.f_value * self._fp_values)),
+                                         f_value=numeric_primitive(other) ** self.f_value)
+        elif isinstance(other, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=(other.f_value ** (self.f_value - 1) * (
+                                         self.f_value * other + self * other.f_value * np.log(other.f_value))).elements,
+                                         f_value=other.f_value ** self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
@@ -740,7 +764,8 @@ def apply_function(func, *args, **kwargs):
     if np.any([isinstance(x, Displace) for x in args]):
         x_path = vectorize_func_over_time(func, *args)
         return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args]))
-    elif np.any([isinstance(x, DerivativeMap) for x in args]):
-        raise NotImplementedError("Have not yet implemented general apply_function functionality for DerivativeMaps")
+    elif np.any([isinstance(x, AccumulatedDerivative) for x in args]):
+        raise NotImplementedError(
+            "Have not yet implemented general apply_function functionality for AccumulatedDerivatives")
     else:
         return func(*args, **kwargs)

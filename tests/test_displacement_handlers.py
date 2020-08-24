@@ -2,7 +2,7 @@
 import numpy as np
 
 from sequence_jacobian.blocks.simple_block import (
-    Ignore, IgnoreVector, Displace, DerivativeMap, numeric_primitive
+    Ignore, IgnoreVector, Displace, AccumulatedDerivative, numeric_primitive
 )
 
 # Define useful helper functions for testing
@@ -138,86 +138,86 @@ def test_displace():
         assert np.all(numeric_primitive(t1(1)) == t1_manual_displace)
 
 
-def test_derivative_map():
+def test_accumulated_derivative():
     # Test unary operations
-    arg_singles = [DerivativeMap(), DerivativeMap()(-1), DerivativeMap(elements={(1, 1): 2.}, ss=2.)]
+    arg_singles = [AccumulatedDerivative(), AccumulatedDerivative()(-1), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)]
     for t1 in arg_singles:
         for op in ["__neg__", "__pos__"]:
-            assert type(apply_op(op, t1)) == DerivativeMap
+            assert type(apply_op(op, t1)) == AccumulatedDerivative
             assert np.all(np.fromiter(apply_op(op, t1).elements.values(), dtype=float) ==
                           np.array([apply_op(op, v) for v in t1.elements.values()]))
 
     # TODO: Only test against scalars as of now. Will need to revisit this to test against vectors
     #   e.g. IgnoreVector, once hetinput/hetoutput functionality is enhanced
     # Test binary operations
-    arg_pairs = [(DerivativeMap(elements={(1, 1): 2.}, ss=2.), 3),
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.), Ignore(3)),
-                 (3, DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
-                 (Ignore(3), DerivativeMap(elements={(1, 1): 2.}, ss=2.)),
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.),
-                  DerivativeMap(elements={(1, 1): 4.}, ss=5.)),
+    arg_pairs = [(AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.), 3),
+                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.), Ignore(3)),
+                 (3, AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)),
+                 (Ignore(3), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)),
+                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.),
+                  AccumulatedDerivative(elements={(1, 1): 4.}, f_value=5.)),
                  # TODO: Implement test for elements not in the same (i, m)
-                 # (DerivativeMap(elements={(1, 1): 2.}, ss=2.),
-                 #  DerivativeMap(elements={(1, 0): 4.}, ss=5.)),
+                 # (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.),
+                 #  AccumulatedDerivative(elements={(1, 0): 4.}, f_value=5.)),
 
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), 3),
-                 (DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1), Ignore(3)),
-                 (3, DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1)),
-                 (Ignore(3), DerivativeMap(elements={(1, 1): 2.}, ss=2.)(-1))]
+                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1), 3),
+                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1), Ignore(3)),
+                 (3, AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1)),
+                 (Ignore(3), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1))]
 
-    def get_single_element_from_dmap(x):
-        return list(x.elements.values())[0]
+    def get_fp_value(x):
+        return x._fp_values[0]
 
     for pair in arg_pairs:
         t1, t2 = pair
         for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
                    "__truediv__", "__rtruediv__", "__pow__", "__rpow__"]:
 
-            assert type(apply_op(op, t1, t2)) == DerivativeMap
+            assert type(apply_op(op, t1, t2)) == AccumulatedDerivative
 
-            result = get_single_element_from_dmap(apply_op(op, t1, t2))
+            result = get_fp_value(apply_op(op, t1, t2))
 
-            if isinstance(t1, DerivativeMap) and isinstance(t2, DerivativeMap):
-                assert apply_op(op, t1, t2).ss == apply_op(op, t1.ss, t2.ss)
+            if isinstance(t1, AccumulatedDerivative) and isinstance(t2, AccumulatedDerivative):
+                assert apply_op(op, t1, t2).f_value == apply_op(op, t1.f_value, t2.f_value)
 
                 if op in ["__add__", "__radd__", "__sub__", "__rsub__"]:
-                    assert result == apply_op(op, get_single_element_from_dmap(t1), get_single_element_from_dmap(t2))
+                    assert result == apply_op(op, get_fp_value(t1), get_fp_value(t2))
                 elif op in ["__mul__", "__rmul__"]:
-                    assert result == get_single_element_from_dmap(t1) * t2.ss + t1.ss * get_single_element_from_dmap(t2)
+                    assert result == get_fp_value(t1) * t2.f_value + t1.f_value * get_fp_value(t2)
                 elif op == "__truediv__":
-                    assert result == (t2.ss * get_single_element_from_dmap(t1) - t1.ss * get_single_element_from_dmap(t2))/t2.ss**2
+                    assert result == (t2.f_value * get_fp_value(t1) - t1.f_value * get_fp_value(t2))/t2.f_value**2
                 elif op == "__rtruediv__":
-                    assert result == (t1.ss * get_single_element_from_dmap(t2) - t2.ss * get_single_element_from_dmap(t1))/t1.ss**2
+                    assert result == (t1.f_value * get_fp_value(t2) - t2.f_value * get_fp_value(t1))/t1.f_value**2
                 elif op == "__pow__":
-                    assert result == (t1.ss ** (t2.ss - 1)) * (t2.ss * get_single_element_from_dmap(t1) +\
-                                                               t1.ss * np.log(t1.ss) * get_single_element_from_dmap(t2))
+                    assert result == (t1.f_value ** (t2.f_value - 1)) * (t2.f_value * get_fp_value(t1) +\
+                                                               t1.f_value * np.log(t1.f_value) * get_fp_value(t2))
                 else:  # op == "__rpow__":
-                    assert result == (t2.ss ** (t1.ss - 1)) * (t1.ss * get_single_element_from_dmap(t2) +\
-                                                               t2.ss * np.log(t2.ss) * get_single_element_from_dmap(t1))
+                    assert result == (t2.f_value ** (t1.f_value - 1)) * (t1.f_value * get_fp_value(t2) +\
+                                                               t2.f_value * np.log(t2.f_value) * get_fp_value(t1))
             else:
-                assert apply_op(op, t1, t2).ss == apply_op(op, t1.ss, numeric_primitive(t2))\
-                    if isinstance(t1, DerivativeMap) else apply_op(op, numeric_primitive(t1), t2.ss)
+                assert apply_op(op, t1, t2).f_value == apply_op(op, t1.f_value, numeric_primitive(t2))\
+                    if isinstance(t1, AccumulatedDerivative) else apply_op(op, numeric_primitive(t1), t2.f_value)
 
                 if op in ["__add__", "__radd__", "__sub__"]:
-                    assert result == get_single_element_from_dmap(t1) if\
-                        isinstance(t1, DerivativeMap) else get_single_element_from_dmap(t2)
+                    assert result == get_fp_value(t1) if\
+                        isinstance(t1, AccumulatedDerivative) else get_fp_value(t2)
                 elif op == "__rsub__":
-                    assert result == -get_single_element_from_dmap(t1) if \
-                        isinstance(t1, DerivativeMap) else -get_single_element_from_dmap(t2)
+                    assert result == -get_fp_value(t1) if \
+                        isinstance(t1, AccumulatedDerivative) else -get_fp_value(t2)
                 elif op in ["__mul__", "__rmul__"]:
-                    assert result == numeric_primitive(t2) * get_single_element_from_dmap(t1) if isinstance(t1, DerivativeMap) else\
-                        numeric_primitive(t1) * get_single_element_from_dmap(t2)
+                    assert result == numeric_primitive(t2) * get_fp_value(t1)\
+                        if isinstance(t1, AccumulatedDerivative) else numeric_primitive(t1) * get_fp_value(t2)
                 elif op == "__truediv__":
-                    assert result == get_single_element_from_dmap(t1)/numeric_primitive(t2) if isinstance(t1, DerivativeMap)\
-                        else -numeric_primitive(t1)/t2.ss**2 * get_single_element_from_dmap(t2)
+                    assert result == get_fp_value(t1)/numeric_primitive(t2) if isinstance(t1, AccumulatedDerivative)\
+                        else -numeric_primitive(t1)/t2.f_value**2 * get_fp_value(t2)
                 elif op == "__rtruediv__":
-                    assert result == -numeric_primitive(t2)/t1.ss**2 * get_single_element_from_dmap(t1) if isinstance(t1, DerivativeMap)\
-                        else get_single_element_from_dmap(t2)/numeric_primitive(t1)
+                    assert result == -numeric_primitive(t2)/t1.f_value**2 * get_fp_value(t1)\
+                        if isinstance(t1, AccumulatedDerivative) else get_fp_value(t2)/numeric_primitive(t1)
                 elif op == "__pow__":
-                    assert result == numeric_primitive(t2) * t1.ss ** (numeric_primitive(t2) - 1) * get_single_element_from_dmap(t1)\
-                        if isinstance(t1, DerivativeMap) else\
-                        np.log(numeric_primitive(t1)) * numeric_primitive(t1) ** t2.ss * get_single_element_from_dmap(t2)
+                    assert result == numeric_primitive(t2) * t1.f_value ** (numeric_primitive(t2) - 1) * get_fp_value(t1)\
+                        if isinstance(t1, AccumulatedDerivative) else\
+                        np.log(numeric_primitive(t1)) * numeric_primitive(t1) ** t2.f_value * get_fp_value(t2)
                 else:  # op == "__rpow__"
-                    assert result == np.log(numeric_primitive(t2)) * numeric_primitive(t2) ** t1.ss * get_single_element_from_dmap(t1)\
-                        if isinstance(t1, DerivativeMap) else\
-                        numeric_primitive(t1) * t2.ss ** (numeric_primitive(t1) - 1) * get_single_element_from_dmap(t2)
+                    assert result == np.log(numeric_primitive(t2)) * numeric_primitive(t2) ** t1.f_value * get_fp_value(t1)\
+                        if isinstance(t1, AccumulatedDerivative) else\
+                        numeric_primitive(t1) * t2.f_value ** (numeric_primitive(t1) - 1) * get_fp_value(t2)
