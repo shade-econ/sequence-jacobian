@@ -16,7 +16,7 @@ def test_hank_ss():
 def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1, 
             muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi1=6.5, chi2=2,
             epsI=4, omega=0.005, kappaw=0.1, phi=1.5, nZ=3, nB=50, nA=70, nK=50,
-            bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, noisy=True):
+            bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, verbose=True):
     """Mostly cribbed from two_asset.hank_ss(), but just does backward iteration to get
     a partial equilibrium household steady state given parameters, not solving for equilibrium.
     Convenient for testing."""

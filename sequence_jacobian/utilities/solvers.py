@@ -3,7 +3,7 @@
 import numpy as np
 
 
-def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
+def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, verbose=True):
     """Simple line search solver for root x satisfying f(x)=0 using Newton direction.
 
     Backtracks if input invalid or improvement is not at least half the predicted improvement.
@@ -29,7 +29,7 @@ def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy
         y = f(x)
 
     for count in range(maxcount):
-        if noisy:
+        if verbose:
             printit(count, x, y)
 
         if np.max(np.abs(y)) < tol:
@@ -43,14 +43,14 @@ def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy
             try:
                 ynew = f(x + dx)
             except ValueError:
-                if noisy:
+                if verbose:
                     print('backtracking\n')
                 dx *= backtrack_c
             else:
                 predicted_improvement = -np.sum((J @ dx) * y) * ((1 - 1 / 2 ** bcount) + 1) / 2
                 actual_improvement = (np.sum(y ** 2) - np.sum(ynew ** 2)) / 2
                 if actual_improvement < predicted_improvement / 2:
-                    if noisy:
+                    if verbose:
                         print('backtracking\n')
                     dx *= backtrack_c
                 else:
@@ -63,7 +63,7 @@ def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy
         raise ValueError(f'No convergence after {maxcount} iterations')
 
 
-def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, noisy=True):
+def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, verbose=True):
     """Similar to newton_solver, but solves f(x)=0 using approximate rather than exact Newton direction,
     obtaining approximate Jacobian J=f'(x) from Broyden updating (starting from exact Newton at f'(x0)).
 
@@ -78,7 +78,7 @@ def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, nois
     # initialize J with Newton!
     J = obtain_J(f, x, y)
     for count in range(maxcount):
-        if noisy:
+        if verbose:
             printit(count, x, y)
 
         if np.max(np.abs(y)) < tol:
@@ -94,7 +94,7 @@ def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, nois
             try:
                 ynew = f(x + dx)
             except ValueError:
-                if noisy:
+                if verbose:
                     print('backtracking\n')
                 dx *= backtrack_c
             else:
@@ -127,7 +127,7 @@ def broyden_update(J, dx, dy):
 
 
 def printit(it, x, y, **kwargs):
-    """Convenience printing function for noisy iterations"""
+    """Convenience printing function for verbose iterations"""
     print(f'On iteration {it}')
     print(('x = %.3f' + ',%.3f' * (len(x) - 1)) % tuple(x))
     print(('y = %.3f' + ',%.3f' * (len(y) - 1)) % tuple(y))

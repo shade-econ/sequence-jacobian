@@ -22,9 +22,9 @@ def test_rbc_td(rbc_model):
     dC = 100 * G['C']['Z'] @ dZ / ss['C']
 
     td_nonlin = nonlinear.td_solve(ss=ss, block_list=blocks, unknowns=unknowns, targets=targets,
-                                   Z=ss["Z"]+dZ[:, 0], noisy=False)
+                                   Z=ss["Z"]+dZ[:, 0], verbose=False)
     td_nonlin_news = nonlinear.td_solve(ss=ss, block_list=blocks, unknowns=unknowns, targets=targets,
-                                        Z=ss["Z"]+dZ[:, 1], noisy=False)
+                                        Z=ss["Z"]+dZ[:, 1], verbose=False)
     dC_nonlin = 100 * (td_nonlin['C'] / ss['C'] - 1)
     dC_nonlin_news = 100 * (td_nonlin_news['C'] / ss['C'] - 1)
 
@@ -43,7 +43,7 @@ def test_ks_td(krusell_smith_model):
         Z = ss['Z'] + shock_size * 0.8 ** np.arange(T)
 
         td_nonlin = nonlinear.td_solve(ss=ss, block_list=blocks, unknowns=unknowns,
-                                       targets=targets, monotonic=True, Z=Z, noisy=False)
+                                       targets=targets, monotonic=True, Z=Z, verbose=False)
         dr_nonlin = 10000 * (td_nonlin['r'] - ss['r'])
         dr_lin = 10000 * G['r']['Z'] @ (Z - ss['Z'])
 
@@ -64,7 +64,7 @@ def test_hank_td(one_asset_hank_model):
     H_U = jacobian.get_H_U(blocks, unknowns, targets, T, ss, use_saved=True)
     H_U_factored = utils.misc.factor(H_U)
 
-    td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets, H_U_factored=H_U_factored, rstar=rstar, noisy=False)
+    td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets, H_U_factored=H_U_factored, rstar=rstar, verbose=False)
 
     dC_nonlin = 100 * (td_nonlin['C'] / ss['C'] - 1)
     dC_lin = 100 * G['C']['rstar'] @ drstar / ss['C']
@@ -83,7 +83,7 @@ def test_two_asset_td(two_asset_hank_model):
         drstar = -0.0025 * 0.6 ** np.arange(T)
         rstar = ss["r"] + shock_size * drstar
 
-        td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets, rstar=rstar, use_saved=True, noisy=False)
+        td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets, rstar=rstar, use_saved=True, verbose=False)
 
         dY_nonlin = 100 * (td_nonlin['Y'] - 1)
         dY_lin = shock_size * 100 * G['Y']['rstar'] @ drstar
@@ -110,12 +110,12 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_model):
 
     dY = 100 * G['Y']['rstar'] @ drstar
     td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets,
-                                   rstar=ss['r']+drstar, use_saved=True, noisy=False)
+                                   rstar=ss['r']+drstar, use_saved=True, verbose=False)
     dY_nonlin = 100 * (td_nonlin['Y'] - 1)
 
     dY_simple = 100 * G_simple['Y']['rstar'] @ drstar
     td_nonlin_simple = nonlinear.td_solve(ss, blocks_simple, unknowns_simple, targets_simple,
-                                          rstar=ss['r']+drstar, use_saved=True, noisy=False)
+                                          rstar=ss['r']+drstar, use_saved=True, verbose=False)
 
     dY_nonlin_simple = 100 * (td_nonlin_simple['Y'] - 1)
 

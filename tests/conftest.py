@@ -57,7 +57,7 @@ def one_asset_hank_model():
     ss_unknowns = {"beta": 0.986, "vphi": 0.8}
     ss_targets = {"asset_mkt": 0, "labor_mkt": 0}
     ss = steady_state(blocks, calibration, ss_unknowns, ss_targets,
-                      solver="broyden", consistency_check=True, noisy=False)
+                      solver="broyden", consistency_check=True, verbose=False)
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous= ["rstar", "Z"]
@@ -85,7 +85,7 @@ def two_asset_hank_model():
     ss_unknowns = {"beta": 0.976, "vphi": 2.07, "chi1": 6.5}
     ss_targets = {"asset_mkt": 0, "labor_mkt": 0, "B": "Bh"}
     ss = steady_state(blocks, calibration, ss_unknowns, ss_targets,
-                      solver="broyden", consistency_check=True, noisy=False)
+                      solver="broyden", consistency_check=True, verbose=False)
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["rstar", "Z", "G"]

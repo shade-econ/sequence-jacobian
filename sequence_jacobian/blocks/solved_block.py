@@ -52,12 +52,12 @@ class SolvedBlock:
             return steady_state(self.block_list, calibration, self.unknowns, self.targets, solver=self.solver,
                                 **self.solver_kwargs)
 
-    def td(self, ss, monotonic=False, returnindividual=False, noisy=False, **kwargs):
+    def td(self, ss, monotonic=False, returnindividual=False, verbose=False, **kwargs):
         # TODO: add H_U_factored caching of some kind
         # also, inefficient since we are repeatedly starting from the steady state, need option
         # to provide a guess (not a big deal with just SimpleBlocks, of course)
         return nonlinear.td_solve(ss, self.block_list, list(self.unknowns.keys()), self.targets, monotonic=monotonic,
-                                  returnindividual=returnindividual, noisy=noisy, **kwargs)
+                                  returnindividual=returnindividual, verbose=verbose, **kwargs)
     
     def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):
         relevant_shocks = [i for i in self.inputs if i in shock_list]

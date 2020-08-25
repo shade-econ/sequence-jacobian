@@ -8,7 +8,7 @@ from .blocks import het_block as het
 
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
-             returnindividual=False, tol=1E-8, maxit=30, noisy=True, save=False, use_saved=False, **kwargs):
+             returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False, **kwargs):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
     Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
@@ -26,7 +26,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     returnindividual: [optional] bool, flag to return individual outcomes from HetBlock.td
     tol             : [optional] scalar, for convergence of Newton's method we require |H|<tol
     maxit           : [optional] int, maximum number of iterations of Newton's method
-    noisy           : [optional] bool, flag to print largest absolute error for each target
+    verbose           : [optional] bool, flag to print largest absolute error for each target
     save            : [optional] bool, flag for saving Jacobians inside HetBlocks during calc of H_U
     use_saved       : [optional] bool, flag for using saved Jacobians inside HetBlocks during calc of H_U
     kwargs          : dict, all shocked Z go here, must all have same length T
@@ -63,7 +63,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     for it in range(maxit):
         results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
-        if noisy:
+        if verbose:
             print(f'On iteration {it}')
             for k in errors:
                 print(f'   max error for {k} is {errors[k]:.2E}')

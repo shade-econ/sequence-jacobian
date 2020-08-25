@@ -283,13 +283,13 @@ def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
 @simple
 def adjustment_costs(a, a_grid, r, chi0, chi1, chi2, D):
     chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, r, chi0, chi1, chi2)
-    # TODO: Currently chi becomes a 4-d (nZ x nB x nA x Time) Displace object when solving for the transitional
+    # TODO: Currently chi becomes a 4-d (nZ x nB x nA x nT) Displace object when solving for the transitional
     #   dynamics of the two asset model (since r is a Displace, which is affected by the rstar shock),
     #   where D remains a 3-d IgnoreVector, since it is unaffected directly
     #   by any of the shocks, and hence never gets converted to a Displace object with a time dimension.
     #   In steady state since the dimensions of D and chi are the same, np.vdot is a valid operation;
     #   however, for transitional dynamics, we actually need the np.ndim(D)-axis tensor product of D and chi
-    #   to return Chi, a vector of length Time.
+    #   to return Chi, a vector of length nT.
     #   In the future, we should find a more general way of accounting for this possibility, so the user does
     #   not have to directly write a tensor product into their code...
     Chi = np.tensordot(D, chi, axes=np.ndim(D)) if isinstance(D, Displace) or isinstance(chi, Displace) else np.vdot(D, chi)
@@ -338,7 +338,7 @@ def partial_steady_state_solution(delta, K, r, tot_wealth, Bh, Bg, G, omega):
 
 def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
                  muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi2=2, epsI=4, omega=0.005, kappaw=0.1,
-                 phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, noisy=True):
+                 phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, verbose=True):
     """Solve steady state of full GE model. Calibrate (beta, vphi, chi1, alpha, mup, Z) to hit targets for
        (r, tot_wealth, Bh, K, Y=N=1).
     """
@@ -380,7 +380,7 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
 
     # solve for beta, vphi, omega
     (beta, vphi, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess, chi1_guess]),
-                                                         noisy=noisy)
+                                                         verbose=verbose)
 
     # extra evaluation to report variables
     ss = household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
@@ -427,4 +427,4 @@ def arbitrage_solved(div, p, r):
 production_solved = solved(block_list=[labor, investment],
                            unknowns={'Q': 1, 'K': 10},
                            targets=['inv', 'val'],
-                           solver="broyden", solver_kwargs={"noisy": False})
+                           solver="broyden", solver_kwargs={"verbose": False})
