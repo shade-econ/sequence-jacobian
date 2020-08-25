@@ -117,6 +117,14 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     return Va, Vb, a, b, c, u
 
 
+def income(e_grid, tax, w, N):
+    z_grid = (1 - tax) * w * N * e_grid
+    return z_grid
+
+
+household.add_hetinput(income, verbose=False)
+
+
 """Supporting functions for HA block"""
 
 def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
@@ -307,14 +315,6 @@ def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
     return b_grid, a_grid, k_grid, e_grid, Pi
 
 
-def income(e_grid, tax, w, N):
-    z_grid = (1 - tax) * w * N * e_grid
-    return z_grid
-
-
-household_inc = household.attach_hetinput(income)
-
-
 @helper
 def partial_steady_state_solution(delta, K, r, tot_wealth, Bh, Bg, G, omega):
     I = delta * K
@@ -372,8 +372,8 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
         beta_loc, vphi_loc, chi1_loc = x
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001 or chi1_loc < 0.5:
             raise ValueError('Clearly invalid inputs')
-        out = household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
-                               k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
+        out = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
+                           k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
         asset_mkt = out['A'] + out['B'] - p - Bg
         labor_mkt = vphi_loc - muw * (1 - tax) * w * out['U']
         return np.array([asset_mkt, labor_mkt, out['B'] - Bh])
@@ -383,8 +383,8 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
                                                          verbose=verbose)
 
     # extra evaluation to report variables
-    ss = household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
-                          k_grid=k_grid, beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+    ss = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
+                      k_grid=k_grid, beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
 
     # other things of interest
     pshare = p / (tot_wealth - Bh)

@@ -91,11 +91,18 @@ class HetBlock:
         
         self.outputs = {k.upper() for k in self.non_back_outputs}
 
-        # start without a hetinput
+        # A HetBlock can have heterogeneous inputs and heterogeneous outputs, henceforth `hetinput` and `hetoutput`.
+        # See docstring for methods `add_hetinput` and `add_hetoutput` for more details.
         self.hetinput = None
         self.hetinput_inputs = set()
         self.hetinput_outputs = set()
         self.hetinput_outputs_order = tuple()
+
+        # start without a hetoutput
+        self.hetoutput = None
+        self.hetoutput_inputs = set()
+        self.hetoutput_outputs = set()
+        self.hetoutput_outputs_order = tuple()
 
         # 'saved' arguments start empty
         self.saved = {}
@@ -411,27 +418,67 @@ class HetBlock:
         # if supposed to save, record J and asympJ for use by jac or ajac
         if save:
             self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
-            self.saved = {'J' : J, 'asympJ' : asympJ}
+            self.saved = {'J': J, 'asympJ': asympJ}
 
         return asympJ
 
-    def attach_hetinput(self, hetinput):
-        """Make new HetBlock that first processes inputs through function hetinput.
-        Assumes 'self' currently does not have hetinput."""
-        if self.hetinput is not None:
-            raise ValueError('Trying to attach hetinput when it is already there!')
+    def add_hetinput(self, hetinput, overwrite=False, verbose=True):
+        """Add a hetinput to this HetBlock. Any call to self.back_step_fun will first process
+         inputs through the hetinput function.
 
-        newself = copy.deepcopy(self)
-        newself.hetinput = hetinput
-        newself.hetinput_inputs = set(utils.misc.input_list(hetinput))
-        newself.hetinput_outputs = set(utils.misc.output_list(hetinput))
-        newself.hetinput_outputs_order = utils.misc.output_list(hetinput)
+        A `hetinput` is any non-scalar-valued input argument provided to the HetBlock's backward iteration function,
+        self.back_step_fun, which is of the same dimensions as the distribution of agents in the HetBlock over
+        the relevant idiosyncratic state variables, generally referred to as `D`. e.g. The one asset HANK model
+        example provided in the models directory of sequence_jacobian has a hetinput `T`, which is skill-specific
+        transfers.
+        """
+        if self.hetinput is not None and overwrite is False:
+            raise ValueError('Trying to attach hetinput when one already exists!')
+        else:
+            if verbose:
+                if self.hetinput is not None and overwrite is True:
+                    print(f"Overwriting current hetinput, {self.hetinput.__name__} with new hetinput,"
+                          f" {hetinput.__name__}!")
+                else:
+                    print(f"Added hetinput {hetinput.__name__} to the {self.back_step_fun.__name__} HetBlock")
 
-        # modify inputs to include hetinput's additional inputs, remove outputs
-        newself.inputs |= newself.hetinput_inputs
-        # newself.inputs -= set(newself.hetinput_outputs_order)
-        newself.inputs -= newself.hetinput_outputs
-        return newself
+            self.hetinput = hetinput
+            self.hetinput_inputs = set(utils.misc.input_list(hetinput))
+            self.hetinput_outputs = set(utils.misc.output_list(hetinput))
+            self.hetinput_outputs_order = utils.misc.output_list(hetinput)
+
+            # modify inputs to include hetinput's additional inputs, remove outputs
+            self.inputs |= self.hetinput_inputs
+            self.inputs -= self.hetinput_outputs
+
+    def add_hetoutput(self, hetoutput, overwrite=False, verbose=True):
+        """Add a hetoutput to this HetBlock. Any call to self.back_step_fun will first process
+         inputs through the hetoutput function.
+
+        A `hetoutput` is any potentially non-scalar-valued output that the user might desire to be calculated from
+        the output arguments of the HetBlock's backward iteration function. Importantly, as of now the `hetoutput`
+        cannot be a function of time displaced values of the HetBlock's outputs but rather must be able to
+        be calculated from the outputs statically. e.g. The two asset HANK model example provided in the models
+        directory of sequence_jacobian has a hetoutput, `chi`, the adjustment costs for any initial level of assets
+        `a`, to any new level of assets `a'`.
+         """
+        if self.hetoutput is not None and overwrite is False:
+            raise ValueError('Trying to attach hetoutput when one already exists!')
+        else:
+            if verbose:
+                if self.hetoutput is not None and overwrite is True:
+                    print(f"Overwriting current hetoutput, {self.hetoutput.__name__} with new hetoutput,"
+                          f" {hetoutput.__name__}!")
+                else:
+                    print(f"Added hetoutput {hetoutput.__name__} to the {self.back_step_fun.__name__} HetBlock")
+
+            self.hetoutput = hetoutput
+            self.hetoutput_inputs = set(utils.misc.input_list(hetoutput))
+            self.hetoutput_outputs = set(utils.misc.output_list(hetoutput))
+            self.hetoutput_outputs_order = utils.misc.output_list(hetoutput)
+
+            # modify inputs to include hetoutput's additional inputs, remove outputs
+            self.outputs |= self.hetoutput_outputs
 
     '''Part 3: components of ss():
         - policy_ss : backward iteration to get steady-state policies and other outcomes

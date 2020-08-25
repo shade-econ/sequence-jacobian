@@ -47,7 +47,7 @@ def krusell_smith_model():
 
 @pytest.fixture(scope='session')
 def one_asset_hank_model():
-    blocks = [hank.household_trans, hank.firm, hank.monetary, hank.fiscal, hank.mkt_clearing, hank.nkpc,
+    blocks = [hank.household, hank.firm, hank.monetary, hank.fiscal, hank.mkt_clearing, hank.nkpc,
               hank.income_state_vars, hank.asset_state_vars, hank.partial_steady_state_solution]
 
     # Steady State
@@ -69,7 +69,7 @@ def one_asset_hank_model():
 
 @pytest.fixture(scope='session')
 def two_asset_hank_model():
-    blocks = [two_asset.household_inc, two_asset.make_grids,
+    blocks = [two_asset.household, two_asset.make_grids,
               two_asset.pricing_solved, two_asset.arbitrage_solved, two_asset.production_solved,
               two_asset.dividend, two_asset.taylor, two_asset.fiscal,
               two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing,

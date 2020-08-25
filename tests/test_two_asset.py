@@ -14,9 +14,9 @@ def test_hank_ss():
 
 
 def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1, 
-            muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi1=6.5, chi2=2,
-            epsI=4, omega=0.005, kappaw=0.1, phi=1.5, nZ=3, nB=50, nA=70, nK=50,
-            bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, verbose=True):
+                      muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi1=6.5, chi2=2,
+                      epsI=4, omega=0.005, kappaw=0.1, phi=1.5, nZ=3, nB=50, nA=70, nK=50,
+                      bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, verbose=True):
     """Mostly cribbed from two_asset.hank_ss(), but just does backward iteration to get
     a partial equilibrium household steady state given parameters, not solving for equilibrium.
     Convenient for testing."""
@@ -41,9 +41,9 @@ def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delt
     Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
     Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
 
-    out = two_asset.household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, 
-                                     N=1, tax=tax, w=w, e_grid=e_grid, k_grid=k_grid, beta=beta,
-                                     eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+    out = two_asset.household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid,
+                                 N=1, tax=tax, w=w, e_grid=e_grid, k_grid=k_grid, beta=beta,
+                                 eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
     
     return out['A'], out['B'], out['U']
 

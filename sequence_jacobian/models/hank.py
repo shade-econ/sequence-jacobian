@@ -55,6 +55,19 @@ def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi):
     return Va, a, c, n, ns
 
 
+def transfers(pi_e, Div, Tax, e_grid):
+    # default incidence rules are proportional to skill
+    tax_rule, div_rule = e_grid, e_grid  # scale does not matter, will be normalized anyway
+
+    div = Div / np.sum(pi_e * div_rule) * div_rule
+    tax = Tax / np.sum(pi_e * tax_rule) * tax_rule
+    T = div - tax
+    return T
+
+
+household.add_hetinput(transfers, verbose=False)
+
+
 @njit
 def cn(uc, w, eis, frisch, vphi):
     """Return optimal c, n as function of u'(c) given parameters"""
@@ -148,19 +161,6 @@ def asset_state_vars(amax, nA):
     return a_grid
 
 
-def transfers(pi_e, Div, Tax, e_grid):
-    # default incidence rules are proportional to skill
-    tax_rule, div_rule = e_grid, e_grid  # scale does not matter, will be normalized anyway
-
-    div = Div / np.sum(pi_e * div_rule) * div_rule
-    tax = Tax / np.sum(pi_e * tax_rule) * tax_rule
-    T = div - tax
-    return T
-
-
-household_trans = household.attach_hetinput(transfers)
-
-
 @helper
 def partial_steady_state_solution(B_Y, mu, r):
     B = B_Y
@@ -201,8 +201,8 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         c_const_loc, n_const_loc = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi_loc, Va)
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
             raise ValueError('Clearly invalid inputs')
-        out = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
-                                 eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc,
+        out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
+                           eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc,
                                  c_const=c_const_loc, n_const=n_const_loc)
         return np.array([out['A'] - B, out['NS'] - 1])
 
@@ -211,7 +211,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
 
     # extra evaluation for reporting
     c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
-    ss = household_trans.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
+    ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
                             Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const)
     
     # check Walras's law
