@@ -130,7 +130,11 @@ class SimpleBlock:
                     if not invertedJ[i][o] or invertedJ[i][o].iszero:
                         continue
                     else:
-                        J[o][i] = invertedJ[i][o].nonzero()
+                        if T is not None:
+                            J[o][i] = invertedJ[i][o].nonzero().matrix(T)
+                        else:
+                            J[o][i] = invertedJ[i][o].nonzero()
+
                 # If output `o` is entirely unaffected by all of the shocks passed in, then
                 # remove the empty Jacobian corresponding to `o` from J
                 if not J[o]:
@@ -147,6 +151,6 @@ def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):
     J = {o: {} for o in utils.misc.output_list(f)}
     for o, o_name in zip(utils.misc.make_tuple(f(**input_args)), utils.misc.output_list(f)):
         if isinstance(o, AccumulatedDerivative):
-            J[o_name] = jacobian.SimpleSparse(o.elements) if T is None else jacobian.SimpleSparse(o.elements).matrix(T)
+            J[o_name] = jacobian.SimpleSparse(o.elements)
 
     return J
