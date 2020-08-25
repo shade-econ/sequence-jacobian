@@ -10,3 +10,4 @@ from .blocks.combined_block import combine
 from .blocks.support.simple_displacement import apply_function
 from .steady_state import steady_state
 from .jacobian import get_G, get_H_U, get_impulse
+from .nonlinear import td_solve
