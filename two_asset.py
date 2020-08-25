@@ -1,9 +1,9 @@
 # pylint: disable=E1120
 import numpy as np
 from numba import njit, guvectorize
-import utils
-from het_block import het
-from simple_block import simple
+from sequence_jacobian import utils
+from sequence_jacobian.het_block import het
+from sequence_jacobian.simple_block import simple
 
 
 '''Part 1: HA block'''

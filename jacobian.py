@@ -1,8 +1,6 @@
 import numpy as np
 import copy
-import utils
-import simple_block as sim
-import asymptotic
+from sequence_jacobian import utils, simple_block as sim, asymptotic
 
 
 '''Part 1: High-level convenience routines: 

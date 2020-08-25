@@ -1,7 +1,6 @@
 import numpy as np
-import nonlinear
-import jacobian as jac
-from simple_block import simple
+from sequence_jacobian import nonlinear, jacobian as jac
+from sequence_jacobian.simple_block import simple
 
 
 def solved(unknowns, targets, block_list=[]):

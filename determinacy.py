@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.fft import fftn, rfftn
-import jacobian
 from numba import njit
+from sequence_jacobian import jacobian
 
 
 def winding_criterion(A, N=4096):

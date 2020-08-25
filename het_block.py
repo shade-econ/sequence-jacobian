@@ -1,7 +1,6 @@
 import numpy as np
-import utils
 import copy
-import asymptotic
+from sequence_jacobian import utils, asymptotic
 
 
 def het(exogenous, policy, backward):

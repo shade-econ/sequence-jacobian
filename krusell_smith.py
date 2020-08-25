@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.optimize as opt
-import utils
-import het_block as het
-from simple_block import simple
+from sequence_jacobian import utils, het_block as het
+from sequence_jacobian.simple_block import simple
 
 
 '''Part 1: HA block'''

@@ -1,7 +1,5 @@
 import numpy as np
-import utils
-import jacobian as jac
-import het_block as het
+from sequence_jacobian import utils, jacobian as jac, het_block as het
 
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
