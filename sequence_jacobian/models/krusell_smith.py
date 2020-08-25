@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.optimize as opt
 
-from .. import utils
+from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.het_block import het
 from ..blocks.helper_block import helper
@@ -40,8 +40,8 @@ def household(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
     uc_nextgrid = (beta * Pi_p) @ Va_p
     c_nextgrid = uc_nextgrid ** (-eis)
     coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis]
-    a = utils.interpolate_y(c_nextgrid + a_grid, coh, a_grid)
-    utils.setmin(a, a_grid[0])
+    a = utils.interpolate.interpolate_y(c_nextgrid + a_grid, coh, a_grid)
+    utils.optimized_routines.setmin(a, a_grid[0])
     c = coh - a
     Va = (1 + r) * c ** (-1 / eis)
     return Va, a, c
@@ -67,13 +67,13 @@ def mkt_clearing(K, A, Y, C, delta):
 
 @simple
 def income_state_vars(rho, sigma, nS):
-    e_grid, _, Pi = utils.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
     return e_grid, Pi
 
 
 @simple
 def asset_state_vars(amax, nA):
-    a_grid = utils.agrid(amax=amax, n=nA)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
     return a_grid
 
 
@@ -95,8 +95,8 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
           nS=7, nA=500, amax=200):
     """Solve steady state of full GE model. Calibrate beta to hit target for interest rate."""
     # set up grid
-    a_grid = utils.agrid(amax=amax, n=nA)
-    e_grid, _, Pi = utils.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
 
     # solve for aggregates analytically
     rk = r + delta

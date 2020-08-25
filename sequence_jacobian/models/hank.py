@@ -1,7 +1,7 @@
 import numpy as np
 from numba import vectorize, njit
 
-from .. import utils
+from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.het_block import het
 from ..blocks.helper_block import helper
@@ -32,8 +32,8 @@ def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi):
     # c(z_t, a_{t-1}) and n(z_t, a_{t-1})
     lhs = c_nextgrid - ws[:, np.newaxis] * n_nextgrid + a_grid[np.newaxis, :] - T[:, np.newaxis]
     rhs = (1 + r) * a_grid
-    c = utils.interpolate_y(lhs, rhs, c_nextgrid)
-    n = utils.interpolate_y(lhs, rhs, n_nextgrid)
+    c = utils.interpolate.interpolate_y(lhs, rhs, c_nextgrid)
+    n = utils.interpolate.interpolate_y(lhs, rhs, n_nextgrid)
 
     # test constraints, replace if needed
     a = rhs + ws[:, np.newaxis] * n + T[:, np.newaxis] - c
@@ -138,13 +138,13 @@ def nkpc(pi, w, Z, Y, r, mu, kappa):
 
 @simple
 def income_state_vars(rho_s, sigma_s, nS):
-    e_grid, pi_e, Pi = utils.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
+    e_grid, pi_e, Pi = utils.discretize.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
     return e_grid, pi_e, Pi
 
 
 @simple
 def asset_state_vars(amax, nA):
-    a_grid = utils.agrid(amax=amax, n=nA)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
     return a_grid
 
 
@@ -179,8 +179,8 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     """Solve steady state of full GE model. Calibrate (beta, vphi) to hit target for interest rate and Y."""
 
     # set up grid
-    a_grid = utils.agrid(amax=amax, n=nA)
-    e_grid, pi_e, Pi = utils.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    e_grid, pi_e, Pi = utils.discretize.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
 
     # solve analytically what we can
     B = B_Y
@@ -207,7 +207,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         return np.array([out['A'] - B, out['NS'] - 1])
 
     # solve for beta, vphi
-    (beta, vphi), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
+    (beta, vphi), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess]), noisy=False)
 
     # extra evaluation for reporting
     c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)

@@ -1,12 +1,13 @@
 # pylint: disable=E1120
 import numpy as np
-from numba import njit, guvectorize
+from numba import guvectorize
 
-from .. import utils
-from ..blocks.simple_block import simple, apply_function, Displace
+from .. import utilities as utils
+from ..blocks.simple_block import simple
 from ..blocks.het_block import het
 from ..blocks.helper_block import helper
 from ..blocks.solved_block import solved
+from ..blocks.support.simple_displacement import apply_function, Displace
 
 
 '''Part 1: HA block'''
@@ -44,8 +45,8 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     i, pi = lhs_equals_rhs_interpolate(W_ratio, 1 + Psi1)
 
     # use same interpolation to get Wb and then c
-    a_endo_unc = utils.apply_coord(i, pi, a_grid)
-    c_endo_unc = utils.apply_coord(i, pi, Wb) ** (-eis)
+    a_endo_unc = utils.interpolate.apply_coord(i, pi, a_grid)
+    c_endo_unc = utils.interpolate.apply_coord(i, pi, Wb) ** (-eis)
 
 
     # === STEP 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED ===
@@ -56,11 +57,11 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
     # interpolate this b' -> b mapping to get b -> b', so we have b'(z, b, a)
     # and also use interpolation to get a'(z, b, a)
-    # (note utils.interpolate_coord and utils.apply_coord work on last axis,
+    # (note utils.interpolate.interpolate_coord and utils.interpolate.apply_coord work on last axis,
     #  so we need to swap 'b' to the last axis, then back when done)
-    i, pi = utils.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
-    a_unc = utils.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
-    b_unc = utils.apply_coord(i, pi, b_grid).swapaxes(1, 2)
+    i, pi = utils.interpolate.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
+    a_unc = utils.interpolate.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
+    b_unc = utils.interpolate.apply_coord(i, pi, b_grid).swapaxes(1, 2)
 
 
     # === STEP 5: a'(z, kappa, a) for CONSTRAINED ===
@@ -71,9 +72,9 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     i, pi = lhs_equals_rhs_interpolate(lhs_con, 1 + Psi1)
 
     # use same interpolation to get Wb and then c
-    a_endo_con = utils.apply_coord(i, pi, a_grid)
+    a_endo_con = utils.interpolate.apply_coord(i, pi, a_grid)
     c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis])**(-eis)
-                    * utils.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
+                    * utils.interpolate.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
 
 
     # === STEP 6: a'(z, b, a) for CONSTRAINED ===
@@ -85,10 +86,10 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
     # interpolate this kappa -> b mapping to get b -> kappa
     # then use the interpolated kappa to get a', so we have a'(z, b, a)
-    # (utils.interpolate_y does this in one swoop, but since it works on last
+    # (utils.interpolate.interpolate_y does this in one swoop, but since it works on last
     #  axis, we need to swap kappa to last axis, and then b back to middle when done)
-    a_con = utils.interpolate_y(b_endo.swapaxes(1, 2), b_grid,
-                                a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
+    a_con = utils.interpolate.interpolate_y(b_endo.swapaxes(1, 2), b_grid,
+                                            a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
 
 
     # === STEP 7: obtain policy functions and update derivatives of value function ===
@@ -298,10 +299,10 @@ def adjustment_costs(a, a_grid, r, chi0, chi1, chi2, D):
 
 @simple
 def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
-    b_grid = utils.agrid(amax=bmax, n=nB)
-    a_grid = utils.agrid(amax=amax, n=nA)
-    k_grid = utils.agrid(amax=kmax, n=nK)[::-1].copy()
-    e_grid, _, Pi = utils.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+    b_grid = utils.discretize.agrid(amax=bmax, n=nB)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    k_grid = utils.discretize.agrid(amax=kmax, n=nK)[::-1].copy()
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     return b_grid, a_grid, k_grid, e_grid, Pi
 
@@ -343,10 +344,10 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
     """
 
     # set up grid
-    b_grid = utils.agrid(amax=bmax, n=nB)
-    a_grid = utils.agrid(amax=amax, n=nA)
-    k_grid = utils.agrid(amax=kmax, n=nK)[::-1].copy()
-    e_grid, _, Pi = utils.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+    b_grid = utils.discretize.agrid(amax=bmax, n=nB)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    k_grid = utils.discretize.agrid(amax=kmax, n=nK)[::-1].copy()
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     # solve analytically what we can
     I = delta * K
@@ -378,7 +379,8 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
         return np.array([asset_mkt, labor_mkt, out['B'] - Bh])
 
     # solve for beta, vphi, omega
-    (beta, vphi, chi1), _ = utils.broyden_solver(res, np.array([beta_guess, vphi_guess, chi1_guess]), noisy=noisy)
+    (beta, vphi, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess, chi1_guess]),
+                                                         noisy=noisy)
 
     # extra evaluation to report variables
     ss = household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,

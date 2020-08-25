@@ -1,3 +1,5 @@
+"""Classes and methods for calculating asymptotic Jacobians"""
+
 import numpy as np
 from numpy.fft import rfft, rfftn, irfft, irfftn
 

@@ -1,8 +1,10 @@
+"""Methods for computing and manipulating both block-level and model-level Jacobians"""
+
 import numpy as np
 import copy
 from numba import njit
 
-from . import utils
+from . import utilities as utils
 from . import asymptotic
 from .blocks import simple_block as sim
 
@@ -63,7 +65,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
                                         H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Get a single general equilibrium impulse response.
 
-    Extremely fast when H_U_factored = utils.factor(get_HU(...)) has already been computed
+    Extremely fast when H_U_factored = utils.misc.factor(get_HU(...)) has already been computed
     and supplied to this function. Less so but still faster when H_U already computed.
 
     Parameters
@@ -76,7 +78,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
     ss           : [optional] dict, steady state required if block_list contains non-jacdicts
     outputs      : [optional] list of str, variables we want impulse responses for
     H_U          : [optional] array, precomputed Jacobian mapping unknowns to targets
-    H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.factor(H_U)
+    H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.misc.factor(H_U)
     save         : [optional] bool, flag for saving Jacobians inside HetBlocks
     use_saved    : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
@@ -114,7 +116,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
     if H_U_factored is None:
         dU_packed = - np.linalg.solve(H_U, H_ZdZ_packed)
     else:
-        dU_packed = - utils.factored_solve(H_U_factored, H_ZdZ_packed)
+        dU_packed = - utils.misc.factored_solve(H_U_factored, H_ZdZ_packed)
 
     dU = unpack_vectors(dU_packed, unknowns, T)
 
@@ -131,7 +133,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
 
-    Faster when H_U_factored = utils.factor(get_HU(...)) has already been computed
+    Faster when H_U_factored = utils.misc.factor(get_HU(...)) has already been computed
     and supplied to this function. Less so but still faster when H_U already computed.
     Relative benefit of precomputing these not as extreme as for get_impulse, since
     obtaining and solving with H_U is a less dominant component of cost for getting Gs.
@@ -146,7 +148,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     ss           : [optional] dict, steady state required if block_list contains non-jacdicts
     outputs      : [optional] list of str, variables we want impulse responses for
     H_U          : [optional] array, precomputed Jacobian mapping unknowns to targets
-    H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.factor(H_U)
+    H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.misc.factor(H_U)
     save         : [optional] bool, flag for saving Jacobians inside HetBlocks
     use_saved    : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
@@ -173,7 +175,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     if H_U_factored is None:
         G_U = unpack_jacobians(-np.linalg.solve(H_U, H_Z), exogenous, unknowns, T)
     else:
-        G_U = unpack_jacobians(-utils.factored_solve(H_U_factored, H_Z), exogenous, unknowns, T)
+        G_U = unpack_jacobians(-utils.misc.factored_solve(H_U_factored, H_Z), exogenous, unknowns, T)
 
     # step 4: forward accumulation to get all outputs starting with G_U
     # by default, don't calculate targets!
@@ -231,8 +233,8 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     """
 
     # step 1: get topological sort and required
-    topsorted = utils.block_sort(block_list, ignore_helpers=True)
-    required = utils.find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=True)
+    topsorted = utils.graph.block_sort(block_list, ignore_helpers=True)
+    required = utils.graph.find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=True)
 
     # Remove any vector-valued outputs that are intermediate inputs, since we don't want
     # to compute Jacobians with respect to vector-valued variables

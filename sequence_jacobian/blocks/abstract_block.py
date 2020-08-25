@@ -1,6 +1,6 @@
 """AbstractBlock class for defining general input/output access methods for all block types"""
 
-from .. import utils
+from .. import utilities as utils
 
 # TODO: Look into abc (Abstract Base Class) package for a more formal implementation of AbstractBlock as an ABC
 
@@ -13,7 +13,7 @@ class AbstractBlock:
     # Define an "abstract __init__ method" to be replaced with @abstractmethod from abc
     def __init__(self, f):
         self.f = f
-        self.input_list = utils.input_list(f)
-        self.output_list = utils.output_list(f)
+        self.input_list = utils.misc.input_list(f)
+        self.output_list = utils.misc.output_list(f)
         self.inputs = set(self.input_list)
         self.outputs = set(self.output_list)

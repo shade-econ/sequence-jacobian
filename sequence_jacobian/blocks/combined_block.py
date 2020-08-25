@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from .. import utils
+from .. import utilities as utils
 from ..steady_state import eval_block_ss
 
 
@@ -25,7 +25,7 @@ class CombinedBlock:
         all_inputs = set().union(*[block.inputs for block in self.blocks])
         self.inputs = all_inputs.difference(self.outputs)
 
-        self.blocks_sorted_indices = utils.block_sort(self.blocks)
+        self.blocks_sorted_indices = utils.graph.block_sort(self.blocks)
 
     def ss(self, **kwargs):
         ss_values = deepcopy(kwargs)

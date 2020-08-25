@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 
-from .. import utils
+from .. import utilities as utils
 from .. import asymptotic
 
 
@@ -45,12 +45,12 @@ class HetBlock:
 
         self.back_step_fun = back_step_fun
 
-        self.all_outputs_order = utils.output_list(back_step_fun)
+        self.all_outputs_order = utils.misc.output_list(back_step_fun)
         all_outputs = set(self.all_outputs_order)
-        self.all_inputs = set(utils.input_list(back_step_fun))
+        self.all_inputs = set(utils.misc.input_list(back_step_fun))
 
         self.exogenous = exogenous
-        self.policy, self.backward = (utils.make_tuple(x) for x in (policy, backward))
+        self.policy, self.backward = (utils.misc.make_tuple(x) for x in (policy, backward))
 
         if len(self.policy) > 2:
             raise ValueError(f"More than two endogenous policies in {back_step_fun.__name__}, not yet supported")
@@ -84,7 +84,7 @@ class HetBlock:
         else:
             self.backward_init = backward_init
 
-        # aggregate outputs and inputs for utils.block_sort
+        # aggregate outputs and inputs for utils.graph.block_sort
         self.inputs = self.all_inputs - {k + '_p' for k in self.backward}
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
@@ -241,15 +241,18 @@ class HetBlock:
             for pol in self.policy:
                 if monotonic:
                     # TODO: change for two-asset case so assumption is monotonicity in own asset, not anything else
-                    sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord(grid[pol], individual_paths[pol][t, ...])
+                    sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord(grid[pol],
+                                                                                      individual_paths[pol][t, ...])
                 else:
-                    sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], individual_paths[pol][t, ...])
+                    sspol_i[pol], sspol_pi[pol] =\
+                        utils.interpolate.interpolate_coord_robust(grid[pol], individual_paths[pol][t, ...])
 
             # step forward
             D_path[t+1, ...]= self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
 
         # obtain aggregates of all outputs, made uppercase
-        aggregates = {k.upper(): utils.fast_aggregate(D_path, individual_paths[k]) for k in self.non_back_outputs}
+        aggregates = {k.upper(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[k])
+                      for k in self.non_back_outputs}
 
         # return either this, or also include distributional information
         if returnindividual:
@@ -293,9 +296,9 @@ class HetBlock:
 
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
-            return utils.extract_nested_dict(savedA=self.saved['J'],
-                                             keys1=[o.upper() for o in output_list],
-                                             keys2=relevant_shocks, shape=(T, T))
+            return utils.misc.extract_nested_dict(savedA=self.saved['J'],
+                                                  keys1=[o.upper() for o in output_list],
+                                                  keys2=relevant_shocks, shape=(T, T))
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
@@ -369,10 +372,10 @@ class HetBlock:
 
         if use_saved and 'curlyYs' in self.saved:
             # was saved by jac, first copy curlyYs, curlyDs, curlyPs
-            curlyYs = utils.extract_nested_dict(savedA=self.saved['curlyYs'],
+            curlyYs = utils.misc.extract_nested_dict(savedA=self.saved['curlyYs'],
                                                 keys1=relevant_shocks, keys2=output_list, shape=(T,))
-            curlyDs = utils.extract_dict(savedA=self.saved['curlyDs'], keys=relevant_shocks, shape=(T,))
-            curlyPs_old = utils.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T - 1,))
+            curlyDs = utils.misc.extract_dict(savedA=self.saved['curlyDs'], keys=relevant_shocks, shape=(T,))
+            curlyPs_old = utils.misc.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T - 1,))
 
             # now need curlyPs that go to T+Tpost-1, not just T
             curlyPs = {}
@@ -420,9 +423,9 @@ class HetBlock:
 
         newself = copy.deepcopy(self)
         newself.hetinput = hetinput
-        newself.hetinput_inputs = set(utils.input_list(hetinput))
-        newself.hetinput_outputs = set(utils.output_list(hetinput))
-        newself.hetinput_outputs_order = utils.output_list(hetinput)
+        newself.hetinput_inputs = set(utils.misc.input_list(hetinput))
+        newself.hetinput_outputs = set(utils.misc.output_list(hetinput))
+        newself.hetinput_outputs_order = utils.misc.output_list(hetinput)
 
         # modify inputs to include hetinput's additional inputs, remove outputs
         newself.inputs |= newself.hetinput_inputs
@@ -467,7 +470,8 @@ class HetBlock:
                 raise
 
             # only check convergence every 10 iterations for efficiency
-            if it % 10 == 1 and all(utils.within_tolerance(sspol[k], old[k], tol) for k in self.policy):
+            if it % 10 == 1 and all(utils.optimized_routines.within_tolerance(sspol[k], old[k], tol)
+                                    for k in self.policy):
                 break
 
             # update 'old' for comparison during next iteration, prepare 'ssin' as input for next iteration
@@ -515,7 +519,7 @@ class HetBlock:
         # first obtain initial distribution D
         if D_seed is None:
             # compute stationary distribution for exogenous variable
-            pi = utils.stationary(Pi, pi_seed)
+            pi = utils.discretize.stationary(Pi, pi_seed)
             
             # now initialize full distribution with this, assuming uniform distribution on endogenous vars
             endogenous_dims = [grid[k].shape[0] for k in self.policy]
@@ -528,7 +532,7 @@ class HetBlock:
         sspol_pi = {}
         for pol in self.policy:
             # use robust binary search-based method that only requires grids, not policies, to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], sspol[pol])
+            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], sspol[pol])
 
         # iterate until convergence by tol, or maxit
         Pi_T = Pi.T.copy()
@@ -536,7 +540,7 @@ class HetBlock:
             Dnew = self.forward_step(D, Pi_T, sspol_i, sspol_pi)
 
             # only check convergence every 10 iterations for efficiency
-            if it % 10 == 0 and utils.within_tolerance(D, Dnew, tol):
+            if it % 10 == 0 and utils.optimized_routines.within_tolerance(D, Dnew, tol):
                 break
             D = Dnew
         else:
@@ -555,8 +559,8 @@ class HetBlock:
                                Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4):
         # shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.all_outputs_order,
-                                                utils.numerical_diff(self.back_step_fun, ssin_dict, din_dict, h,
-                                                                     ssout_list))}
+                                                utils.differentiate.numerical_diff(self.back_step_fun,
+                                                                                   ssin_dict, din_dict, h, ssout_list))}
         curlyV = {k: shocked_outputs[k] for k in self.backward}
 
         # which affects the distribution tomorrow
@@ -578,7 +582,8 @@ class HetBlock:
         if self.hetinput is not None and input_shocked in self.hetinput_inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
             din_dict = dict(zip(self.hetinput_outputs_order,
-                                utils.numerical_diff_symmetric(self.hetinput, ss_for_hetinput, {input_shocked: 1}, h)))
+                                utils.differentiate.numerical_diff_symmetric(self.hetinput,
+                                                                             ss_for_hetinput, {input_shocked: 1}, h)))
         else:
             # otherwise, we just have that one shock
             din_dict = {input_shocked: 1}
@@ -615,9 +620,10 @@ class HetBlock:
         since curlyPs now go to zero for high t (used in paper in proof of Proposition 1).
         """
         curlyPs = np.empty((T,) + o_ss.shape)
-        curlyPs[0, ...] = utils.demean(o_ss)
+        curlyPs[0, ...] = utils.misc.demean(o_ss)
         for t in range(1, T):
-            curlyPs[t, ...] = utils.demean(self.forward_step_transpose(curlyPs[t - 1, ...], Pi, pol_i_ss, pol_pi_ss))
+            curlyPs[t, ...] = utils.misc.demean(self.forward_step_transpose(curlyPs[t - 1, ...],
+                                                                            Pi, pol_i_ss, pol_pi_ss))
         return curlyPs
 
     @staticmethod
@@ -682,7 +688,7 @@ class HetBlock:
         sspol_space = {}
         for pol in self.policy:
             # use robust binary-search-based method that only requires grids to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate_coord_robust(grid[pol], ss[pol])
+            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss[pol])
             sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
 
         toreturn = (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
@@ -709,7 +715,8 @@ class HetBlock:
         # If this HetBlock has a hetinput, then we need to compute the outputs of the hetinput first and include
         # them as inputs for self.back_step_fun
         if self.hetinput is not None:
-            outputs_as_tuple = utils.make_tuple(self.hetinput(**{k: input_dict[k] for k in self.hetinput_inputs if k in input_dict}))
+            outputs_as_tuple = utils.misc.make_tuple(self.hetinput(**{k: input_dict[k]
+                                                                      for k in self.hetinput_inputs if k in input_dict}))
             input_dict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
 
         # Check if there are entries in indict corresponding to self.inputs_p.
@@ -717,9 +724,9 @@ class HetBlock:
         # for the backward iteration variable has been provided.
         # If it has not been provided, then use self.backward_init to calculate the initial values.
         if not self.inputs_p.issubset(set(input_dict.keys())):
-            initial_value_input_args = [input_dict[arg_name] for arg_name in utils.input_list(self.backward_init)]
-            input_dict.update(zip(utils.output_list(self.backward_init),
-                              utils.make_tuple(self.backward_init(*initial_value_input_args))))
+            initial_value_input_args = [input_dict[arg_name] for arg_name in utils.misc.input_list(self.backward_init)]
+            input_dict.update(zip(utils.misc.output_list(self.backward_init),
+                              utils.misc.make_tuple(self.backward_init(*initial_value_input_args))))
 
         # self.inputs_p indicates all variables that enter into self.back_step_fun whose name has "_p" (read as prime)
         # Because it's the case that inside of input_dict/all_inputs_dict the names of these variables omit the "_p",
@@ -753,10 +760,10 @@ class HetBlock:
         """
         if len(self.policy) == 1:
             p, = self.policy
-            return utils.forward_step_1d(D, Pi_T, pol_i[p], pol_pi[p])
+            return utils.forward_step.forward_step_1d(D, Pi_T, pol_i[p], pol_pi[p])
         elif len(self.policy) == 2:
             p1, p2 = self.policy
-            return utils.forward_step_2d(D, Pi_T, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
+            return utils.forward_step.forward_step_2d(D, Pi_T, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
 
@@ -764,10 +771,10 @@ class HetBlock:
         """Transpose of forward_step (note: this takes Pi rather than Pi_T as argument!)"""
         if len(self.policy) == 1:
             p, = self.policy
-            return utils.forward_step_transpose_1d(D, Pi, pol_i[p], pol_pi[p])
+            return utils.forward_step.forward_step_transpose_1d(D, Pi, pol_i[p], pol_pi[p])
         elif len(self.policy) == 2:
             p1, p2 = self.policy
-            return utils.forward_step_transpose_2d(D, Pi, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
+            return utils.forward_step.forward_step_transpose_2d(D, Pi, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
 
@@ -775,10 +782,11 @@ class HetBlock:
         """Forward_step linearized with respect to pol_pi"""
         if len(self.policy) == 1:
             p, = self.policy
-            return utils.forward_step_shock_1d(Dss, Pi_T, pol_i_ss[p], pol_pi_shock[p])
+            return utils.forward_step.forward_step_shock_1d(Dss, Pi_T, pol_i_ss[p], pol_pi_shock[p])
         elif len(self.policy) == 2:
             p1, p2 = self.policy
-            return utils.forward_step_shock_2d(Dss, Pi_T, pol_i_ss[p1], pol_i_ss[p2],
-                                               pol_pi_ss[p1], pol_pi_ss[p2], pol_pi_shock[p1], pol_pi_shock[p2])
+            return utils.forward_step.forward_step_shock_2d(Dss, Pi_T, pol_i_ss[p1], pol_i_ss[p2],
+                                                            pol_pi_ss[p1], pol_pi_ss[p2],
+                                                            pol_pi_shock[p1], pol_pi_shock[p2])
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")

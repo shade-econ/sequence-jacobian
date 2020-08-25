@@ -1,7 +1,8 @@
 """Test displacement handler classes: Ignore, IgnoreVector, Displace, Perturb, Reporter"""
+
 import numpy as np
 
-from sequence_jacobian.blocks.simple_block import (
+from sequence_jacobian.blocks.support.simple_displacement import (
     Ignore, IgnoreVector, Displace, AccumulatedDerivative, numeric_primitive
 )
 

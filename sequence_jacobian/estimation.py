@@ -1,3 +1,5 @@
+"""Functions for calculating the log likelihood of a model from its impulse responses"""
+
 import numpy as np
 import scipy.linalg as linalg
 from numba import njit

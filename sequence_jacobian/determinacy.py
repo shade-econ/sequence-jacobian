@@ -1,3 +1,5 @@
+"""Functions for implementing the winding criterion method for assessing model determinacy"""
+
 import numpy as np
 from numpy.fft import rfftn
 from numba import njit

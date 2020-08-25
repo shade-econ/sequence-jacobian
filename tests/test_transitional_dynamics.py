@@ -2,7 +2,9 @@
 
 import numpy as np
 
-from sequence_jacobian import two_asset, nonlinear, jacobian, utils
+from sequence_jacobian import two_asset, nonlinear, jacobian
+from sequence_jacobian import utilities as utils
+
 
 # TODO: Figure out a more robust way to check similarity of the linear and non-linear solution.
 #   As of now just checking that the tolerance for difference (by infinity norm) is below a manually checked threshold
@@ -60,7 +62,7 @@ def test_hank_td(one_asset_hank_model):
     rstar = ss['r'] + drstar
 
     H_U = jacobian.get_H_U(blocks, unknowns, targets, T, ss, use_saved=True)
-    H_U_factored = utils.factor(H_U)
+    H_U_factored = utils.misc.factor(H_U)
 
     td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets, H_U_factored=H_U_factored, rstar=rstar, noisy=False)
 

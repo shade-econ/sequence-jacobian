@@ -1,7 +1,5 @@
 """Test all models' determinacy calculations"""
 
-import numpy as np
-
 from sequence_jacobian import jacobian, determinacy
 
 

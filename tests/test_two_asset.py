@@ -3,7 +3,7 @@
 import numpy as np
 
 from sequence_jacobian.models import two_asset
-from sequence_jacobian import utils
+from sequence_jacobian import utilities as utils
 
 
 def test_hank_ss():
@@ -22,10 +22,10 @@ def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delt
     Convenient for testing."""
 
     # set up grid
-    b_grid = utils.agrid(amax=bmax, n=nB)
-    a_grid = utils.agrid(amax=amax, n=nA)
-    k_grid = utils.agrid(amax=kmax, n=nK)[::-1].copy()
-    e_grid, pi, Pi = utils.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+    b_grid = utils.discretize.agrid(amax=bmax, n=nB)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    k_grid = utils.discretize.agrid(amax=kmax, n=nK)[::-1].copy()
+    e_grid, pi, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     # solve analytically what we can
     I = delta * K
@@ -42,8 +42,8 @@ def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delt
     Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
 
     out = two_asset.household_inc.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, 
-                           N=1, tax=tax, w=w, e_grid=e_grid, k_grid=k_grid, beta=beta,
-                           eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+                                     N=1, tax=tax, w=w, e_grid=e_grid, k_grid=k_grid, beta=beta,
+                                     eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
     
     return out['A'], out['B'], out['U']
 

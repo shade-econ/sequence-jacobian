@@ -1,4 +1,5 @@
 """Test all models' estimation calculations"""
+
 import numpy as np
 
 import sequence_jacobian as sj

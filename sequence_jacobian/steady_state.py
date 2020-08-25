@@ -1,10 +1,10 @@
-"""A general function for computing a model's steady state variable and parameters values"""
+"""A general function for computing a model's steady state variables and parameters values"""
 
 import numpy as np
 import scipy.optimize as opt
 from copy import deepcopy
 
-from . import utils
+from . import utilities as utils
 from .blocks.simple_block import SimpleBlock
 from .blocks.helper_block import HelperBlock
 
@@ -44,7 +44,7 @@ def steady_state(blocks, calibration, unknowns, targets,
     """
 
     ss_values = deepcopy(calibration)
-    topsorted = utils.block_sort(blocks, calibration=calibration)
+    topsorted = utils.graph.block_sort(blocks, calibration=calibration)
 
     def residual(unknown_values, include_helpers=True, update_unknowns_inplace=False):
         ss_values.update(smart_zip(unknowns.keys(), unknown_values))
@@ -85,7 +85,7 @@ def steady_state(blocks, calibration, unknowns, targets,
         assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < ctol
 
     # Update to set the solutions for the steady state values of the unknowns
-    ss_values.update(zip(unknowns, utils.make_tuple(unknown_solutions)))
+    ss_values.update(zip(unknowns, utils.misc.make_tuple(unknown_solutions)))
 
     return ss_values
 
@@ -143,7 +143,7 @@ def eval_block_ss(block, potential_args):
     # Simple and HetBlocks require different handling of block.ss() output since
     # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
     if isinstance(block, SimpleBlock) or isinstance(block, HelperBlock):
-        output_args = utils.make_tuple(block.ss(**input_args))
+        output_args = utils.misc.make_tuple(block.ss(**input_args))
         outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
     else:  # assume it's a HetBlock. Figure out a nicer way to handle SolvedBlocks/CombinedBlocks later on
         outputs = block.ss(**input_args)
@@ -182,7 +182,7 @@ def _solve_for_unknowns(residual, unknowns, tol=1e-9, solver=None, **solver_kwar
             raise ValueError("Steady-state solver did not converge.")
     elif solver == "broyden":
         init_values = np.array(list(unknowns.values()))
-        unknown_solutions, _ = utils.broyden_solver(residual, init_values, tol=tol, **solver_kwargs)
+        unknown_solutions, _ = utils.solvers.broyden_solver(residual, init_values, tol=tol, **solver_kwargs)
         unknown_solutions = list(unknown_solutions)
     elif solver is "solved":
         # If the entire solution is provided by the helper blocks
