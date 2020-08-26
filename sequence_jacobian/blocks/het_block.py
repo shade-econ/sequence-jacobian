@@ -153,10 +153,13 @@ class HetBlock:
         - jac   : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
         - ajac  : compute asymptotic columns of jacobians output by jac, also using fake news algorithm
 
-        - attach_hetinput : make new HetBlock that first processes inputs through function hetinput
+        - add_hetinput : add a hetinput to the HetBlock that first processes inputs through function hetinput
+        - add_hetoutput: add a hetoutput to the HetBlock that is computed after the entire ss computation, or after
+                         each backward iteration step in td
     '''
 
-    def ss(self, backward_tol=1E-8, backward_maxit=5000, forward_tol=1E-10, forward_maxit=100_000, **kwargs):
+    def ss(self, backward_tol=1E-8, backward_maxit=5000, forward_tol=1E-10, forward_maxit=100_000,
+           hetoutput=False, **kwargs):
         """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
 
         Parameters
@@ -193,6 +196,8 @@ class HetBlock:
             - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
         """
 
+        ss = copy.deepcopy(kwargs)
+
         # extract information from kwargs
         Pi = kwargs[self.exogenous]
         grid = {k: kwargs[k+'_grid'] for k in self.policy}
@@ -201,17 +206,28 @@ class HetBlock:
 
         # run backward iteration
         sspol = self.policy_ss(kwargs, tol=backward_tol, maxit=backward_maxit)
+        ss.update(sspol)
 
         # run forward iteration
         D = self.dist_ss(Pi, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
+        ss.update({"D": D})
 
         # aggregate all outputs other than backward variables on grid, capitalize
         aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_iter_outputs}
+        ss.update(aggs)
+
+        if hetoutput:
+            hetoutputs = zip(self.hetoutput_outputs_order,
+                             utils.misc.make_tuple(self.hetoutput(**{arg_name: ss[arg_name]
+                                                                     for arg_name in self.hetoutput_inputs})))
+        else:
+            hetoutputs = {}
+        ss.update(hetoutputs)
 
         # clear any previously saved Jacobian info for safety, since we're computing new SS
         self.clear_saved()
 
-        return {**sspol, **aggs, 'D': D}
+        return ss
 
     def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
@@ -262,7 +278,7 @@ class HetBlock:
             # be careful: if you include vars from self.back_iter_vars in kwargs, agents will use them!
             backdict.update({k: v[t,...] for k, v in kwargs.items()})
             individual = {k: v for k, v in zip(self.back_step_output_list,
-                                    self.back_step_fun(**self.make_inputs(backdict)))}
+                                               self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
             for k in self.non_back_iter_outputs:
                 individual_paths[k][t, ...] = individual[k]
@@ -283,7 +299,7 @@ class HetBlock:
                         utils.interpolate.interpolate_coord_robust(grid[pol], individual_paths[pol][t, ...])
 
             # step forward
-            D_path[t+1, ...]= self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
+            D_path[t+1, ...] = self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {k.upper(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[k])
@@ -506,6 +522,7 @@ class HetBlock:
             self.hetoutput_outputs_order = utils.misc.output_list(hetoutput)
 
             # modify inputs to include hetoutput's additional inputs, remove outputs
+            self.inputs |= (self.hetoutput_inputs - self.back_step_outputs - set("D"))
             self.outputs |= self.hetoutput_outputs
 
     '''Part 3: components of ss():

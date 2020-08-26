@@ -125,6 +125,23 @@ def income(e_grid, tax, w, N):
 household.add_hetinput(income, verbose=False)
 
 
+# A potential hetoutput to include with the above HetBlock
+def adjustment_costs(a, a_grid, r, chi0, chi1, chi2, D):
+    chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, r, chi0, chi1, chi2)
+    # TODO: Currently chi becomes a 4-d (nZ x nB x nA x nT) Displace object when solving for the transitional
+    #   dynamics of the two asset model (since r is a Displace, which is affected by the rstar shock),
+    #   where D remains a 3-d IgnoreVector, since it is unaffected directly
+    #   by any of the shocks, and hence never gets converted to a Displace object with a time dimension.
+    #   In steady state since the dimensions of D and chi are the same, np.vdot is a valid operation;
+    #   however, for transitional dynamics, we actually need the np.ndim(D)-axis tensor product of D and chi
+    #   to return Chi, a vector of length nT.
+    #   In the future, we should find a more general way of accounting for this possibility, so the user does
+    #   not have to directly write a tensor product into their code...
+    Chi = np.tensordot(D, chi, axes=np.ndim(D)) if isinstance(D, Displace) or isinstance(chi, Displace) else np.vdot(D, chi)
+
+    return chi, Chi
+
+
 """Supporting functions for HA block"""
 
 def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
@@ -289,23 +306,6 @@ def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
 
 
 @simple
-def adjustment_costs(a, a_grid, r, chi0, chi1, chi2, D):
-    chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, r, chi0, chi1, chi2)
-    # TODO: Currently chi becomes a 4-d (nZ x nB x nA x nT) Displace object when solving for the transitional
-    #   dynamics of the two asset model (since r is a Displace, which is affected by the rstar shock),
-    #   where D remains a 3-d IgnoreVector, since it is unaffected directly
-    #   by any of the shocks, and hence never gets converted to a Displace object with a time dimension.
-    #   In steady state since the dimensions of D and chi are the same, np.vdot is a valid operation;
-    #   however, for transitional dynamics, we actually need the np.ndim(D)-axis tensor product of D and chi
-    #   to return Chi, a vector of length nT.
-    #   In the future, we should find a more general way of accounting for this possibility, so the user does
-    #   not have to directly write a tensor product into their code...
-    Chi = np.tensordot(D, chi, axes=np.ndim(D)) if isinstance(D, Displace) or isinstance(chi, Displace) else np.vdot(D, chi)
-
-    return Chi
-
-
-@simple
 def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
     b_grid = utils.discretize.agrid(amax=bmax, n=nB)
     a_grid = utils.discretize.agrid(amax=amax, n=nA)
@@ -396,8 +396,7 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
     assert np.abs(goods_mkt) < 1E-7
 
     ss.update({'pi': 0, 'piw': 0, 'Q': 1, 'Y': 1, 'N': 1, 'mc': mc, 'K': K, 'Z': Z, 'I': I, 'w': w, 'tax': tax,
-               # 'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'Chi': Chi, 'goods_mkt': goods_mkt, 'phi': phi,
-               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'phi': phi,
+               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'chi': chi, 'Chi': Chi, 'phi': phi,
                'beta': beta, 'vphi': vphi, 'omega': omega, 'alpha': alpha, 'delta': delta, 'mup': mup, 'muw': muw,
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'z_grid': z_grid, 'e_grid': e_grid,
                'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r,

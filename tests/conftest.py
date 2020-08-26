@@ -1,6 +1,7 @@
 """Fixtures used by tests."""
 
 import pytest
+import copy
 
 from sequence_jacobian import steady_state
 from sequence_jacobian.models import rbc, krusell_smith, hank, two_asset
@@ -69,12 +70,13 @@ def one_asset_hank_model():
 
 @pytest.fixture(scope='session')
 def two_asset_hank_model():
-    blocks = [two_asset.household, two_asset.make_grids,
+    household = copy.deepcopy(two_asset.household)
+    household.add_hetoutput(two_asset.adjustment_costs, verbose=False)
+    blocks = [household, two_asset.make_grids,
               two_asset.pricing_solved, two_asset.arbitrage_solved, two_asset.production_solved,
               two_asset.dividend, two_asset.taylor, two_asset.fiscal,
               two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing,
               two_asset.partial_steady_state_solution]
-              # two_asset.adjustment_costs, two_asset.partial_steady_state_solution]
 
     # Steady State
     calibration = {"pi": 0, "piw": 0, "Q": 1, "Y": 1, "N": 1, "r": 0.0125, "rstar": 0.0125, "i": 0.0125,

@@ -79,13 +79,16 @@ def steady_state(blocks, calibration, unknowns, targets,
 
     unknown_solutions = _solve_for_unknowns(residual, unknowns, tol=ttol, solver=solver, **solver_kwargs)
 
-    # Check that the solution is consistent with what would come out of the DAG without
-    # the helper blocks
+    # Check that the solution is consistent with what would come out of the DAG without the helper blocks
     if consistency_check:
         assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < ctol
 
     # Update to set the solutions for the steady state values of the unknowns
     ss_values.update(zip(unknowns, utils.misc.make_tuple(unknown_solutions)))
+
+    # Find the hetoutputs of the Hetblocks that have hetoutputs
+    for i in find_blocks_with_hetoutputs(blocks):
+        ss_values.update(eval_block_ss(blocks[i], ss_values, hetoutput=True))
 
     return ss_values
 
@@ -129,24 +132,24 @@ def compute_target_values(targets, potential_args):
 
 
 # Analogous to the SHADE workflow of having blocks call utils.apply(self._fss, inputs) but not as general.
-def eval_block_ss(block, potential_args):
+def eval_block_ss(block, potential_args, **kwargs):
     """
     Evaluate the .ss method of a block, given a dictionary of potential arguments.
 
     block: Refer to the `steady_state` function docstring for the "blocks" variable
     potential_args: Refer to the `steady_state` function docstring for the "calibration" variable
 
-    :return: A `dict` of output names (as `str`) and output values from evaluating the .ss method of a block
+    return: A `dict` of output names (as `str`) and output values from evaluating the .ss method of a block
     """
     input_args = {unprime(arg_name): potential_args[unprime(arg_name)] for arg_name in block.inputs}
 
     # Simple and HetBlocks require different handling of block.ss() output since
     # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
     if isinstance(block, SimpleBlock) or isinstance(block, HelperBlock):
-        output_args = utils.misc.make_tuple(block.ss(**input_args))
+        output_args = utils.misc.make_tuple(block.ss(**input_args, **kwargs))
         outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
     else:  # assume it's a HetBlock. Figure out a nicer way to handle SolvedBlocks/CombinedBlocks later on
-        outputs = block.ss(**input_args)
+        outputs = block.ss(**input_args, **kwargs)
 
     return outputs
 
@@ -233,3 +236,7 @@ def smart_zeros(n):
         return np.zeros(n)
     else:
         return 0.
+
+
+def find_blocks_with_hetoutputs(blocks):
+    return [i for i, block in enumerate(blocks) if hasattr(block, "hetoutput") and block.hetoutput is not None]
