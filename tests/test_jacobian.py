@@ -63,7 +63,7 @@ def test_fake_news_v_actual(one_asset_hank_model):
     T = 40
     shock_list=['w', 'r', 'Div', 'Tax']
     Js = household.jac(ss, T, shock_list)
-    output_list = household.non_back_outputs
+    output_list = household.non_back_iter_outputs
 
     # Preliminary processing of the steady state
     (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = household.jac_prelim(ss)
@@ -126,7 +126,7 @@ def test_fake_news_v_direct_method(one_asset_hank_model):
     household = blocks[0]
     T = 40
     shock_list = ('r')
-    output_list = household.non_back_outputs
+    output_list = household.non_back_iter_outputs
     h = 1E-4
 
     Js = household.jac(ss, T, shock_list)
