@@ -90,13 +90,13 @@ def test_fake_news_v_actual(one_asset_hank_model):
     assert np.linalg.norm(persistent_asset - Js["A"]["r"][1:31, 0], np.inf) < 2e-15
 
     # Step 3 of fake news algorithm: combine everything to make the fake news matrix for each output-input pair
-    Fs = {o.upper(): {} for o in output_list}
+    Fs = {o.capitalize(): {} for o in output_list}
     for o in output_list:
         for i in shock_list:
             F = np.empty((T,T))
             F[0, ...] = curlyYs[i][o]
             F[1:, ...] = curlyPs[o].reshape(T-1, -1) @ curlyDs[i].reshape(T, -1).T
-            Fs[o.upper()][i] = F
+            Fs[o.capitalize()][i] = F
 
 
     impulse = Fs['C']['w'][:10, 1].copy()  # start with fake news impulse
@@ -106,18 +106,18 @@ def test_fake_news_v_actual(one_asset_hank_model):
 
     # Step 4 of fake news algorithm: recursively convert fake news matrices to actual Jacobian matrices
     Js_original = Js
-    Js = {o.upper(): {} for o in output_list}
+    Js = {o.capitalize(): {} for o in output_list}
     for o in output_list:
         for i in shock_list:
             # implement recursion (30): start with J=F and accumulate terms along diagonal
-            J = Fs[o.upper()][i].copy()
+            J = Fs[o.capitalize()][i].copy()
             for t in range(1, J.shape[1]):
                 J[1:, t] += J[:-1, t-1]
-            Js[o.upper()][i] = J
+            Js[o.capitalize()][i] = J
 
     for o in output_list:
         for i in shock_list:
-            assert np.array_equal(Js[o.upper()][i], Js_original[o.upper()][i])
+            assert np.array_equal(Js[o.capitalize()][i], Js_original[o.capitalize()][i])
 
 
 def test_fake_news_v_direct_method(one_asset_hank_model):
@@ -130,7 +130,7 @@ def test_fake_news_v_direct_method(one_asset_hank_model):
     h = 1E-4
 
     Js = household.jac(ss, T, shock_list)
-    Js_direct = {o.upper(): {i: np.empty((T, T)) for i in shock_list} for o in output_list}
+    Js_direct = {o.capitalize(): {i: np.empty((T, T)) for i in shock_list} for o in output_list}
 
     # run td once without any shocks to get paths to subtract against
     # (better than subtracting by ss since ss not exact)
@@ -145,6 +145,6 @@ def test_fake_news_v_direct_method(one_asset_hank_model):
 
             # store results as column t of J[o][i] for each outcome o
             for o in output_list:
-                Js_direct[o.upper()][i][:, t] = (td_out[o.upper()] - td_noshock[o.upper()]) / h
+                Js_direct[o.capitalize()][i][:, t] = (td_out[o.capitalize()] - td_noshock[o.capitalize()]) / h
 
     assert np.linalg.norm(Js["C"]["r"] - Js_direct["C"]["r"], np.inf) < 3e-4

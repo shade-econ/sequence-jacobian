@@ -78,7 +78,7 @@ class HetBlock:
         # self.outputs and self.inputs are the *aggregate* outputs and inputs of this HetBlock, which are used
         # in utils.graph.block_sort to topologically sort blocks along the DAG
         # according to their aggregate outputs and inputs.
-        self.outputs = {k.upper() for k in self.non_back_iter_outputs}
+        self.outputs = {k.capitalize() for k in self.non_back_iter_outputs}
         self.inputs = self.back_step_inputs - {k + '_p' for k in self.back_iter_vars}
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
@@ -106,7 +106,7 @@ class HetBlock:
         for pol in self.policy:
             if pol not in self.back_step_outputs:
                 raise ValueError(f"Policy '{pol}' not included as output in {back_step_fun.__name__}")
-            if pol.isupper():
+            if pol[0].isupper():
                 raise ValueError(f"Policy '{pol}' is uppercase in {back_step_fun.__name__}, which is not allowed")
 
         for back in self.back_iter_vars:
@@ -117,7 +117,7 @@ class HetBlock:
                 raise ValueError(f"Backward variable '{back}' not included as output in {back_step_fun.__name__}")
 
         for out in self.non_back_iter_outputs:
-            if out.isupper():
+            if out[0].isupper():
                 raise ValueError("Output '{out}' is uppercase in {back_step_fun.__name__}, which is not allowed")
 
         # Add the backward iteration initializer function (the initial guesses for self.back_iter_vars)
@@ -213,13 +213,15 @@ class HetBlock:
         ss.update({"D": D})
 
         # aggregate all outputs other than backward variables on grid, capitalize
-        aggs = {k.upper(): np.vdot(D, sspol[k]) for k in self.non_back_iter_outputs}
+        aggs = {k.capitalize(): np.vdot(D, sspol[k]) for k in self.non_back_iter_outputs}
         ss.update(aggs)
 
         if hetoutput:
-            hetoutputs = zip(self.hetoutput_outputs_order,
-                             utils.misc.make_tuple(self.hetoutput(**{arg_name: ss[arg_name]
-                                                                     for arg_name in self.hetoutput_inputs})))
+            hetoutputs = dict(zip(self.hetoutput_outputs_order,
+                                  utils.misc.make_tuple(self.hetoutput(**{arg_name: ss[arg_name]
+                                                                          for arg_name in self.hetoutput_inputs}))))
+            # aggregate hetoutput outputs
+            hetoutputs.update({k.capitalize(): np.vdot(D, hetoutputs[k]) for k in self.hetoutput_outputs})
         else:
             hetoutputs = {}
         ss.update(hetoutputs)
@@ -271,6 +273,7 @@ class HetBlock:
 
         # allocate empty arrays to store result, assume all like D
         individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_iter_outputs}
+        hetoutput_paths = {k: np.empty((T,) + D.shape) for k in self.hetoutput_outputs}
 
         # backward iteration
         backdict = ss.copy()
@@ -280,6 +283,13 @@ class HetBlock:
             individual = {k: v for k, v in zip(self.back_step_output_list,
                                                self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
+
+            if self.hetoutput is not None:
+                hetoutput = {k: v for k, v in zip(self.hetoutput_outputs_order,
+                                                  self.hetoutput(**{i: backdict[i] for i in self.hetoutput_inputs}))}
+                for k in self.hetoutput_outputs:
+                    hetoutput_paths[k][t, ...] = hetoutput[k]
+
             for k in self.non_back_iter_outputs:
                 individual_paths[k][t, ...] = individual[k]
 
@@ -302,14 +312,16 @@ class HetBlock:
             D_path[t+1, ...] = self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
 
         # obtain aggregates of all outputs, made uppercase
-        aggregates = {k.upper(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[k])
+        aggregates = {k.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[k])
                       for k in self.non_back_iter_outputs}
+        aggregate_hetoutputs = {k.capitalize(): utils.optimized_routines.fast_aggregate(D_path, hetoutput_paths[k])
+                                for k in self.hetoutput_outputs}
 
         # return either this, or also include distributional information
         if returnindividual:
-            return {**aggregates, **individual_paths, 'D': D_path}
+            return {**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths, 'D': D_path}
         else:
-            return aggregates
+            return {**aggregates, **aggregate_hetoutputs}
 
     def jac(self, ss, T, shock_list, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
@@ -343,12 +355,12 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_iter_outputs
 
-        relevant_shocks = [i for i in self.inputs if i in shock_list]
+        relevant_shocks = [i for i in self.inputs - self.hetoutput_inputs if i in shock_list]
 
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
             return utils.misc.extract_nested_dict(savedA=self.saved['J'],
-                                                  keys1=[o.upper() for o in output_list],
+                                                  keys1=[o.capitalize() for o in output_list],
                                                   keys2=relevant_shocks, shape=(T, T))
 
         # step 0: preliminary processing of steady state
@@ -371,12 +383,12 @@ class HetBlock:
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
-        F = {o.upper(): {} for o in output_list}
-        J = {o.upper(): {} for o in output_list}
+        F = {o.capitalize(): {} for o in output_list}
+        J = {o.capitalize(): {} for o in output_list}
         for o in output_list:
             for i in relevant_shocks:
-                F[o.upper()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
-                J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
+                F[o.capitalize()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
+                J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
 
         if save:
             self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
@@ -397,7 +409,7 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_iter_outputs
 
-        relevant_shocks = [i for i in self.inputs if i in shock_list]
+        relevant_shocks = [i for i in self.inputs - self.hetoutput_inputs if i in shock_list]
 
         # if Tpost not provided, assume it is 2*T by default
         if Tpost is None:
@@ -409,10 +421,10 @@ class HetBlock:
         if use_saved and 'curlyYs' not in self.saved:
             asympJ = {}
             for o in output_list:
-                asympJ[o.upper()] = {}
+                asympJ[o.capitalize()] = {}
                 for i in relevant_shocks:
-                    asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
-                                                self.saved['asympJ'][o.upper()][i][-(Tpost-1): Tpost])
+                    asympJ[o.capitalize()][i] = asymptotic.AsymptoticTimeInvariant(
+                                                self.saved['asympJ'][o.capitalize()][i][-(Tpost-1): Tpost])
             return asympJ
 
         # was either saved last by jac or not saved at all, need to do more work!
@@ -450,14 +462,14 @@ class HetBlock:
                 curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1+Tpost-1)
 
         # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
-        J = {o.upper(): {} for o in output_list}
-        asympJ = {o.upper(): {} for o in output_list}
+        J = {o.capitalize(): {} for o in output_list}
+        asympJ = {o.capitalize(): {} for o in output_list}
         for o in output_list:
             for i in relevant_shocks:
                 F = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
-                J[o.upper()][i] = HetBlock.J_from_F(F)
-                asympJ[o.upper()][i] = asymptotic.AsymptoticTimeInvariant(
-                    np.concatenate((np.zeros(Tpost-T), J[o.upper()][i][:, -1])))
+                J[o.capitalize()][i] = HetBlock.J_from_F(F)
+                asympJ[o.capitalize()][i] = asymptotic.AsymptoticTimeInvariant(
+                    np.concatenate((np.zeros(Tpost-T), J[o.capitalize()][i][:, -1])))
 
         # if supposed to save, record J and asympJ for use by jac or ajac
         if save:
@@ -499,7 +511,8 @@ class HetBlock:
         """Add a hetoutput to this HetBlock. Any call to self.back_step_fun will first process
          inputs through the hetoutput function.
 
-        A `hetoutput` is any potentially non-scalar-valued output that the user might desire to be calculated from
+        # TODO: Emphasize that hetoutputs are all non-scalar-valued and assumed to be simple aggregates over D
+        A `hetoutput` is any *non-scalar-value* output that the user might desire to be calculated from
         the output arguments of the HetBlock's backward iteration function. Importantly, as of now the `hetoutput`
         cannot be a function of time displaced values of the HetBlock's outputs but rather must be able to
         be calculated from the outputs statically. e.g. The two asset HANK model example provided in the models

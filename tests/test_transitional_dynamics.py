@@ -1,6 +1,7 @@
 """Test all models' non-linear transitional dynamics computations"""
 
 import numpy as np
+import copy
 
 from sequence_jacobian import two_asset, nonlinear, jacobian
 from sequence_jacobian import utilities as utils
@@ -94,7 +95,9 @@ def test_two_asset_td(two_asset_hank_model):
 def test_two_asset_solved_v_simple_td(two_asset_hank_model):
     blocks, exogenous, unknowns, targets, ss = two_asset_hank_model
 
-    blocks_simple = [two_asset.household, two_asset.make_grids,
+    household = copy.deepcopy(two_asset.household)
+    household.add_hetoutput(two_asset.adjustment_costs, verbose=False)
+    blocks_simple = [household, two_asset.make_grids,
                      two_asset.pricing, two_asset.arbitrage, two_asset.labor, two_asset.investment,
                      two_asset.dividend, two_asset.taylor, two_asset.fiscal,
                      two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing,

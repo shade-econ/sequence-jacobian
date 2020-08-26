@@ -573,38 +573,23 @@ def numeric_primitive(instance):
         return instance.real if np.isscalar(instance) else instance.base
 
 
-def shift_first_dim_to_last(v):
-    """For `v`, an np.ndarray, shift the first dimension to the last dimension,
-    e.g. if np.shape(v) = (3, 4, 5), then shift_first_dim_to_last(v) returns the same data as v
-    but in shape (4, 5, 3).
-    This is useful since in apply_function, the default behavior of iterating across the time dimension and then
-    calling np.array on the resulting list of arrays returns the time dimension in the first index (but we want
-    it in the last index)
-    """
-    if np.ndim(v) > 1:
-        return np.moveaxis(v, 0, -1)
-    else:
-        return v
-
-
+# TODO: This needs its own unit test
 def vectorize_func_over_time(func, *args):
     """In `args` some arguments will be Displace objects and others will be Ignore/IgnoreVector objects.
-    The Displace objects will have an extra time dimension (as its last dimension).
+    The Displace objects will have an extra time dimension (as its first dimension).
     We need to ensure that `func` is evaluated at the non-time dependent steady-state value of
     the Ignore/IgnoreVectors and at each of the time-dependent values, t, of the Displace objects or in other
     words along its time path.
     """
     d_inds = [i for i in range(len(args)) if isinstance(args[i], Displace)]
     x_path = []
-    # np.shape(args[d_inds[0]])[-1] is T, the size of the last dimension of the first Displace object
+
+    # np.shape(args[d_inds[0]])[0] is T, the size of the first dimension of the first Displace object
     # provided in args (assume all Displaces are the same shape s.t. they're conformable)
-    for t in range(np.shape(args[d_inds[0]])[-1]):
+    for t in range(np.shape(args[d_inds[0]])[0]):
         x_path.append(func(*[args[i][t] if i in d_inds else args[i] for i in range(len(args))]))
 
-    # Need an extra call to shift_first_dim_to_last, since the way Python collects a list of arrays through np.array
-    # (the list's elements are across the time dimension) by default is to add it as the first
-    # dimension, but we want time to be the last dimension so need to move that axis
-    return shift_first_dim_to_last(np.array(x_path))
+    return np.array(x_path)
 
 
 def apply_function(func, *args, **kwargs):

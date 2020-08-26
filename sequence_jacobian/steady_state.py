@@ -111,7 +111,7 @@ def compute_target_values(targets, potential_args):
     targets: Refer to `steady_state` function docstring
     potential_args: Refer to the `steady_state` function docstring for the "calibration" variable
 
-    :return: A `float` (if computing a univariate target) or an `np.ndarray` (if using a multivariate target)
+    return: A `float` (if computing a univariate target) or an `np.ndarray` (if using a multivariate target)
     """
     target_values = np.empty(len(targets))
     for (i, t) in enumerate(targets):
@@ -174,7 +174,7 @@ def _solve_for_unknowns(residual, unknowns, tol=1e-9, solver=None, **solver_kwar
     solver_kwargs:
         Refer to the `steady_state` function docstring for the "solver_kwargs" variable
 
-    :return: The root[s] of the residual function as either a scalar (float) or a list of floats
+    return: The root[s] of the residual function as either a scalar (float) or a list of floats
     """
     if solver is None:
         raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")

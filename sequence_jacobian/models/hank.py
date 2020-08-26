@@ -50,9 +50,9 @@ def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi):
     Va = (1 + r) * c ** (-1 / eis)
 
     # efficiency units of labor which is what really matters
-    ns = e_grid[:, np.newaxis] * n
+    n_e = e_grid[:, np.newaxis] * n
 
-    return Va, a, c, n, ns
+    return Va, a, c, n, n_e
 
 
 def transfers(pi_e, Div, Tax, e_grid):
@@ -135,9 +135,9 @@ def fiscal(r, B):
 
 
 @simple
-def mkt_clearing(A, NS, C, L, Y, B, pi, mu, kappa):
+def mkt_clearing(A, N_e, C, L, Y, B, pi, mu, kappa):
     asset_mkt = A - B
-    labor_mkt = NS - L
+    labor_mkt = N_e - L
     goods_mkt = Y - C - mu/(mu-1)/(2*kappa) * (1+pi).apply(np.log)**2 * Y
     return asset_mkt, labor_mkt, goods_mkt
 
@@ -203,8 +203,8 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
             raise ValueError('Clearly invalid inputs')
         out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
                            eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc,
-                                 c_const=c_const_loc, n_const=n_const_loc)
-        return np.array([out['A'] - B, out['NS'] - 1])
+                           c_const=c_const_loc, n_const=n_const_loc)
+        return np.array([out['A'] - B, out['N_e'] - 1])
 
     # solve for beta, vphi
     (beta, vphi), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess]), verbose=False)
@@ -212,7 +212,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     # extra evaluation for reporting
     c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
     ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
-                            Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const)
+                      Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const)
     
     # check Walras's law
     goods_mkt = 1 - ss['C']
@@ -220,6 +220,13 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     
     # add aggregate variables
     ss.update({'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
-               'rho_s': rho_s, 'labor_mkt': ss["NS"] - 1, 'nA': nA, 'nS': nS, 'B_Y': B_Y, 'sigma_s': sigma_s,
+               'rho_s': rho_s, 'labor_mkt': ss["N_e"] - 1, 'nA': nA, 'nS': nS, 'B_Y': B_Y, 'sigma_s': sigma_s,
                'goods_mkt': 1 - ss["C"], 'amax': amax, 'asset_mkt': ss["A"] - B, 'nkpc_res': kappa * (w - 1 / mu)})
+
+    # since we don't use c_const, n_const (an optimization of pre-calculating the constrained consumption and labor
+    # supply) in the general steady_state function, delete it from the ss dict so the test won't
+    # check for those variables
+    del ss["c_const"]
+    del ss["n_const"]
+
     return ss
