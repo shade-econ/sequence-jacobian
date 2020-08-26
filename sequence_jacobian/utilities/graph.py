@@ -1,6 +1,9 @@
 """Topological sort and related code"""
 
+from ..blocks.simple_block import SimpleBlock
+from ..blocks.het_block import HetBlock
 from ..blocks.helper_block import HelperBlock
+from ..blocks.solved_block import SolvedBlock
 
 
 def block_sort(block_list, ignore_helpers=False, calibration=None):
@@ -91,14 +94,7 @@ def construct_output_map(block_list, ignore_helpers=False, calibration=None):
             continue
 
         # Find the relevant set of outputs corresponding to a block
-        # TODO: This is temporary to force the DAG to account for heterogeneous outputs (e.g. the individual
-        #   household policy functions). Later just generalize those to always be accounted for as potential
-        #   objects to be passed around in the DAG
-        if hasattr(block, 'all_outputs_order'):
-            # Include the backward iteration variable, individual household policy functions, and aggregate equivalents
-            # when adding a HetBlock's outputs to the output map
-            outputs = set(block.all_outputs_order) | set({k.upper() for k in block.non_back_outputs})
-        elif hasattr(block, 'outputs'):
+        if isinstance(block, SimpleBlock) or isinstance(block, HetBlock) or isinstance(block, HelperBlock) or isinstance(block, SolvedBlock):
             outputs = block.outputs
         elif isinstance(block, dict):
             outputs = block.keys()
