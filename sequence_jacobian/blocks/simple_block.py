@@ -118,7 +118,7 @@ class SimpleBlock:
 
             # Loop over all inputs/shocks which we want to differentiate with respect to
             for shock in relevant_shocks:
-                invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock, T=T)
+                invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock)
 
             # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
             # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
@@ -143,7 +143,7 @@ class SimpleBlock:
             return J
 
 
-def compute_single_shock_curlyJ(f, steady_state_dict, shock_name, T=None):
+def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):
     """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
     input_args = {i: ignore(steady_state_dict[i]) for i in utils.misc.input_list(f)}
     input_args[shock_name] = AccumulatedDerivative(f_value=steady_state_dict[shock_name])
