@@ -2,6 +2,7 @@
 
 import numpy as np
 
+import sequence_jacobian as sj
 from sequence_jacobian.models import rbc, krusell_smith, hank, two_asset
 
 

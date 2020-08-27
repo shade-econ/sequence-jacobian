@@ -45,7 +45,12 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
     # use same interpolation to get Wb and then c
     a_endo_unc = utils.interpolate.apply_coord(i, pi, a_grid)
-    c_endo_unc = utils.interpolate.apply_coord(i, pi, Wb) ** (-eis)
+    try:
+        c_endo_unc = utils.interpolate.apply_coord(i, pi, Wb) ** (-eis)
+    except:
+        # print(f"Problem c_endo_unc value = {utils.interpolate.apply_coord(i, pi, Wb)}\n")
+        print("PROBLEM!")
+        raise
 
 
     # === STEP 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED ===
