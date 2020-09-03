@@ -209,7 +209,7 @@ class HetBlock:
         D = ss['D']
 
         # allocate empty arrays to store result, assume all like D
-        individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_outputs}
+        individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_outputs | set(self.backward)}
 
         # backward iteration
         backdict = ss.copy()
@@ -219,8 +219,10 @@ class HetBlock:
             individual = {k: v for k, v in zip(self.all_outputs_order,
                                     self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.backward})
-            for k in self.non_back_outputs:
+            for k in self.non_back_outputs | set(self.backward):
                 individual_paths[k][t, ...] = individual[k]
+            # for k in self.non_back_outputs:
+            #     individual_paths[k][t, ...] = individual[k]
 
         D_path = np.empty((T,) + D.shape)
         D_path[0, ...] = D
