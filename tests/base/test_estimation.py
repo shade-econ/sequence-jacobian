@@ -1,11 +1,14 @@
 """Test all models' estimation calculations"""
 
+import pytest
 import numpy as np
 
 import sequence_jacobian as sj
 from sequence_jacobian import jacobian
 
 
+# See test_determinacy.py for the to-do describing this suppression
+@pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
 def test_krusell_smith_estimation(krusell_smith_model):
     blocks, exogenous, unknowns, targets, ss = krusell_smith_model
 

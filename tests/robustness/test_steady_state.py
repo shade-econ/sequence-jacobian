@@ -1,8 +1,15 @@
+import pytest
 import numpy as np
 
 import sequence_jacobian as sj
 
 
+# See test_determinacy.py for the to-do describing this suppression
+@pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
+# This warning is expected, so we will suppress it. If the solver attempts an invalid value,
+# the backtracking mechanism in the linear continuation functionality of constrained multivariate root-finding
+# will use the cached residual value and attempt to step back into the valid region.
+@pytest.mark.filterwarnings("ignore:.*invalid value encountered in.*:RuntimeWarning")
 def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_model):
     blocks, _, _, _, ss = one_asset_hank_model
 
@@ -19,6 +26,9 @@ def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_model):
         assert np.all(np.isclose(ss[k], ss_ref[k]))
 
 
+# See test_determinacy.py for the to-do describing this suppression
+@pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
+@pytest.mark.filterwarnings("ignore:.*invalid value encountered in.*:RuntimeWarning")
 def test_two_asset_steady_state_w_bad_init_guesses_and_bounds(two_asset_hank_model):
     blocks, _, _, _, ss = two_asset_hank_model
 

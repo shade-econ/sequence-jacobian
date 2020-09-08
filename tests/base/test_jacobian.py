@@ -87,7 +87,7 @@ def test_fake_news_v_actual(one_asset_hank_model):
     persistent_asset = np.array([np.vdot(curlyDs['r'][0, ...],
                                          curlyPs['a'][u, ...]) for u in range(30)])
 
-    assert np.linalg.norm(persistent_asset - Js["A"]["r"][1:31, 0], np.inf) < 2e-15
+    assert np.linalg.norm(persistent_asset - Js["A"]["r"][1:31, 0], np.inf) < 3e-15
 
     # Step 3 of fake news algorithm: combine everything to make the fake news matrix for each output-input pair
     Fs = {o.capitalize(): {} for o in output_list}
