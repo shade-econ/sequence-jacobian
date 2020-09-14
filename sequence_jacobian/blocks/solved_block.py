@@ -45,12 +45,13 @@ class SolvedBlock:
         self.outputs = (set.union(*(b.outputs for b in block_list)) | set(list(self.unknowns.keys()))) - set(self.targets)
         self.inputs = set.union(*(b.inputs for b in block_list)) - self.outputs
 
-    def ss(self, **calibration):
+    def ss(self, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False, **calibration):
         if self.solver is None:
             raise RuntimeError("Cannot call the ss method on this SolvedBlock without specifying a solver.")
         else:
-            return steady_state(self.block_list, calibration, self.unknowns, self.targets, solver=self.solver,
-                                **self.solver_kwargs)
+            return steady_state(self.block_list, calibration, self.unknowns, self.targets,
+                                consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose,
+                                solver=self.solver, **self.solver_kwargs)
 
     def td(self, ss, monotonic=False, returnindividual=False, verbose=False, **kwargs):
         # TODO: add H_U_factored caching of some kind
