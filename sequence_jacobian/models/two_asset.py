@@ -410,7 +410,5 @@ def arbitrage_solved(div, p, r):
     return equity
 
 
-production_solved = solved(block_list=[labor, investment],
-                           unknowns={'Q': 1, 'K': 10},
-                           targets=['inv', 'val'],
-                           solver="broyden", solver_kwargs={"verbose": False})
+production_solved = solved(block_list=[labor, investment], unknowns={'Q': 1, 'K': 10},
+                           targets=['inv', 'val'], solver="broyden")
