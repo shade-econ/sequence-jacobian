@@ -104,7 +104,7 @@ def construct_output_map(block_list, ignore_helpers=False, calibration=None):
         for o in outputs:
             # If a block's output is also present in the provided calibration, then it is not required for the
             # construction of a dependency graph and hence we omit it
-            if calibration is not None and o in calibration:
+            if isinstance(block, HelperBlock) and calibration is not None and o in calibration:
                 continue
 
             # Because some of the outputs of a HelperBlock are, by construction, outputs that also appear in the
