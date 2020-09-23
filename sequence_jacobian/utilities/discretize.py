@@ -56,7 +56,7 @@ def corr(x, y, pi):
     return cov(x, y, pi) / (std(x, pi) * std(y, pi))
 
 
-def markov_tauchen(rho, sigma, N=7, m=3):
+def markov_tauchen(rho, sigma, N=7, m=3, normalize=True):
     """Tauchen method discretizing AR(1) s_t = rho*s_(t-1) + eps_t.
 
     Parameters
@@ -89,7 +89,10 @@ def markov_tauchen(rho, sigma, N=7, m=3):
     # invariant distribution and scaling
     pi = stationary(Pi)
     s *= (sigma / np.sqrt(variance(s, pi)))
-    y = np.exp(s) / np.sum(pi * np.exp(s))
+    if normalize:
+        y = np.exp(s) / np.sum(pi * np.exp(s))
+    else:
+        y = s
 
     return y, pi, Pi
 
