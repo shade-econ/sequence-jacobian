@@ -40,6 +40,6 @@ def test_two_asset_steady_state_w_bad_init_guesses_and_bounds(two_asset_hank_mod
     unknowns = {"beta": (0.5, 0.9, 0.999 / (1 + 0.0125)), "vphi": (0.001, 1.0, 10.), "chi1": (0.5, 5.5, 10.)}
     targets = {"asset_mkt": 0, "labor_mkt": 0, "B": "Bh"}
     ss_ref = sj.steady_state(blocks, calibration, unknowns, targets,
-                             solver="broyden", consistency_check=True, verbose=False)
+                             solver="broyden_custom", consistency_check=True, verbose=False)
     for k in ss.keys():
         assert np.all(np.isclose(ss[k], ss_ref[k]))

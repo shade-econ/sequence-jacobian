@@ -411,4 +411,4 @@ def arbitrage_solved(div, p, r):
 
 
 production_solved = solved(block_list=[labor, investment], unknowns={'Q': 1, 'K': 10},
-                           targets=['inv', 'val'], solver="broyden")
+                           targets=['inv', 'val'], solver="broyden_custom")

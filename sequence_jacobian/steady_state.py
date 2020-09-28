@@ -224,7 +224,7 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         unknown_solutions = list(result.x)
     # TODO: Implement a more general interface for custom solvers, so we don't need to add new elifs at this level
     #  everytime a new custom solver is implemented.
-    elif solver == "broyden":
+    elif solver == "broyden_custom":
         initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
         # If no bounds were provided
         if not bounds:
@@ -236,6 +236,19 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
                                                                      **constrained_kwargs)
             unknown_solutions, _ = utils.solvers.broyden_solver(constrained_residual, initial_values,
                                                                 verbose=verbose, tol=tol, **solver_kwargs)
+        unknown_solutions = list(unknown_solutions)
+    elif solver == "newton_custom":
+        initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
+        # If no bounds were provided
+        if not bounds:
+            unknown_solutions, _ = utils.solvers.newton_solver(residual, initial_values, tol=tol,
+                                                               verbose=verbose, **solver_kwargs)
+        else:
+            constrained_residual = constrained_multivariate_residual(residual, bounds, verbose=verbose,
+                                                                     method=constrained_method,
+                                                                     **constrained_kwargs)
+            unknown_solutions, _ = utils.solvers.newton_solver(constrained_residual, initial_values,
+                                                               verbose=verbose, tol=tol, **solver_kwargs)
         unknown_solutions = list(unknown_solutions)
     elif solver == "solved":
         # If the entire solution is provided by the helper blocks
