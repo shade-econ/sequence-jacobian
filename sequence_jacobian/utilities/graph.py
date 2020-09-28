@@ -35,10 +35,10 @@ def block_sort(block_list, ignore_helpers=False, calibration=None):
     """
 
     # step 1: map outputs to blocks for topological sort
-    outmap = construct_output_map(block_list, calibration=calibration)
+    outmap = construct_output_map(block_list)
 
     # step 2: dependency graph for topological sort and input list
-    dep = construct_dependency_graph(block_list, outmap, ignore_helpers=ignore_helpers)
+    dep = construct_dependency_graph(block_list, outmap, calibration=calibration, ignore_helpers=ignore_helpers)
     if ignore_helpers:
         return ignore_helper_block_indices(topological_sort(dep), block_list)
     else:
@@ -76,7 +76,7 @@ def ignore_helper_block_indices(topsorted, blocks):
     return [i for i in topsorted if not isinstance(blocks[i], HelperBlock)]
 
 
-def construct_output_map(block_list, ignore_helpers=False, calibration=None):
+def construct_output_map(block_list, ignore_helpers=False):
     """Construct a map of outputs to the indices of the blocks that produce them.
 
     block_list: `list`
@@ -84,9 +84,6 @@ def construct_output_map(block_list, ignore_helpers=False, calibration=None):
     ignore_helpers: `bool`
         A boolean indicating whether to account for/return the indices of HelperBlocks contained in block_list
         Set to true when sorting for td and jac calculations
-    calibration: `dict` or `None`
-        An optional dict of variable/parameter names and their pre-specified values to help resolve any cycles
-        introduced by using HelperBlocks. Read above docstring for more detail
     """
     outmap = dict()
     for num, block in enumerate(block_list):
@@ -102,11 +99,6 @@ def construct_output_map(block_list, ignore_helpers=False, calibration=None):
             raise ValueError(f'{block} is not recognized as block or does not provide outputs')
 
         for o in outputs:
-            # If a block's output is also present in the provided calibration, then it is not required for the
-            # construction of a dependency graph and hence we omit it
-            if calibration is not None and o in calibration:
-                continue
-
             # Because some of the outputs of a HelperBlock are, by construction, outputs that also appear in the
             # standard blocks that comprise a DAG, ignore the fact that an output is repeated when considering
             # throwing this ValueError
@@ -122,7 +114,7 @@ def construct_output_map(block_list, ignore_helpers=False, calibration=None):
     return outmap
 
 
-def construct_dependency_graph(block_list, outmap, ignore_helpers=False):
+def construct_dependency_graph(block_list, outmap, calibration=None, ignore_helpers=False):
     """Construct a dependency graph dictionary, with block indices as keys and a set of block indices as values, where
     this set is the set of blocks that the key block is dependent on.
 
@@ -130,6 +122,8 @@ def construct_dependency_graph(block_list, outmap, ignore_helpers=False):
 
     See the docstring of block_sort for more details about the other arguments.
     """
+    if calibration is None:
+        calibration = {}
     dep = {num: set() for num in range(len(block_list))}
     for num, block in enumerate(block_list):
         if ignore_helpers and isinstance(block, HelperBlock):
@@ -139,19 +133,27 @@ def construct_dependency_graph(block_list, outmap, ignore_helpers=False):
         else:
             inputs = set(i for o in block for i in block[o])
         for i in inputs:
-            if i in outmap:
+            # Each potential input to a given block will either be 1) output by another block,
+            # 2) an unknown or exogenous variable, or 3) a pre-specified variable/parameter passed into
+            # the steady-state computation via the `calibration' dict.
+            # If the block is a HelperBlock, then we want to check the calibration to see if the potential
+            # input is a pre-specified variable/parameter, and if it is then we will not add the block that
+            # produces that input as an output as a dependency.
+            # e.g. Krusell Smith's firm_steady_state_solution HelperBlock and firm block would create a cyclic
+            # dependency, if it were not for this resolution.
+            if i in outmap and not (i in calibration and isinstance(block, HelperBlock)):
                 dep[num].add(outmap[i])
     return dep
 
 
-def find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=False, calibration=None):
+def find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=False):
     """Find outputs of the blocks in block_list that are inputs to other blocks in block_list.
     This is useful to ensure that all of the relevant curlyJ Jacobians (of all inputs to all outputs) are computed.
 
     See the docstring of construct_output_map for more details about the arguments.
     """
     required = set()
-    outmap = construct_output_map(block_list, ignore_helpers=ignore_helpers, calibration=calibration)
+    outmap = construct_output_map(block_list, ignore_helpers=ignore_helpers)
     for block in block_list:
         if ignore_helpers and isinstance(block, HelperBlock):
             continue
