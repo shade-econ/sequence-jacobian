@@ -1,6 +1,7 @@
 """Simple nonlinear solvers"""
 
 import numpy as np
+import warnings
 
 
 def newton_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, verbose=True):
@@ -84,7 +85,15 @@ def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, verb
         if np.max(np.abs(y)) < tol:
             return x, y
 
-        dx = np.linalg.solve(J, -y)
+        if len(x) == len(y):
+            dx = np.linalg.solve(J, -y)
+        elif len(x) < len(y):
+            warnings.warn(f"Dimension of x, {len(x)} is less than dimension of y, {len(y)}."
+                          f" Using least-squares criterion to solve for approximate root.")
+            dx = np.linalg.lstsq(J, -y, rcond=None)[0]
+        else:
+            raise ValueError(f"Dimension of x, {len(x)} is greater than dimension of y, {len(y)}."
+                             f" Cannot solve underdetermined system.")
 
         # backtrack at most 29 times
         for bcount in range(30):
@@ -112,7 +121,7 @@ def obtain_J(f, x, y, h=1E-5):
     """Finds Jacobian f'(x) around y=f(x)"""
     nx = x.shape[0]
     ny = y.shape[0]
-    J = np.empty((nx, ny))
+    J = np.empty((ny, nx))
 
     for i in range(nx):
         dx = h * (np.arange(nx) == i)
