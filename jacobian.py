@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from sequence_jacobian import utils, simple_block as sim, asymptotic
+from sequence_jacobian import utils, simple_block as sim, het_block as het, asymptotic
 
 
 '''Part 1: High-level convenience routines: 
@@ -14,7 +14,7 @@ from sequence_jacobian import utils, simple_block as sim, asymptotic
 '''
 
 
-def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
+def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, symmetric=False, Tpost=None, save=False, use_saved=False):
     """Get T*n_u by T*n_u matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
@@ -40,7 +40,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, asymptotic, Tpost, save, use_saved)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, asymptotic, symmetric, Tpost, save, use_saved)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
@@ -55,7 +55,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
         return pack_asymptotic_jacobians(H_U_unpacked, unknowns, targets, Tpost)
 
 
-def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None,
+def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None, symmetric=False,
                                         H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Get a single general equilibrium impulse response.
 
@@ -86,7 +86,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
             T = len(x)
             break
 
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss, T,
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + list(dZ.keys()), ss, T, symmetric=symmetric,
                                       save=save, use_saved=use_saved)
 
     # step 1: if not provided, do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
@@ -122,7 +122,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
     return {o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}
 
 
-def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, 
+def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,  symmetric=False,
           H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
@@ -153,7 +153,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
 
     # step 1: do topological sort and get curlyJs
     curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T,
-                                      save=save, use_saved=use_saved)
+                                      symmetric=symmetric, save=save, use_saved=use_saved)
 
     # step 2: do (matrix) forward accumulation to get
     # H_U = J^(curlyH, curlyU) [if not provided], H_Z = J^(curlyH, curlyZ)
@@ -179,13 +179,13 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
-def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, 
+def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None, symmetric=False,
                      save=False, use_saved=False, Tpost=None):
     """Like get_G, but rather than returning the actual matrices G, return
     asymptotic.AsymptoticTimeInvariant objects representing their asymptotic columns."""
 
     # step 1: do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T, save=save, 
+    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T, symmetric=symmetric, save=save, 
                                       use_saved=use_saved, asymptotic=True, Tpost=Tpost)
 
     # step 2: do (matrix) forward accumulation to get
@@ -204,7 +204,7 @@ def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outpu
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns)) 
 
 
-def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
+def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None, symmetric=False, save=False, use_saved=False):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -236,12 +236,17 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
         block = block_list[num]
         if hasattr(block, 'ajac'):
             # has 'ajac' function, is some block other than SimpleBlock
+            if isinstance(block, het.HetBlock):
+                options = {'symmetric': symmetric}
+            else:
+                options = {}
+
             if asymptotic:
                 jac = block.ajac(ss, T=T,
-                                 shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost, save=save, use_saved=use_saved)
+                                shock_list=[i for i in block.inputs if i in shocks], Tpost=Tpost, save=save, use_saved=use_saved, **options)
             else:
                 jac = block.jac(ss, T=T,
-                                shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved)
+                                shock_list=[i for i in block.inputs if i in shocks], save=save, use_saved=use_saved, **options)
         elif hasattr(block, 'jac'):
             # has 'jac' but not 'ajac', must be SimpleBlock where no distinction (given SimpleSparse)
             jac = block.jac(ss, shock_list=[i for i in block.inputs if i in shocks])

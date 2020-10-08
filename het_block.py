@@ -251,7 +251,7 @@ class HetBlock:
         else:
             return aggregates
 
-    def jac(self, ss, T, shock_list, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jac(self, ss, T, shock_list, output_list=None, h=1E-4, symmetric=False, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -267,6 +267,8 @@ class HetBlock:
             self.back_step_fun except self.backward
         h : [optional] float
             h for numerical differentiation of backward iteration
+        symmetric : [optional] bool
+            symmetric differentiation to obtain jacobians
         save : [optional] bool
             store curlyYs, curlyDs, curlyPs, F, and J from calculation inside HetBlock itself
             useful to avoid redundant work when evaluating .jac or .ajac again
@@ -297,7 +299,7 @@ class HetBlock:
         for i in shock_list:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, ssin_dict, ssout_list,
                                                 ss['D'], Pi.T.copy(), sspol_i, sspol_pi, sspol_space, T, h,
-                                                ss_for_hetinput)
+                                                symmetric, ss_for_hetinput)
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
@@ -320,7 +322,7 @@ class HetBlock:
 
         return J
 
-    def ajac(self, ss, T, shock_list, output_list=None, h=1E-4, Tpost=None, save=False, use_saved=False):
+    def ajac(self, ss, T, shock_list, output_list=None, h=1E-4, Tpost=None, symmetric=False, save=False, use_saved=False):
         """Like .jac, but outputs asymptotic columns of Jacobians as AsymptoticTimeInvariant objects
         with nonzero entries -(T-1),...,(Tpost-1) representing asymptotic entries in diagonals,
         measured relative to main diagonal.
@@ -375,7 +377,7 @@ class HetBlock:
             for i in shock_list:
                 curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, 
                                                     ssin_dict, ssout_list, ss['D'], Pi.T.copy(), sspol_i, 
-                                                    sspol_pi, sspol_space, T, h, ss_for_hetinput)
+                                                    sspol_pi, sspol_space, T, h, symmetric, ss_for_hetinput)
 
             # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
             # here go to (T-1) + (Tpost-1) rather than (T-1)
@@ -537,11 +539,14 @@ class HetBlock:
     '''
 
     def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list, 
-                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4):
+                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4, symmetric=False):
         # shock perturbs outputs
-        shocked_outputs = {k: v for k, v in zip(self.all_outputs_order,
-                                                utils.numerical_diff(self.back_step_fun, ssin_dict, din_dict, h,
-                                                                     ssout_list))}
+        if symmetric:
+            outputs = utils.numerical_diff_symmetric(self.back_step_fun, ssin_dict, din_dict, h)
+        else:
+            outputs = utils.numerical_diff(self.back_step_fun, ssin_dict, din_dict, h, ssout_list)
+
+        shocked_outputs = {k: v for k, v in zip(self.all_outputs_order, outputs)}
         curlyV = {k: shocked_outputs[k] for k in self.backward}
 
         # which affects the distribution tomorrow
@@ -554,7 +559,7 @@ class HetBlock:
         return curlyV, curlyD, curlyY
 
     def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T, 
-                                    sspol_i, sspol_pi, sspol_space, T, h=1E-4, ss_for_hetinput=None):
+                                    sspol_i, sspol_pi, sspol_space, T, h=1E-4, symmetric=False, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
         if self.hetinput is not None and input_shocked in self.hetinput_inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
@@ -566,7 +571,7 @@ class HetBlock:
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list, 
-                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
+                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h, symmetric)
         
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -581,7 +586,7 @@ class HetBlock:
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
                                                     output_list, ssin_dict, ssout_list, 
-                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
+                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h, symmetric)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
 
