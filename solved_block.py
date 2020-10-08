@@ -48,12 +48,12 @@ class SolvedBlock:
         # this is not our focus for now, since our methodological contributions are on dynamic side
         raise NotImplementedError('Cannot evaluate steady state for a SolvedBlock!')
 
-    def td(self, ss, monotonic=False, returnindividual=False, noisy=False, **kwargs):
+    def td(self, ss, ss_initial=None, monotonic=False, returnindividual=False, noisy=False, **kwargs):
         # TODO: add H_U_factored caching of some kind
         # also, inefficient since we are repeatedly starting from the steady state, need option
         # to provide a guess (not a big deal with just SimpleBlocks, of course)
-        return nonlinear.td_solve(ss, self.block_list, self.unknowns, self.targets, monotonic=monotonic, 
-                                  returnindividual=returnindividual, noisy=noisy, **kwargs)
+        return nonlinear.td_solve(ss, self.block_list, self.unknowns, self.targets, ss_initial=ss_initial,
+                            monotonic=monotonic, returnindividual=returnindividual, noisy=noisy, **kwargs)
     
     def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):
         # H_U_factored caching could be helpful here too

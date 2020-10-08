@@ -234,7 +234,7 @@ def fiscal(r, w, N, G, Bg):
 @simple
 def finance(i, p, pi, r, div, omega, pshare):
     rb = r - omega
-    ra = pshare * (div + p) / p(-1) + (1-pshare) * (1 + r) - 1
+    ra = pshare(-1) * (div + p) / p(-1) + (1-pshare(-1)) * (1 + r) - 1
     fisher = 1 + i(-1) - (1 + r) * (1 + pi)
     return rb, ra, fisher
 

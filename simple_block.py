@@ -40,18 +40,23 @@ class SimpleBlock:
         kwargs = {k: Ignore(v) for k, v in kwargs.items()}
         return self.f(*args, **kwargs)
 
-    def td(self, ss, **kwargs):
+    def td(self, ss, ss_initial=None, **kwargs):
+        if ss_initial is None:
+            ss_initial = ss
+
         kwargs_new = {}
         for k, v in kwargs.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
-            kwargs_new[k] = Displace(v, ss=ss.get(k, None), name=k)
+            kwargs_new[k] = Displace(v, ss_initial=ss_initial.get(k, None),
+                                     ss_terminal=ss.get(k, None), name=k)
 
         for k in self.input_list:
             if k not in kwargs_new:
                 kwargs_new[k] = Ignore(ss[k])
 
-        return dict(zip(self.output_list, utils.make_tuple(self.f(**kwargs_new))))
+        return dict((k, v) for (k, v) in zip(self.output_list, utils.make_tuple(self.f(**kwargs_new)))
+                    if type(v) != float)
 
     def jac(self, ss, T=None, shock_list=None, h=1E-5):
         """Assemble nested dict of Jacobians
@@ -375,23 +380,24 @@ class Displace(np.ndarray):
     """This class makes time displacements of a time path, given the steady-state value.
     Needed for SimpleBlock.td()"""
 
-    def __new__(cls, x, ss=None, name='UNKNOWN'):
+    def __new__(cls, x, ss_initial=None, ss_terminal=None, name='UNKNOWN'):
         obj = np.asarray(x).view(cls)
-        obj.ss = ss
+        obj.ss_initial = ss_initial
+        obj.ss_terminal = ss_terminal
         obj.name = name
         return obj
 
     def __call__(self, index):
         if index != 0:
-            if self.ss is None:
-                raise KeyError(f'Trying to call {self.name}({index}), but steady-state {self.name} not given!')
+            # if self.ss is None:
+            #     raise KeyError(f'Trying to call {self.name}({index}), but steady-state {self.name} not given!')
             newx = np.empty_like(self)
             if index > 0:
                 newx[:-index] = self[index:]
-                newx[-index:] = self.ss
+                newx[-index:] = self.ss_terminal
             else:
                 newx[-index:] = self[:index]
-                newx[:-index] = self.ss
+                newx[:-index] = self.ss_initial
             return newx
         else:
             return self

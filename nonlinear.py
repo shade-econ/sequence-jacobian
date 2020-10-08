@@ -2,8 +2,9 @@ import numpy as np
 from sequence_jacobian import utils, jacobian as jac, het_block as het
 
 
-def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
-             returnindividual=False, tol=1E-8, maxit=30, noisy=True, save=False, use_saved=False, **kwargs):
+def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, ss_initial=None,
+                monotonic=False, returnindividual=False, tol=1E-8, maxit=30, noisy=True, save=False,
+                use_saved=False, T=None, **kwargs):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
     Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
@@ -16,6 +17,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
     H_U             : [optional] array (nU*nU), Jacobian of targets with respect to unknowns
     H_U_factored    : [optional] tuple, LU decomposition of H_U, save time by supplying this from utils.factor()
+    ss_initial      : [optional] dict, initial steady-state if different from terminal steady-state (for transitions)
     monotonic       : [optional] bool, flag indicating HetBlock policy for some k' is monotonic in state k
                                                                         (allows more efficient interpolation)
     returnindividual: [optional] bool, flag to return individual outcomes from HetBlock.td
@@ -36,9 +38,10 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
             raise ValueError(f'Shock {x} in td_solve cannot also be an unknown or target!')
 
     # infer T from a single shocked Z in kwargs
-    for v in kwargs.values():
-        T = v.shape[0]
-        break
+    if T is None:
+        for v in kwargs.values():
+            T = v.shape[0]
+            break
     
     # initialize guess for unknowns to steady state length T
     Us = {k: np.full(T, ss[k]) for k in unknowns}
@@ -56,7 +59,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
 
     # iterate until convergence
     for it in range(maxit):
-        results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
+        results = td_map(ss, block_list, sort, ss_initial, monotonic, returnindividual, **kwargs, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if noisy:
             print(f'On iteration {it}')
@@ -75,7 +78,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     return results
 
 
-def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, **kwargs):
+def td_map(ss, block_list, sort=None, ss_initial=None, monotonic=False, returnindividual=False, **kwargs):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
     
     Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
@@ -96,10 +99,10 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, *
         if not block.outputs.isdisjoint(results):
             raise ValueError(f'Block {block} outputting already-present outputs {block.outputs & results.keys()}')
 
-        # if any input to the block has changed, run the block
+        # if any input to the block has changed or if there is a change in ss, run the block
         blockoptions = hetoptions if isinstance(block, het.HetBlock) else {}
-        if not block.inputs.isdisjoint(results):
-            results.update(block.td(ss, **blockoptions, **{k: results[k] for k in block.inputs if k in results}))
+        if not block.inputs.isdisjoint(results) or ss_initial is not None:
+            results.update(block.td(ss, ss_initial=ss_initial, **blockoptions, **{k: results[k] for k in block.inputs if k in results}))
 
     return results
 

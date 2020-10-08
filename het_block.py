@@ -168,7 +168,7 @@ class HetBlock:
 
         return {**sspol, **aggs, 'D': D}
 
-    def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
+    def td(self, ss, ss_initial=None, monotonic=False, returnindividual=False, **kwargs):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -179,6 +179,8 @@ class HetBlock:
         ----------
         ss : dict
             all steady-state info, intended to be from .ss()
+        ss_initial : dict
+            steady-state info for initial steady state (if different from terminal)
         monotonic : [optional] bool
             flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
@@ -206,7 +208,7 @@ class HetBlock:
         # copy from ss info
         Pi_T = ss[self.exogenous].T.copy()
         grid = {k: ss[k+'_grid'] for k in self.policy}
-        D = ss['D']
+        D = ss['D'] if ss_initial is None else ss_initial['D']
 
         # allocate empty arrays to store result, assume all like D
         individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_outputs | set(self.backward)}
