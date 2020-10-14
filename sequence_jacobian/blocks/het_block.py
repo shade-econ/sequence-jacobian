@@ -78,7 +78,7 @@ class HetBlock:
         # self.outputs and self.inputs are the *aggregate* outputs and inputs of this HetBlock, which are used
         # in utils.graph.block_sort to topologically sort blocks along the DAG
         # according to their aggregate outputs and inputs.
-        self.outputs = {k.capitalize() for k in self.non_back_iter_outputs}
+        self.outputs = {o.capitalize() for o in self.non_back_iter_outputs}
         self.inputs = self.back_step_inputs - {k + '_p' for k in self.back_iter_vars}
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
@@ -141,7 +141,7 @@ class HetBlock:
         if self.hetinput is not None:
             if self.hetoutput is not None:
                 return f"<HetBlock '{self.back_step_fun.__name__}' with hetinput '{self.hetinput.__name__}'" \
-                       f" and with hetoutput `{self.hetoutput.__name__}'>"
+                       f" and with hetoutput `{self.hetoutput.name}'>"
             else:
                 return f"<HetBlock '{self.back_step_fun.__name__}' with hetinput '{self.hetinput.__name__}'>"
         else:
@@ -213,18 +213,16 @@ class HetBlock:
         ss.update({"D": D})
 
         # aggregate all outputs other than backward variables on grid, capitalize
-        aggs = {k.capitalize(): np.vdot(D, sspol[k]) for k in self.non_back_iter_outputs}
-        ss.update(aggs)
+        aggregates = {o.capitalize(): np.vdot(D, sspol[o]) for o in self.non_back_iter_outputs}
+        ss.update(aggregates)
 
         if hetoutput:
-            hetoutputs = dict(zip(self.hetoutput_outputs_order,
-                                  utils.misc.make_tuple(self.hetoutput(**{arg_name: ss[arg_name]
-                                                                          for arg_name in self.hetoutput_inputs}))))
-            # aggregate hetoutput outputs
-            hetoutputs.update({k.capitalize(): np.vdot(D, hetoutputs[k]) for k in self.hetoutput_outputs})
+            hetoutputs = self.hetoutput.evaluate(ss)
+            aggregate_hetoutputs = self.hetoutput.aggregate(hetoutputs, D, ss, mode="ss")
         else:
             hetoutputs = {}
-        ss.update(hetoutputs)
+            aggregate_hetoutputs = {}
+        ss.update({**hetoutputs, **aggregate_hetoutputs})
 
         # clear any previously saved Jacobian info for safety, since we're computing new SS
         self.clear_saved()
@@ -285,8 +283,7 @@ class HetBlock:
             backdict.update({k: individual[k] for k in self.back_iter_vars})
 
             if self.hetoutput is not None:
-                hetoutput = {k: v for k, v in zip(self.hetoutput_outputs_order,
-                                                  self.hetoutput(**{i: backdict[i] for i in self.hetoutput_inputs}))}
+                hetoutput = self.hetoutput.evaluate(backdict)
                 for k in self.hetoutput_outputs:
                     hetoutput_paths[k][t, ...] = hetoutput[k]
 
@@ -312,10 +309,12 @@ class HetBlock:
             D_path[t+1, ...] = self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
 
         # obtain aggregates of all outputs, made uppercase
-        aggregates = {k.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[k])
-                      for k in self.non_back_iter_outputs}
-        aggregate_hetoutputs = {k.capitalize(): utils.optimized_routines.fast_aggregate(D_path, hetoutput_paths[k])
-                                for k in self.hetoutput_outputs}
+        aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
+                      for o in self.non_back_iter_outputs}
+        if self.hetoutput:
+            aggregate_hetoutputs = self.hetoutput.aggregate(hetoutput_paths, D_path, backdict, mode="td")
+        else:
+            aggregate_hetoutputs = {}
 
         # return either this, or also include distributional information
         if returnindividual:
@@ -524,19 +523,25 @@ class HetBlock:
         else:
             if verbose:
                 if self.hetoutput is not None and overwrite is True:
-                    print(f"Overwriting current hetoutput, {self.hetoutput.__name__} with new hetoutput,"
-                          f" {hetoutput.__name__}!")
+                    print(f"Overwriting current hetoutput, {self.hetoutput.name} with new hetoutput,"
+                          f" {hetoutput.name}!")
                 else:
-                    print(f"Added hetoutput {hetoutput.__name__} to the {self.back_step_fun.__name__} HetBlock")
+                    print(f"Added hetoutput {hetoutput.name} to the {self.back_step_fun.__name__} HetBlock")
 
             self.hetoutput = hetoutput
-            self.hetoutput_inputs = set(utils.misc.input_list(hetoutput))
-            self.hetoutput_outputs = set(utils.misc.output_list(hetoutput))
-            self.hetoutput_outputs_order = utils.misc.output_list(hetoutput)
+            self.hetoutput_inputs = set(hetoutput.input_list)
+            self.hetoutput_outputs = set(hetoutput.output_list)
+            self.hetoutput_outputs_order = hetoutput.output_list
 
-            # modify inputs to include hetoutput's additional inputs, remove outputs
-            self.inputs |= (self.hetoutput_inputs - self.back_step_outputs - set("D"))
-            self.outputs |= self.hetoutput_outputs
+            # Modify the HetBlock's inputs to include additional inputs required for computing both the hetoutput
+            # and aggregating the hetoutput, but do not include:
+            # 1) objects computed within the HetBlock's backward iteration that enter into the hetoutput computation
+            # 2) objects computed within hetoutput that enter into hetoutput's aggregation (self.hetoutput.outputs)
+            # 3) D, the cross-sectional distribution of agents, which is used in the hetoutput aggregation
+            # but is computed after the backward iteration
+            self.inputs |= (self.hetoutput_inputs - self.back_step_outputs - self.hetoutput_outputs - set("D"))
+            # Modify the HetBlock's outputs to include the aggregated hetoutputs
+            self.outputs |= set([o.capitalize() for o in self.hetoutput_outputs])
 
     '''Part 3: components of ss():
         - policy_ss : backward iteration to get steady-state policies and other outcomes
@@ -891,3 +896,54 @@ class HetBlock:
                                                             pol_pi_shock[p1], pol_pi_shock[p2])
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
+
+
+def hetoutput(custom_aggregation=None):
+    def decorator(f):
+        return HetOutput(f, custom_aggregation=custom_aggregation)
+    return decorator
+
+
+class HetOutput:
+    def __init__(self, f, custom_aggregation=None):
+        self.name = f.__name__
+        self.f = f
+        self.eval_input_list = utils.misc.input_list(f)
+
+        self.custom_aggregation = custom_aggregation
+        self.agg_input_list = [] if custom_aggregation is None else utils.misc.input_list(custom_aggregation)
+
+        # We are distinguishing between the eval_input_list and agg_input_list because custom aggregation may require
+        # certain arguments that are not required for simply evaluating the hetoutput
+        self.input_list = list(set(self.eval_input_list).union(set(self.agg_input_list)))
+        self.output_list = utils.misc.output_list(f)
+
+    def evaluate(self, arg_dict):
+        hetoutputs = dict(zip(self.output_list, utils.misc.make_tuple(self.f(*[arg_dict[i] for i in self.eval_input_list]))))
+        return hetoutputs
+
+    def aggregate(self, hetoutputs, D, custom_aggregation_args, mode="ss"):
+        if self.custom_aggregation is not None:
+            hetoutputs_w_custom_aggregation = list(set(self.output_list) - set(utils.misc.output_list(self.custom_aggregation)))
+            hetoutputs_w_std_aggregation = list(set(self.output_list) - set(hetoutputs_w_custom_aggregation))
+        else:
+            hetoutputs_w_custom_aggregation = []
+            hetoutputs_w_std_aggregation = self.output_list
+
+        # TODO: May need to check if this works properly for td
+        if self.custom_aggregation is not None:
+            custom_agg_inputs = {"D": D, **hetoutputs, **custom_aggregation_args}
+            custom_aggregates = dict(zip([o.capitalize() for o in hetoutputs_w_custom_aggregation],
+                                         utils.misc.make_tuple(self.custom_aggregation(*[custom_agg_inputs[i] for i in self.agg_input_list]))))
+        else:
+            custom_aggregates = {}
+
+        if mode == "ss":
+            std_aggregates = {o.capitalize(): np.vdot(D, hetoutputs[o]) for o in hetoutputs_w_std_aggregation}
+        elif mode == "td":
+            std_aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D, hetoutputs[o])
+                              for o in hetoutputs_w_std_aggregation}
+        else:
+            raise RuntimeError(f"Mode {mode} is not supported in HetOutput aggregation. Choose either 'ss' or 'td'")
+
+        return {**std_aggregates, **custom_aggregates}
