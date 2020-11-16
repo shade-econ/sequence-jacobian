@@ -8,7 +8,8 @@ from .blocks import het_block as het
 
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
-             returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False, **kwargs):
+             returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False,
+             grid_paths=None, **kwargs):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
     Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
@@ -61,7 +62,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
 
     # iterate until convergence
     for it in range(maxit):
-        results = td_map(ss, block_list, sort, monotonic, returnindividual, **kwargs, **Us)
+        results = td_map(ss, block_list, sort, monotonic, returnindividual, grid_paths=grid_paths, **kwargs, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if verbose:
             print(f'On iteration {it}')
@@ -80,13 +81,13 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     return results
 
 
-def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, **kwargs):
+def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, grid_paths=None, **kwargs):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
     
     Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
 
-    hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual}
+    hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual, 'grid_paths': grid_paths}
 
     # first get topological sort if none already provided
     if sort is None:

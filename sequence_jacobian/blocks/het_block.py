@@ -229,7 +229,7 @@ class HetBlock:
 
         return ss
 
-    def td(self, ss, monotonic=False, returnindividual=False, **kwargs):
+    def td(self, ss, monotonic=False, returnindividual=False, grid_paths=None, **kwargs):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -245,6 +245,8 @@ class HetBlock:
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
         returnindividual : [optional] bool
             return distribution and full outputs on grid
+        grid_paths: [optional] dict of {str: array(T, Number of grid points)}
+            time-varying grids for policies
         kwargs : dict of {str : array(T, ...)}
             all time-varying inputs here, with first dimension being time
             this must have same length T for all entries (all outputs will be calculated up to T)
@@ -266,8 +268,19 @@ class HetBlock:
 
         # copy from ss info
         Pi_T = ss[self.exogenous].T.copy()
-        grid = {k: ss[k+'_grid'] for k in self.policy}
         D = ss['D']
+
+        # construct grids for policy variables either from the steady state grid if the grid is meant to be
+        # non-time-varying or from the provided `grid_path` if the grid is meant to be time-varying.
+        grid = {}
+        use_ss_grid = {}
+        for k in self.policy:
+            if grid_paths is not None and k in grid_paths:
+                grid[k] = grid_paths[k]
+                use_ss_grid[k] = False
+            else:
+                grid[k] = ss[k+"_grid"]
+                use_ss_grid[k] = True
 
         # allocate empty arrays to store result, assume all like D
         individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_iter_outputs}
@@ -297,13 +310,17 @@ class HetBlock:
             sspol_i = {}
             sspol_pi = {}
             for pol in self.policy:
+                if use_ss_grid[pol]:
+                    grid_var = grid[pol]
+                else:
+                    grid_var = grid[pol][t, ...]
                 if monotonic:
                     # TODO: change for two-asset case so assumption is monotonicity in own asset, not anything else
-                    sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord(grid[pol],
+                    sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord(grid_var,
                                                                                       individual_paths[pol][t, ...])
                 else:
                     sspol_i[pol], sspol_pi[pol] =\
-                        utils.interpolate.interpolate_coord_robust(grid[pol], individual_paths[pol][t, ...])
+                        utils.interpolate.interpolate_coord_robust(grid_var, individual_paths[pol][t, ...])
 
             # step forward
             D_path[t+1, ...] = self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
