@@ -12,6 +12,17 @@ def agrid(amax, n, amin=0):
     return a_grid
 
 
+# TODO: Temporarily include the old way of constructing grids from ikc_old for comparability of results
+def agrid_old(amax, N, amin=0, frac=1/25):
+    """crappy discretization method we've been using, generates N point
+    log-spaced grid between bmin and bmax, choosing pivot such that 'frac' of
+    total log space between log(1+amin) and log(1+amax) beneath it"""
+    apivot = (1+amin)**(1-frac)*(1+amax)**frac - 1
+    a = np.geomspace(amin+apivot,amax+apivot,N) - apivot
+    a[0] = amin
+    return a
+
+
 def stationary(Pi, pi_seed=None, tol=1E-11, maxit=10_000):
     """Find invariant distribution of a Markov chain by iteration."""
     if pi_seed is None:
