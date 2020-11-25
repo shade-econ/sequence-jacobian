@@ -687,11 +687,20 @@ class HetBlock:
         # shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.back_step_output_list,
                                                 utils.differentiate.numerical_diff(self.back_step_fun,
-                                                                                   ssin_dict, din_dict, h, ssout_list))}
+                                                                                   ssin_dict, din_dict, h,
+                                                                                   ssout_list))}
         curlyV = {k: shocked_outputs[k] for k in self.back_iter_vars}
 
         # which affects the distribution tomorrow
-        pol_pi_shock = {k: -shocked_outputs[k]/sspol_space[k] for k in self.policy}
+        pol_pi_shock = {k: -shocked_outputs[k] / sspol_space[k] for k in self.policy}
+
+        # Include an additional term to account for the effect of a deleveraging shock affecting the grid
+        if "delev_exante" in din_dict:
+            dx = np.zeros_like(sspol_pi["a"])
+            dx[sspol_i["a"] == 0] = 1.
+            add_term = sspol_pi["a"] * dx / sspol_space["a"]
+            pol_pi_shock["a"] += add_term
+
         curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
 
         # and the aggregate outcomes today
@@ -717,8 +726,8 @@ class HetBlock:
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list, 
-                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
-        
+                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=h)
+
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
         curlyYs = {k: np.empty(T) for k in curlyY.keys()}
