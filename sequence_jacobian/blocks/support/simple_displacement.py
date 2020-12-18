@@ -6,15 +6,101 @@ from warnings import warn
 
 
 def ignore(x):
-    if isinstance(x, numbers.Real):
-        return Ignore(x)
+    if isinstance(x, int):
+        return IgnoreInt(x)
+    elif isinstance(x, numbers.Real) and not isinstance(x, int):
+        return IgnoreFloat(x)
     elif isinstance(x, np.ndarray):
         return IgnoreVector(x)
     else:
         raise TypeError(f"{type(x)} is not supported. Must provide either a float or an nd.array as an argument")
 
 
-class Ignore(float):
+class IgnoreInt(int):
+    """This class ignores time displacements of a scalar.
+    Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
+    any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore
+    """
+
+    def __call__(self, index):
+        return self
+
+    def apply(self, f, **kwargs):
+        return ignore(f(numeric_primitive(self), **kwargs))
+
+    def __pos__(self):
+        return self
+
+    def __neg__(self):
+        return ignore(-numeric_primitive(self))
+
+    # Tried using the multipledispatch package but @dispatch requires the classes being dispatched on to be defined
+    # prior to the use of the decorator @dispatch("ClassName"), hence making it impossible to overload in this way,
+    # as opposed to how isinstance() is evaluated at runtime, so it is valid to check isinstance even if in this module
+    # the class is defined later on in the module.
+    # Thus, we need to specially overload the left operations to check if `other` is a Displace to promote properly
+    def __add__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__radd__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) + other)
+
+    def __radd__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__add__(numeric_primitive(self))
+        else:
+            return ignore(other + numeric_primitive(self))
+
+    def __sub__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__rsub__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) - other)
+
+    def __rsub__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__sub__(numeric_primitive(self))
+        else:
+            return ignore(other - numeric_primitive(self))
+
+    def __mul__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__rmul__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) * other)
+
+    def __rmul__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__mul__(numeric_primitive(self))
+        else:
+            return ignore(other * numeric_primitive(self))
+
+    def __truediv__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__rtruediv__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) / other)
+
+    def __rtruediv__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__truediv__(numeric_primitive(self))
+        else:
+            return ignore(other / numeric_primitive(self))
+
+    def __pow__(self, power, modulo=None):
+        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative):
+            return power.__rpow__(numeric_primitive(self))
+        else:
+            return ignore(numeric_primitive(self) ** power)
+
+    def __rpow__(self, other):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+            return other.__pow__(numeric_primitive(self))
+        else:
+            return ignore(other ** numeric_primitive(self))
+
+
+class IgnoreFloat(float):
     """This class ignores time displacements of a scalar.
     Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
     any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore

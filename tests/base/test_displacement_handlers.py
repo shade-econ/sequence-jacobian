@@ -3,7 +3,7 @@
 import numpy as np
 
 from sequence_jacobian.blocks.support.simple_displacement import (
-    Ignore, IgnoreVector, Displace, AccumulatedDerivative, numeric_primitive
+    IgnoreInt, IgnoreFloat, IgnoreVector, Displace, AccumulatedDerivative, numeric_primitive
 )
 
 # Define useful helper functions for testing
@@ -43,20 +43,41 @@ def apply_op(op, *args):
 
 def test_ignore():
     # Test unary operations
-    arg_singles = [Ignore(1), Ignore(1)(-1)]
+    arg_singles = [IgnoreInt(1), IgnoreInt(1)(-1), IgnoreFloat(1), IgnoreFloat(1)(-1)]
     for t1 in arg_singles:
         for op in ["__neg__", "__pos__"]:
-            assert type(apply_op(op, t1)) == Ignore
+            assert type(apply_op(op, t1)) == type(t1)
             assert np.all(numeric_primitive(apply_op(op, t1)) == apply_op(op, numeric_primitive(t1)))
 
     # Test binary operations
-    arg_pairs = [(Ignore(1), 1), (1, Ignore(1)), (Ignore(1), Ignore(2)),
-                 (Ignore(1)(-1), 1), (1, Ignore(1)(-1)), (Ignore(1)(-1), Ignore(2)), (Ignore(1), Ignore(2)(-1))]
+    arg_pairs = [(IgnoreInt(1), 1), (1, IgnoreInt(1)), (IgnoreInt(1), IgnoreInt(2)),
+                 (IgnoreInt(1)(-1), 1), (1, IgnoreInt(1)(-1)),
+                 (IgnoreInt(1)(-1), IgnoreInt(2)), (IgnoreInt(1), IgnoreInt(2)(-1))]
+    for pair in arg_pairs:
+        t1, t2 = pair
+        for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__"]:
+            # Explicitly ignoring the cases where the mirrored operation is applied to the numeric primitive
+            # as `t1', since the standard operator checking will first see if the
+            # non-mirrored operation is valid on `t2' and `t1', which it is.
+            # This gets around the fact that there doesn't seem to be a simple way to force valid
+            # arithmetic operations to be invalid on numeric sub-classes.
+            # E.g. when t1 = 1, t2 = IgnoreInt(1), t1.__radd__(t2) will return an int not an IgnoreInt; however
+            # in practice when the actual expression is w ritten as t2 + t1, t2.__add__(t1) will be checked first
+            # and will be deemed valid, returning an IgnoreInt
+            if op in ["__radd__", "__rsub__", "__rmul__"] and not (type(t1) == int and type(t2) == IgnoreInt):
+                assert type(apply_op(op, t1, t2)) == IgnoreInt
+            assert np.all(numeric_primitive(apply_op(op, t1, t2)) == apply_op(op, numeric_primitive(t1),
+                                                                              numeric_primitive(t2)))
+
+    arg_pairs = [(IgnoreFloat(1), 1), (1, IgnoreFloat(1)), (IgnoreFloat(1), IgnoreFloat(2)),
+                 (IgnoreFloat(1)(-1), 1), (1, IgnoreFloat(1)(-1)),
+                 (IgnoreFloat(1)(-1), IgnoreFloat(2)), (IgnoreFloat(1), IgnoreFloat(2)(-1))]
     for pair in arg_pairs:
         t1, t2 = pair
         for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
                    "__truediv__", "__rtruediv__", "__pow__", "__rpow__"]:
-            assert type(apply_op(op, t1, t2)) == Ignore
+            if op in ["__radd__", "__rsub__", "__rmul__", "__rpow__"] and not (type(t1) == float and type(t2) == IgnoreFloat):
+                assert type(apply_op(op, t1, t2)) == IgnoreFloat
             assert np.all(numeric_primitive(apply_op(op, t1, t2)) == apply_op(op, numeric_primitive(t1),
                                                                               numeric_primitive(t2)))
 
@@ -75,17 +96,17 @@ def test_ignore_vector():
 
     # Test binary operations
     arg_pairs = [(IgnoreVector(np.array([1, 2, 3])), 1),
-                 (IgnoreVector(np.array([1, 2, 3])), Ignore(1)),
+                 (IgnoreVector(np.array([1, 2, 3])), IgnoreFloat(1)),
                  (IgnoreVector(np.array([1, 2, 3])), IgnoreVector(np.array([2, 3, 4]))),
                  (1, IgnoreVector(np.array([1, 2, 3]))),
-                 (Ignore(1), IgnoreVector(np.array([1, 2, 3]))),
+                 (IgnoreFloat(1), IgnoreVector(np.array([1, 2, 3]))),
 
                  (IgnoreVector(np.array([1, 2, 3]))(-1), 1),
-                 (IgnoreVector(np.array([1, 2, 3]))(-1), Ignore(1)),
+                 (IgnoreVector(np.array([1, 2, 3]))(-1), IgnoreFloat(1)),
                  (IgnoreVector(np.array([1, 2, 3]))(-1), IgnoreVector(np.array([2, 3, 4]))),
                  (IgnoreVector(np.array([1, 2, 3])), IgnoreVector(np.array([2, 3, 4]))(-1)),
                  (1, IgnoreVector(np.array([1, 2, 3]))(-1)),
-                 (Ignore(1), IgnoreVector(np.array([1, 2, 3]))(-1))]
+                 (IgnoreFloat(1), IgnoreVector(np.array([1, 2, 3]))(-1))]
     for pair in arg_pairs:
         t1, t2 = pair
         for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
@@ -109,17 +130,17 @@ def test_displace():
 
     # Test binary operations
     arg_pairs = [(Displace(np.array([1, 2, 3]), ss=2), 1),
-                 (Displace(np.array([1, 2, 3]), ss=2), Ignore(1)),
+                 (Displace(np.array([1, 2, 3]), ss=2), IgnoreFloat(1)),
                  (Displace(np.array([1, 2, 3]), ss=2), Displace(np.array([2, 3, 4]), ss=3)),
                  (1, Displace(np.array([1, 2, 3]), ss=2)),
-                 (Ignore(1), Displace(np.array([1, 2, 3]), ss=2)),
+                 (IgnoreFloat(1), Displace(np.array([1, 2, 3]), ss=2)),
 
                  (Displace(np.array([1, 2, 3]), ss=2)(-1), 1),
-                 (Displace(np.array([1, 2, 3]), ss=2)(-1), Ignore(1)),
+                 (Displace(np.array([1, 2, 3]), ss=2)(-1), IgnoreFloat(1)),
                  (Displace(np.array([1, 2, 3]), ss=2)(-1), Displace(np.array([2, 3, 4]), ss=3)),
                  (Displace(np.array([1, 2, 3]), ss=2), Displace(np.array([2, 3, 4]), ss=3)(-1)),
                  (1, Displace(np.array([1, 2, 3]), ss=2)(-1)),
-                 (Ignore(1), Displace(np.array([1, 2, 3]), ss=2)(-1))]
+                 (IgnoreFloat(1), Displace(np.array([1, 2, 3]), ss=2)(-1))]
     for pair in arg_pairs:
         t1, t2 = pair
         for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
@@ -152,9 +173,9 @@ def test_accumulated_derivative():
     #   e.g. IgnoreVector, once hetinput/hetoutput functionality is enhanced
     # Test binary operations
     arg_pairs = [(AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.), 3),
-                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.), Ignore(3)),
+                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.), IgnoreFloat(3)),
                  (3, AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)),
-                 (Ignore(3), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)),
+                 (IgnoreFloat(3), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)),
                  (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.),
                   AccumulatedDerivative(elements={(1, 1): 4.}, f_value=5.)),
                  # TODO: Implement test for elements not in the same (i, m)
@@ -162,9 +183,9 @@ def test_accumulated_derivative():
                  #  AccumulatedDerivative(elements={(1, 0): 4.}, f_value=5.)),
 
                  (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1), 3),
-                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1), Ignore(3)),
+                 (AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1), IgnoreFloat(3)),
                  (3, AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1)),
-                 (Ignore(3), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1))]
+                 (IgnoreFloat(3), AccumulatedDerivative(elements={(1, 1): 2.}, f_value=2.)(-1))]
 
     def get_fp_value(x):
         return x._fp_values[0]
