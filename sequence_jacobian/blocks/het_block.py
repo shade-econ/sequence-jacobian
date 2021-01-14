@@ -371,7 +371,7 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_iter_outputs
 
-        relevant_shocks = [i for i in self.inputs - self.hetoutput_inputs if i in shock_list]
+        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in shock_list]
 
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
@@ -425,7 +425,7 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_iter_outputs
 
-        relevant_shocks = [i for i in self.inputs - self.hetoutput_inputs if i in shock_list]
+        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in shock_list]
 
         # if Tpost not provided, assume it is 2*T by default
         if Tpost is None:
