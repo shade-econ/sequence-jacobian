@@ -527,7 +527,6 @@ class HetBlock:
         """Add a hetoutput to this HetBlock. Any call to self.back_step_fun will first process
          inputs through the hetoutput function.
 
-        # TODO: Emphasize that hetoutputs are all non-scalar-valued and assumed to be simple aggregates over D
         A `hetoutput` is any *non-scalar-value* output that the user might desire to be calculated from
         the output arguments of the HetBlock's backward iteration function. Importantly, as of now the `hetoutput`
         cannot be a function of time displaced values of the HetBlock's outputs but rather must be able to
@@ -945,22 +944,28 @@ class HetOutput:
         self.output_list = utils.misc.output_list(f)
 
     def evaluate(self, arg_dict):
-        hetoutputs = dict(zip(self.output_list, utils.misc.make_tuple(self.f(*[arg_dict[i] for i in self.eval_input_list]))))
+        hetoutputs = dict(zip(self.output_list, utils.misc.make_tuple(self.f(*[arg_dict[i] for i
+                                                                               in self.eval_input_list]))))
         return hetoutputs
 
     def aggregate(self, hetoutputs, D, custom_aggregation_args, mode="ss"):
         if self.custom_aggregation is not None:
-            hetoutputs_w_custom_aggregation = list(set(self.output_list) - set(utils.misc.output_list(self.custom_aggregation)))
-            hetoutputs_w_std_aggregation = list(set(self.output_list) - set(hetoutputs_w_custom_aggregation))
+            hetoutputs_w_std_aggregation = list(set(self.output_list) -
+                                                set([utils.misc.uncapitalize(o) for o
+                                                     in utils.misc.output_list(self.custom_aggregation)]))
+            hetoutputs_w_custom_aggregation = list(set(self.output_list) - set(hetoutputs_w_std_aggregation))
         else:
-            hetoutputs_w_custom_aggregation = []
             hetoutputs_w_std_aggregation = self.output_list
+            hetoutputs_w_custom_aggregation = []
 
         # TODO: May need to check if this works properly for td
         if self.custom_aggregation is not None:
-            custom_agg_inputs = {"D": D, **hetoutputs, **custom_aggregation_args}
+            hetoutputs_w_custom_aggregation_args = dict(zip(hetoutputs_w_custom_aggregation,
+                                                        [hetoutputs[i] for i in hetoutputs_w_custom_aggregation]))
+            custom_agg_inputs = {"D": D, **hetoutputs_w_custom_aggregation_args, **custom_aggregation_args}
             custom_aggregates = dict(zip([o.capitalize() for o in hetoutputs_w_custom_aggregation],
-                                         utils.misc.make_tuple(self.custom_aggregation(*[custom_agg_inputs[i] for i in self.agg_input_list]))))
+                                         utils.misc.make_tuple(self.custom_aggregation(*[custom_agg_inputs[i] for i
+                                                                                         in self.agg_input_list]))))
         else:
             custom_aggregates = {}
 

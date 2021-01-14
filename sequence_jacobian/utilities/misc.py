@@ -63,3 +63,8 @@ def take_subarray(A, shape):
 
     # take subarray along those dimensions: A[:shape, ...]
     return A[tuple(slice(None, x, None) for x in shape) + (Ellipsis,)]
+
+
+def uncapitalize(s):
+    # Similar to s.lower() but only makes the first character lower-case
+    return s[0].lower() + s[1:]
