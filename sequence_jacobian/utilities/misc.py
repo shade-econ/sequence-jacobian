@@ -1,5 +1,6 @@
 """Assorted other utilities"""
 
+import numpy as np
 import scipy.linalg
 import re
 import inspect
@@ -68,3 +69,44 @@ def take_subarray(A, shape):
 def uncapitalize(s):
     # Similar to s.lower() but only makes the first character lower-case
     return s[0].lower() + s[1:]
+
+
+# The below functions are used in steady_state
+def unprime(s):
+    """Given a variable's name as a `str`, check if the variable is a prime, i.e. has "_p" at the end.
+    If so, return the unprimed version, if not return itself."""
+    if s[-2:] == "_p":
+        return s[:-2]
+    else:
+        return s
+
+
+def dict_diff(d1, d2):
+    """Returns the dictionary that is the "set difference" between d1 and d2 (based on keys, not key-value pairs)
+    E.g. d1 = {"a": 1, "b": 2}, d2 = {"b": 5}, then dict_diff(d1, d2) = {"a": 1}
+    """
+    o_dict = {}
+    for k in set(d1.keys()).difference(set(d2.keys())):
+        o_dict[k] = d1[k]
+
+    return o_dict
+
+
+def smart_zip(keys, values):
+    """For handling the case where keys and values may be scalars"""
+    if isinstance(values, float):
+        return zip(keys, [values])
+    else:
+        return zip(keys, values)
+
+
+def smart_zeros(n):
+    """Return either the float 0. or a np.ndarray of length 0 depending on whether n > 1"""
+    if n > 1:
+        return np.zeros(n)
+    else:
+        return 0.
+
+
+def find_blocks_with_hetoutputs(blocks):
+    return [i for i, block in enumerate(blocks) if hasattr(block, "hetoutput") and block.hetoutput is not None]
