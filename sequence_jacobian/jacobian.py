@@ -62,7 +62,7 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
 
 
 def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None,
-                                        H_U=None, H_U_factored=None, save=False, use_saved=False):
+                H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Get a single general equilibrium impulse response.
 
     Extremely fast when H_U_factored = utils.misc.factor(get_HU(...)) has already been computed
