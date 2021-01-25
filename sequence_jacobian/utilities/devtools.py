@@ -27,6 +27,7 @@ def compare_steady_states(ss_ref, ss_comp, name_map=None, verbose=True):
     # Show the steady state values present in only one of ss_ref or ss_comp
     ss_ref_incl_mapped = set(ss_ref.keys()) - set(name_map.keys())
     ss_comp_incl_mapped = set(ss_comp.keys()) - set(name_map.values())
-    print(f"The keys present in only one of the two steady state dicts are"
-          f" {ss_ref_incl_mapped.symmetric_difference(ss_comp_incl_mapped)}")
+    diff_keys = ss_ref_incl_mapped.symmetric_difference(ss_comp_incl_mapped)
+    if diff_keys:
+        print(f"The keys present in only one of the two steady state dicts are {diff_keys}")
 
