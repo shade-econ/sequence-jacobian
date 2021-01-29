@@ -21,6 +21,9 @@ class IgnoreInt(int):
     Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
     any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore
     """
+    @property
+    def ss(self):
+        return self
 
     def __call__(self, index):
         return self
@@ -105,6 +108,10 @@ class IgnoreFloat(float):
     Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
     any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore
     """
+
+    @property
+    def ss(self):
+        return self
 
     def __call__(self, index):
         return self
@@ -192,6 +199,10 @@ class IgnoreVector(np.ndarray):
     def __new__(cls, x):
         obj = np.asarray(x).view(cls)
         return obj
+
+    @property
+    def ss(self):
+        return self
 
     def __call__(self, index):
         return self
@@ -459,6 +470,10 @@ class AccumulatedDerivative:
         self.f_value = f_value
         self._keys = list(self.elements.keys())
         self._fp_values = np.fromiter(self.elements.values(), dtype=float)
+
+    @property
+    def ss(self):
+        return ignore(self.f_value)
 
     def __repr__(self):
         formatted = '{' + ', '.join(f'({i}, {m}): {x:.3f}' for (i, m), x in self.elements.items()) + '}'
