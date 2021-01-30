@@ -44,11 +44,11 @@ def test_hank_jac(one_asset_hank_model):
     curlyJs, required = jacobian.curlyJ_sorted(blocks, unknowns+exogenous, ss, T)
     J_curlyH_U = jacobian.forward_accumulate(curlyJs, unknowns, targets, required)
     J_curlyH_Z = jacobian.forward_accumulate(curlyJs, exogenous, targets, required)
-    H_U = jacobian.pack_jacobians(J_curlyH_U, unknowns, targets, T)
-    H_Z = jacobian.pack_jacobians(J_curlyH_Z, exogenous, targets, T)
-    G_U = jacobian.unpack_jacobians(-np.linalg.solve(H_U, H_Z), exogenous, unknowns, T)
+    H_U = J_curlyH_U[targets, unknowns].pack(T)
+    H_Z = J_curlyH_Z[targets, exogenous].pack(T)
+    G_U = jacobian.JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, exogenous, T)
     curlyJs = [G_U] + curlyJs
-    outputs = set().union(*(curlyJ.keys() for curlyJ in curlyJs)) - set(targets)
+    outputs = set().union(*(curlyJ.outputs for curlyJ in curlyJs)) - set(targets)
     G = jacobian.forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
     for o in G:

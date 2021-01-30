@@ -6,8 +6,7 @@ from numba import njit
 
 from . import utilities as utils
 from . import asymptotic
-from .blocks import simple_block as sim
-
+from .utilities.special_matrices import IdentityMatrix, ZeroMatrix
 
 '''Part 1: High-level convenience routines: 
     - get_H_U               : get H_U matrix mapping all unknowns to all targets
@@ -53,7 +52,8 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
 
     if not asymptotic:
         # pack these n_u^2 matrices, each T*T, into a single matrix
-        return pack_jacobians(H_U_unpacked, unknowns, targets, T)
+        return H_U_unpacked[targets, unknowns].pack(T)
+        #return pack_jacobians(H_U_unpacked, unknowns, targets, T)
     else:
         # pack these n_u^2 AsymptoticTimeInvariant objects into a single (2*Tpost-1,n_u,n_u) array
         if Tpost is None:
@@ -109,7 +109,8 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
 
     # step 3: solve H_UdU = -H_ZdZ for dU
     if H_U is None and H_U_factored is None:
-        H_U = pack_jacobians(H_U_unpacked, unknowns, targets, T)
+        H_U = H_U_unpacked[targets, unknowns].pack(T)
+        #H_U = pack_jacobians(H_U_unpacked, unknowns, targets, T)
     
     H_ZdZ_packed = pack_vectors(J_curlyZ_dZ, targets, T)
 
@@ -169,19 +170,21 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
 
     # step 3: solve for G^U, unpack
     if H_U is None and H_U_factored is None:
-        H_U = pack_jacobians(J_curlyH_U, unknowns, targets, T)
-    H_Z = pack_jacobians(J_curlyH_Z, exogenous, targets, T)
+        H_U = J_curlyH_U[targets, unknowns].pack(T)
+        #H_U = pack_jacobians(J_curlyH_U, unknowns, targets, T)
+    H_Z = J_curlyH_Z[targets, exogenous].pack(T)
+    #H_Z = pack_jacobians(J_curlyH_Z, exogenous, targets, T)
 
     if H_U_factored is None:
-        G_U = unpack_jacobians(-np.linalg.solve(H_U, H_Z), exogenous, unknowns, T)
+        G_U = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, exogenous, T)
     else:
-        G_U = unpack_jacobians(-utils.misc.factored_solve(H_U_factored, H_Z), exogenous, unknowns, T)
+        G_U = JacobianDict.unpack(-utils.misc.factored_solve(H_U_factored, H_Z), unknowns, exogenous, T)
 
     # step 4: forward accumulation to get all outputs starting with G_U
     # by default, don't calculate targets!
     curlyJs = [G_U] + curlyJs
     if outputs is None:
-        outputs = set().union(*(curlyJ.keys() for curlyJ in curlyJs)) - set(targets)
+        outputs = set().union(*(curlyJ.outputs for curlyJ in curlyJs)) - set(targets)
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
@@ -206,7 +209,7 @@ def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outpu
     # by default, don't calculate targets!
     curlyJs = [G_U] + curlyJs
     if outputs is None:
-        outputs = set().union(*(curlyJ.keys() for curlyJ in curlyJs)) - set(targets)
+        outputs = set().union(*(curlyJ.outputs for curlyJ in curlyJs)) - set(targets)
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns)) 
 
 
@@ -265,7 +268,7 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
         if not jac:
             continue
         else:
-            curlyJs.append(jac)
+            curlyJs.append(JacobianDict(jac))
 
     return curlyJs, required
 
@@ -311,97 +314,42 @@ def forward_accumulate(curlyJs, inputs, outputs=None, required=None):
 
     if jacflag:
         # Jacobians of inputs with respect to themselves are the identity, initialize with this
-        out = {i: {i: utils.special_matrices.IdentityMatrix()} for i in inputs}
+        #out = {i: {i: utils.special_matrices.IdentityMatrix()} for i in inputs}
+        out = JacobianDict.identity(inputs)
     else:
         out = inputs.copy()
 
     # iterate through curlyJs, in what is presumed to be a topologically sorted order
     for curlyJ in curlyJs:
+        curlyJ = JacobianDict(curlyJ).complete()
         if alloutputs is not None:
             # if we want specific list of outputs, restrict curlyJ to that before continuing
-            curlyJ = {k: v for k, v in curlyJ.items() if k in alloutputs}
+            #curlyJ = {k: v for k, v in curlyJ.items() if k in alloutputs}
+            curlyJ = curlyJ[[k for k in alloutputs if k in curlyJ.outputs]]
         if jacflag:
-            out.update(compose_jacobians(out, curlyJ))
+            #out.update(compose_jacobians(out, curlyJ))
+            out.update(curlyJ.compose(out))
         else:
-            out.update(apply_jacobians(curlyJ, out))
+            #out.update(apply_jacobians(curlyJ, out))
+            out.update(curlyJ.apply(out))
 
     if outputs is not None:
         # if we want specific list of outputs, restrict to that
         # (dropping 'required' in 'alloutputs' that was needed for intermediate computations)
-        return {k: out[k] for k in outputs if k in out}
+        #return {k: out[k] for k in outputs if k in out}
+        return out[[k for k in outputs if k in out.outputs]]
     else:
-        if jacflag:
-            # default behavior for Jacobian case: return all Jacobians we used/calculated along the way
-            # except the (redundant) IdentityMatrix objects mapping inputs to themselves
-            return {k: v for k, v in out.items() if k not in inputs}
-        else:
-            # default behavior for case where we're calculating paths: return everything, including inputs
-            return out
+        return out
+        # if jacflag:
+        #     # default behavior for Jacobian case: return all Jacobians we used/calculated along the way
+        #     # except the (redundant) IdentityMatrix objects mapping inputs to themselves
+        #     return {k: v for k, v in out.items() if k not in inputs}
+        # else:
+        #     # default behavior for case where we're calculating paths: return everything, including inputs
+        #     return out
 
 
 '''Part 2: Somewhat lower-level routines for handling Jacobians'''
-
-
-def chain_jacobians(jacdicts, inputs):
-    """Obtain complete Jacobian of every output in jacdicts with respect to inputs, by applying chain rule."""
-    cumulative_jacdict = {i: {i: IdentityMatrix()} for i in inputs}
-    for jacdict in jacdicts:
-        cumulative_jacdict.update(compose_jacobians(cumulative_jacdict, jacdict))
-    return cumulative_jacdict
-
-
-def compose_jacobians(jacdict2, jacdict1):
-    """Compose Jacobians via the chain rule."""
-    jacdict = {}
-    for output, innerjac1 in jacdict1.items():
-        jacdict[output] = {}
-        for middle, jac1 in innerjac1.items():
-            innerjac2 = jacdict2.get(middle, {})
-            for inp, jac2 in innerjac2.items():
-                if inp in jacdict[output]:
-                    jacdict[output][inp] += jac1 @ jac2
-                else:
-                    jacdict[output][inp] = jac1 @ jac2
-    return jacdict
-
-
-def apply_jacobians(jacdict, indict):
-    """Apply Jacobians in jacdict to indict to obtain outputs."""
-    outdict = {}
-    for myout, innerjacdict in jacdict.items():
-        for myin, jac in innerjacdict.items():
-            if myin in indict:
-                if myout in outdict:
-                    outdict[myout] += jac @ indict[myin]
-                else:
-                    outdict[myout] = jac @ indict[myin]
-
-    return outdict
-
-
-def pack_jacobians(jacdict, inputs, outputs, T):
-    """If we have T*T jacobians from nI inputs to nO outputs in jacdict, combine into (nO*T)*(nI*T) jacobian matrix."""
-    nI, nO = len(inputs), len(outputs)
-
-    outjac = np.empty((nO * T, nI * T))
-    for iO in range(nO):
-        subdict = jacdict.get(outputs[iO], {})
-        for iI in range(nI):
-            outjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = make_matrix(subdict.get(inputs[iI],
-                                                                                               np.zeros((T, T))), T)
-    return outjac
-
-
-def unpack_jacobians(bigjac, inputs, outputs, T):
-    """If we have an (nO*T)*(nI*T) jacobian and provide names of nO outputs and nI inputs, output nested dictionary"""
-    nI, nO = len(inputs), len(outputs)
-
-    jacdict = {}
-    for iO in range(nO):
-        jacdict[outputs[iO]] = {}
-        for iI in range(nI):
-            jacdict[outputs[iO]][inputs[iI]] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
-    return jacdict
 
 
 def pack_asymptotic_jacobians(jacdict, inputs, outputs, tau):
@@ -464,4 +412,152 @@ def make_ATI_v(x, tau):
     else:
         return x.v
 
+
+"""Experimental new jacdict feature"""
+
+class NestedDict:
+    def __init__(self, nesteddict, outputs=None, inputs=None):
+        if isinstance(nesteddict, NestedDict):
+            self.nesteddict = nesteddict.nesteddict
+            self.outputs = nesteddict.outputs
+            self.inputs = nesteddict.inputs
+        else:
+            self.nesteddict = nesteddict
+            if outputs is None:
+                outputs = list(nesteddict.keys())
+            if inputs is None:
+                inputs = []
+                for v in nesteddict.values():
+                    inputs.extend(list(v))
+                inputs = deduplicate(inputs)
+            
+            self.outputs = list(outputs)
+            self.inputs = list(inputs)
+    
+    def __repr__(self):
+        return f'<{type(self).__name__} outputs={self.outputs}, inputs={self.inputs}>'
+
+    def __iter__(self):
+        return iter(self.outputs)
+
+    def __getitem__(self, x):
+        if isinstance(x, str):
+            # case 1: just a single output, give subdict
+            return self.nesteddict[x]
+        elif isinstance(x, tuple):
+            # case 2: tuple, referring to output and input
+            o, i = x
+            o = self.outputs if o == slice(None, None, None) else o
+            i = self.inputs if i == slice(None, None, None) else i
+            if isinstance(o, str):
+                if isinstance(i, str):
+                    # case 2a: one output, one input, return single Jacobian
+                    return self.nesteddict[o][i]
+                else:
+                    # case 2b: one output, multiple inputs, return dict
+                    return {ii: self.nesteddict[o][ii] for ii in i}
+            else:
+                # case 2c: multiple outputs, one or more inputs, return JacobianDict with outputs o and inputs i
+                i = (i,) if isinstance(i, str) else i
+                return JacobianDict({oo: {ii: self.nesteddict[oo][ii] for ii in i} for oo in o}, o, i)
+        elif isinstance(x, list) or isinstance(x, set):
+            # case 3: assume that list or set refers just to outputs, get all of those
+            return JacobianDict({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
+        else:
+            raise ValueError(f'Tried to get impermissible item {x}')
+
+    def get(self, *args, **kwargs):
+        # this is for compatibilty, not a huge fan
+        return self.nesteddict.get(*args, **kwargs)
+
+    
+    def update(self, J):
+        if set(self.inputs) != set(J.inputs):
+            raise ValueError(f'Cannot merge JacobianDicts with non-overlapping inputs {set(self.inputs) ^ set(J.inputs)}')
+        if not set(self.outputs).isdisjoint(J.outputs):
+            raise ValueError(f'Cannot merge JacobianDicts with overlapping outputs {set(self.outputs) & set(J.outputs)}')
+        self.outputs = self.outputs + J.outputs
+        self.nesteddict = {**self.nesteddict, **J.nesteddict}
+
+    def complete(self, filler):
+        nesteddict = {}
+        for o in self.outputs:
+            nesteddict[o] = dict(self.nesteddict[o])
+            for i in self.inputs:
+                if i not in nesteddict[o]:
+                    nesteddict[o][i] = filler
+        return JacobianDict(nesteddict, self.outputs, self.inputs)
+
+
+def deduplicate(mylist):
+    """Remove duplicates while otherwise maintaining order"""
+    return list(dict.fromkeys(mylist))
+
+
+class JacobianDict(NestedDict):
+    @staticmethod
+    def identity(ks):
+        return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks).complete()
+
+    def complete(self):
+        return super().complete(ZeroMatrix())
+
+    def __matmul__(self, x):
+        if isinstance(x, JacobianDict):
+            return self.compose(x)
+        else:
+            return self.apply(x)
+
+    def compose(self, J):
+        o_list = self.outputs
+        m_list = tuple(set(self.inputs) & set(J.outputs))
+        i_list = J.inputs
+
+        J_om = self.nesteddict
+        J_mi = J.nesteddict
+        J_oi = {}
+
+        for o in o_list:
+            J_oi[o] = {}
+            for i in i_list:
+                Jout = ZeroMatrix()
+                for m in m_list:
+                    J_om[o][m]
+                    J_mi[m][i]
+                    Jout += J_om[o][m] @ J_mi[m][i]
+                J_oi[o][i] = Jout
+
+        return JacobianDict(J_oi, o_list, i_list)
+
+    def apply(self, x):
+        # assume that all entries in x have some length T, and infer it
+        T = len(next(iter(x.values())))
+        
+        inputs = x.keys() & set(self.inputs)
+        J_oi = self.nesteddict
+        y = {}
+
+        for o in self.outputs:
+            y[o] = np.zeros(T)
+            for i in inputs:
+                y[o] += J_oi[o][i] @ x[i]
+        
+        return y
+
+    def pack(self, T):
+        J = np.empty((len(self.outputs) * T, len(self.inputs) * T))
+        for iO, O in enumerate(self.outputs):
+            for iI, I in enumerate(self.inputs):
+                J[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = make_matrix(self[O, I], T)
+        return J
+
+    @staticmethod
+    def unpack(bigjac, outputs, inputs, T):
+        """If we have an (nO*T)*(nI*T) jacobian and provide names of nO outputs and nI inputs, output nested dictionary"""
+        jacdict = {}
+        for iO, O in enumerate(outputs):
+            jacdict[O] = {}
+            for iI, I in enumerate(inputs):
+                jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
+        return JacobianDict(jacdict, outputs, inputs)
 

@@ -55,8 +55,11 @@ class IdentityMatrix:
 
 class ZeroMatrix:
     """Simple zero matrix class, cheaper than using actual np.zeros((T,T)) matrix,
-    use to indicate no"""
+    use in common case where some outputs don't depend on inputs"""
     __array_priority__ = 10_000
+
+    def sparse(self):
+        return SimpleSparse({(0, 0): 0})
 
     def matrix(self, T):
         return np.zeros((T,T))
@@ -76,17 +79,18 @@ class ZeroMatrix:
     def __rmul__(self, a):
         return self
 
+    # copies seem inefficient here, try to live without them
     def __add__(self, x):
-        return copy.deepcopy(x)
+        return x
 
     def __radd__(self, x):
-        return copy.deepcopy(x)
+        return x
 
     def __sub__(self, x):
-        return -copy.deepcopy(x)
+        return -x
 
     def __rsub__(self, x):
-        return copy.deepcopy(x)
+        return x
 
     def __neg__(self):
         return self
@@ -96,6 +100,10 @@ class ZeroMatrix:
 
     def __repr__(self):
         return 'ZeroMatrix'
+
+    @property
+    def asymptotic_time_invariant(self):
+        return self.sparse().asymptotic_time_invariant
 
 
 class SimpleSparse:
