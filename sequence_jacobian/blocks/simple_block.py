@@ -151,6 +151,6 @@ def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):
     J = {o: {} for o in utils.misc.output_list(f)}
     for o, o_name in zip(utils.misc.make_tuple(f(**input_args)), utils.misc.output_list(f)):
         if isinstance(o, AccumulatedDerivative):
-            J[o_name] = jacobian.SimpleSparse(o.elements)
+            J[o_name] = utils.special_matrices.SimpleSparse(o.elements)
 
     return J
