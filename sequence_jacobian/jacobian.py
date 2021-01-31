@@ -440,6 +440,12 @@ class NestedDict:
     def __iter__(self):
         return iter(self.outputs)
 
+    def __or__(self, other):
+        # non-in-place merge: make a copy, then update
+        merged = type(self)(self.nesteddict, self.outputs, self.inputs)
+        merged.update(other)
+        return merged
+
     def __getitem__(self, x):
         if isinstance(x, str):
             # case 1: just a single output, give subdict
@@ -457,12 +463,12 @@ class NestedDict:
                     # case 2b: one output, multiple inputs, return dict
                     return {ii: self.nesteddict[o][ii] for ii in i}
             else:
-                # case 2c: multiple outputs, one or more inputs, return JacobianDict with outputs o and inputs i
+                # case 2c: multiple outputs, one or more inputs, return NestedDict with outputs o and inputs i
                 i = (i,) if isinstance(i, str) else i
-                return JacobianDict({oo: {ii: self.nesteddict[oo][ii] for ii in i} for oo in o}, o, i)
+                return type(self)({oo: {ii: self.nesteddict[oo][ii] for ii in i} for oo in o}, o, i)
         elif isinstance(x, list) or isinstance(x, set):
             # case 3: assume that list or set refers just to outputs, get all of those
-            return JacobianDict({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
+            return type(self)({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
         else:
             raise ValueError(f'Tried to get impermissible item {x}')
 
@@ -470,12 +476,11 @@ class NestedDict:
         # this is for compatibilty, not a huge fan
         return self.nesteddict.get(*args, **kwargs)
 
-    
     def update(self, J):
         if set(self.inputs) != set(J.inputs):
-            raise ValueError(f'Cannot merge JacobianDicts with non-overlapping inputs {set(self.inputs) ^ set(J.inputs)}')
+            raise ValueError(f'Cannot merge {type(self).__name__}s with non-overlapping inputs {set(self.inputs) ^ set(J.inputs)}')
         if not set(self.outputs).isdisjoint(J.outputs):
-            raise ValueError(f'Cannot merge JacobianDicts with overlapping outputs {set(self.outputs) & set(J.outputs)}')
+            raise ValueError(f'Cannot merge {type(self).__name__}s with overlapping outputs {set(self.outputs) & set(J.outputs)}')
         self.outputs = self.outputs + J.outputs
         self.nesteddict = {**self.nesteddict, **J.nesteddict}
 
@@ -486,7 +491,7 @@ class NestedDict:
             for i in self.inputs:
                 if i not in nesteddict[o]:
                     nesteddict[o][i] = filler
-        return JacobianDict(nesteddict, self.outputs, self.inputs)
+        return type(self)(nesteddict, self.outputs, self.inputs)
 
 
 def deduplicate(mylist):
@@ -501,6 +506,11 @@ class JacobianDict(NestedDict):
 
     def complete(self):
         return super().complete(ZeroMatrix())
+
+    def addinputs(self):
+        """Add any inputs that were not already in output list as outputs, with the identity"""
+        inputs = [x for x in self.inputs if x not in self.outputs]
+        return self | JacobianDict.identity(inputs)
 
     def __matmul__(self, x):
         if isinstance(x, JacobianDict):
