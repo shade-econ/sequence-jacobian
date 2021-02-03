@@ -21,6 +21,10 @@ class IgnoreInt(int):
     Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
     any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore
     """
+
+    def __repr__(self):
+        return f'IgnoreInt({numeric_primitive(self)})'
+
     @property
     def ss(self):
         return self
@@ -103,6 +107,9 @@ class IgnoreFloat(float):
     Standard arithmetic operators including +, -, x, /, ** all overloaded to "promote" the result of
     any arithmetic operation with an Ignore type to an Ignore type. e.g. type(Ignore(1) + 1) is Ignore
     """
+
+    def __repr__(self):
+        return f'IgnoreFloat({numeric_primitive(self)})'
 
     @property
     def ss(self):
@@ -190,6 +197,9 @@ class IgnoreVector(np.ndarray):
         obj = np.asarray(x).view(cls)
         return obj
 
+    def __repr__(self):
+        return f'IgnoreVector({numeric_primitive(self)})'
+
     @property
     def ss(self):
         return self
@@ -270,6 +280,9 @@ class Displace(np.ndarray):
         obj.ss = ss
         obj.name = name
         return obj
+
+    def __repr__(self):
+        return f'Displace({numeric_primitive(self)})'
 
     # TODO: Implemented a very preliminary generalization of Displace to higher-dimensional (>1) ndarrays
     #   however the rigorous operator overloading/testing has not been checked for higher dimensions.
