@@ -37,67 +37,62 @@ class IgnoreInt(int):
     def __neg__(self):
         return ignore(-numeric_primitive(self))
 
-    # Tried using the multipledispatch package but @dispatch requires the classes being dispatched on to be defined
-    # prior to the use of the decorator @dispatch("ClassName"), hence making it impossible to overload in this way,
-    # as opposed to how isinstance() is evaluated at runtime, so it is valid to check isinstance even if in this module
-    # the class is defined later on in the module.
-    # Thus, we need to specially overload the left operations to check if `other` is a Displace to promote properly
     def __add__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rtruediv__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) / other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__truediv__(numeric_primitive(self))
         else:
             return ignore(other / numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative):
+        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative) or isinstance(power, PathTracer):
             return power.__rpow__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) ** power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__pow__(numeric_primitive(self))
         else:
             return ignore(other ** numeric_primitive(self))
@@ -125,67 +120,62 @@ class IgnoreFloat(float):
     def __neg__(self):
         return ignore(-numeric_primitive(self))
 
-    # Tried using the multipledispatch package but @dispatch requires the classes being dispatched on to be defined
-    # prior to the use of the decorator @dispatch("ClassName"), hence making it impossible to overload in this way,
-    # as opposed to how isinstance() is evaluated at runtime, so it is valid to check isinstance even if in this module
-    # the class is defined later on in the module.
-    # Thus, we need to specially overload the left operations to check if `other` is a Displace to promote properly
     def __add__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rtruediv__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) / other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__truediv__(numeric_primitive(self))
         else:
             return ignore(other / numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative):
+        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative) or isinstance(power, PathTracer):
             return power.__rpow__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) ** power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__pow__(numeric_primitive(self))
         else:
             return ignore(other ** numeric_primitive(self))
@@ -211,61 +201,61 @@ class IgnoreVector(np.ndarray):
         return ignore(f(numeric_primitive(self), **kwargs))
 
     def __add__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__radd__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) + other)
 
     def __radd__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__add__(numeric_primitive(self))
         else:
             return ignore(other + numeric_primitive(self))
 
     def __sub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rsub__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) - other)
 
     def __rsub__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__sub__(numeric_primitive(self))
         else:
             return ignore(other - numeric_primitive(self))
 
     def __mul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rmul__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) * other)
 
     def __rmul__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__mul__(numeric_primitive(self))
         else:
             return ignore(other * numeric_primitive(self))
 
     def __truediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__rtruediv__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) / other)
 
     def __rtruediv__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__truediv__(numeric_primitive(self))
         else:
             return ignore(other / numeric_primitive(self))
 
     def __pow__(self, power, modulo=None):
-        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative):
+        if isinstance(power, Displace) or isinstance(power, AccumulatedDerivative) or isinstance(power, PathTracer):
             return power.__rpow__(numeric_primitive(self))
         else:
             return ignore(numeric_primitive(self) ** power)
 
     def __rpow__(self, other):
-        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative):
+        if isinstance(other, Displace) or isinstance(other, AccumulatedDerivative) or isinstance(other, PathTracer):
             return other.__pow__(numeric_primitive(self))
         else:
             return ignore(other ** numeric_primitive(self))
@@ -704,3 +694,87 @@ def apply_function(func, *args, **kwargs):
             "Have not yet implemented general apply_function functionality for AccumulatedDerivatives")
     else:
         return func(*args, **kwargs)
+
+
+class PathTracer:
+    """This class behaves like a displacement handler class but exists for the sole purpose of tracing
+    the path of an input variable through a block to the relevant set of affected output variables"""
+
+    @property
+    def ss(self):
+        return self
+
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return f'PathTracer({self.value.__repr__()})'
+
+    def __call__(self, index):
+        return self
+
+    def apply(self, f, **kwargs):
+        return PathTracer((f(self.value, **kwargs)))
+
+    def __pos__(self):
+        return self
+
+    def __neg__(self):
+        return PathTracer(-self.value)
+
+    def __add__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__add__(other.value))
+        else:
+            return PathTracer(self.value.__add__(other))
+
+    def __radd__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__radd__(other.value))
+        else:
+            return PathTracer(self.value.__radd__(other))
+
+    def __sub__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__sub__(other.value))
+        else:
+            return PathTracer(self.value.__sub__(other))
+
+    def __rsub__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__rsub__(other.value))
+        else:
+            return PathTracer(self.value.__rsub__(other))
+
+    def __mul__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__mul__(other.value))
+        else:
+            return PathTracer(self.value.__mul__(other))
+
+    def __rmul__(self, other):
+        return PathTracer(self.value.__rmul__(other))
+
+    def __truediv__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__truediv__(other.value))
+        else:
+            return PathTracer(self.value.__truediv__(other))
+
+    def __rtruediv__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__rtruediv__(other.value))
+        else:
+            return PathTracer(self.value.__rtruediv__(other))
+
+    def __pow__(self, power, modulo=None):
+        if isinstance(power, PathTracer):
+            return PathTracer(self.value.__pow__(power.value))
+        else:
+            return PathTracer(self.value.__pow__(power))
+
+    def __rpow__(self, other):
+        if isinstance(other, PathTracer):
+            return PathTracer(self.value.__rpow__(other.value))
+        else:
+            return PathTracer(self.value.__rpow__(other))
