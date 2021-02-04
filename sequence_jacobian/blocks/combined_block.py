@@ -13,9 +13,11 @@ def combine(*args):
 
 class CombinedBlock:
 
-    def __init__(self, *args, name=None):
+    def __init__(self, *args, name=""):
         self.blocks = args
-        if name is not None:
+        if not name:
+            self.name = f"{self.blocks[0].name}_to_{self.blocks[-1].name}_combined"
+        else:
             self.name = name
 
         # Find all outputs (including those used as intermediary inputs)

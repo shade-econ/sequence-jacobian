@@ -14,6 +14,7 @@ class HelperBlock:
 
     def __init__(self, f):
         self.f = f
+        self.name = f.__name__
         self.input_list = utils.misc.input_list(f)
         self.output_list = utils.misc.output_list(f)
         self.inputs = set(self.input_list)

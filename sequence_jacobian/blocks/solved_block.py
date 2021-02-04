@@ -4,20 +4,21 @@ from ..steady_state import steady_state
 from ..blocks.simple_block import simple
 
 
-def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}):
+def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name=""):
     """Creates SolvedBlocks. Can be applied in two ways, both of which return a SolvedBlock:
         - as @solved(unknowns=..., targets=...) decorator on a single SimpleBlock
         - as function solved(blocklist=..., unknowns=..., targets=...) where blocklist
             can be any list of blocks
     """
-
     if block_list:
+        if not name:
+            name = f"{block_list[0].name}_to_{block_list[-1].name}_solved"
         # ordinary call, not as decorator
-        return SolvedBlock(block_list, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
+        return SolvedBlock(block_list, name, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
     else:
         # call as decorator, return function of function
         def singleton_solved_block(f):
-            return SolvedBlock([simple(f)], unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
+            return SolvedBlock([simple(f)], f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
         return singleton_solved_block
 
 
@@ -34,8 +35,9 @@ class SolvedBlock:
     nonlinear transition path such that all internal targets of the mini SHADE model are zero.
     """
 
-    def __init__(self, block_list, unknowns, targets, solver=None, solver_kwargs={}):
+    def __init__(self, block_list, name, unknowns, targets, solver=None, solver_kwargs={}):
         self.block_list = block_list
+        self.name = name
         self.unknowns = unknowns
         self.targets = targets
         self.solver = solver
