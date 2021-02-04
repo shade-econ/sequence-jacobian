@@ -7,7 +7,7 @@ formatwarning_orig = warnings.formatwarning
 warnings.formatwarning = lambda message, category, filename, lineno, line=None: \
     formatwarning_orig(message, category, filename, lineno, line='')
 
-from .. import utilities as utils
+from ..utilities.graph import ignore_helper_block_indices, topological_sort, construct_output_map, construct_dependency_graph
 from ..blocks.helper_block import HelperBlock
 
 
@@ -28,9 +28,9 @@ try:
     """
     from graphviz import Digraph
 
-    # TODO: Integrate the givedep and giveio functionality into the base block_sort functionality in SSJ
+    # TODO: Integrate the giveio functionality into the base block_sort functionality in SSJ
     # Enhanced block sort
-    def block_sort_enhanced(block_list, findrequired=False, givedep=False, giveio=False, ignore_helpers=True):
+    def block_sort_enhanced(block_list, findrequired=False, giveio=False, ignore_helpers=True):
         """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort and also
         optionally return which outputs must be computed as inputs of later blocks.
 
@@ -84,27 +84,18 @@ try:
                         if findrequired:
                             required.add(i)
 
-        if givedep:
-            if findrequired:
-                if giveio:
-                    return dep, required, inset, outset
-                else:
-                    return dep, inset, outset
-            else:
-                return dep
+        if ignore_helpers:
+            dep_sorted = ignore_helper_block_indices(topological_sort(dep), block_list)
         else:
-            if ignore_helpers:
-                dep_sorted = utils.graph.ignore_helper_block_indices(utils.graph.topological_sort(dep), block_list)
-            else:
-                dep_sorted = utils.graph.topological_sort(dep)
+            dep_sorted = topological_sort(dep)
 
-            if findrequired:
-                if giveio:
-                     return dep_sorted, required, inset, outset
-                else:
-                     return dep_sorted, required
+        if findrequired:
+            if giveio:
+                 return dep_sorted, required, inset, outset
             else:
-                return dep_sorted
+                 return dep_sorted, required
+        else:
+            return dep_sorted
 
 
     def draw_dag(block_list, exogenous=None, unknowns=None, targets=None,
@@ -140,7 +131,7 @@ try:
         # get sorted list of blocks
         block_list_sorted = [block_list[i] for i in topsorted]
         # Obtain the dependency list of the sorted set of blocks
-        dep_list_sorted = block_sort_enhanced(block_list_sorted, givedep=True)
+        dep_list_sorted = construct_dependency_graph(block_list_sorted, construct_output_map(block_list_sorted))
 
         # Draw DAG
         dot = Digraph(comment='Model DAG')
@@ -209,8 +200,7 @@ try:
             # print(dot.source)
 
         if debug:
-            dep, required, inputs, outputs = block_sort_enhanced(block_list_sorted, findrequired=True,
-                                                                 givedep=False, giveio=True)
+            dep, required, inputs, outputs = block_sort_enhanced(block_list_sorted, findrequired=True, giveio=True)
             # Candidate targets: outputs that are not inputs to any block
             print("Candidate targets :")
             cand_targets = outputs.difference(required)
