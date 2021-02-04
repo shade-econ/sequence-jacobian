@@ -6,7 +6,7 @@ from ..blocks.helper_block import HelperBlock
 from ..blocks.solved_block import SolvedBlock
 
 
-def block_sort(block_list, ignore_helpers=False, calibration=None):
+def block_sort(block_list, ignore_helpers=False, calibration=None, return_io=False):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort.
 
     Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
@@ -32,17 +32,37 @@ def block_sort(block_list, ignore_helpers=False, calibration=None):
     calibration: `dict` or `None`
         An optional dict of variable/parameter names and their pre-specified values to help resolve any cycles
         introduced by using HelperBlocks. Read above docstring for more detail
+    return_io: `bool`
+        A boolean indicating whether to return the full set of input and output arguments from `block_list`
     """
 
-    # step 1: map outputs to blocks for topological sort
-    outmap = construct_output_map(block_list)
+    # TODO: Decide whether we want to break out the input and output argument tracking and return to
+    #   a different function... currently it's very convenient to slot it into block_sort directly, but it
+    #   does clutter up the function body
+    if return_io:
+        # step 1: map outputs to blocks for topological sort
+        outmap, outargs = construct_output_map(block_list, return_output_args=True)
 
-    # step 2: dependency graph for topological sort and input list
-    dep = construct_dependency_graph(block_list, outmap, calibration=calibration, ignore_helpers=ignore_helpers)
-    if ignore_helpers:
-        return ignore_helper_block_indices(topological_sort(dep), block_list)
+        # step 2: dependency graph for topological sort and input list
+        dep, inargs = construct_dependency_graph(block_list, outmap, return_input_args=True,
+                                                 calibration=calibration, ignore_helpers=ignore_helpers)
+
+        if ignore_helpers:
+            return ignore_helper_block_indices(topological_sort(dep), block_list), inargs, outargs
+        else:
+            return topological_sort(dep), inargs, outargs
     else:
-        return topological_sort(dep)
+        # step 1: map outputs to blocks for topological sort
+        outmap = construct_output_map(block_list)
+
+        # step 2: dependency graph for topological sort and input list
+        dep = construct_dependency_graph(block_list, outmap,
+                                         calibration=calibration, ignore_helpers=ignore_helpers)
+
+        if ignore_helpers:
+            return ignore_helper_block_indices(topological_sort(dep), block_list)
+        else:
+            return topological_sort(dep)
 
 
 def topological_sort(dep, names=None):
@@ -76,7 +96,7 @@ def ignore_helper_block_indices(topsorted, blocks):
     return [i for i in topsorted if not isinstance(blocks[i], HelperBlock)]
 
 
-def construct_output_map(block_list, ignore_helpers=False):
+def construct_output_map(block_list, ignore_helpers=False, return_output_args=False):
     """Construct a map of outputs to the indices of the blocks that produce them.
 
     block_list: `list`
@@ -84,8 +104,12 @@ def construct_output_map(block_list, ignore_helpers=False):
     ignore_helpers: `bool`
         A boolean indicating whether to account for/return the indices of HelperBlocks contained in block_list
         Set to true when sorting for td and jac calculations
+    return_output_args: `bool`
+        A boolean indicating whether to track and return the full set of output arguments of all of the blocks
+        in `block_list`
     """
     outmap = dict()
+    outargs = set()
     for num, block in enumerate(block_list):
         if ignore_helpers and isinstance(block, HelperBlock):
             continue
@@ -109,12 +133,17 @@ def construct_output_map(block_list, ignore_helpers=False):
             # a given output, such that the dependency graph is constructed on the standard blocks, where possible
             if o not in outmap or (o in outmap and not isinstance(block, HelperBlock)):
                 outmap[o] = num
+                if return_output_args:
+                    outargs.add(o)
             else:
                 continue
-    return outmap
+    if return_output_args:
+        return outmap, outargs
+    else:
+        return outmap
 
 
-def construct_dependency_graph(block_list, outmap, calibration=None, ignore_helpers=False):
+def construct_dependency_graph(block_list, outmap, ignore_helpers=False, calibration=None, return_input_args=False):
     """Construct a dependency graph dictionary, with block indices as keys and a set of block indices as values, where
     this set is the set of blocks that the key block is dependent on.
 
@@ -125,6 +154,7 @@ def construct_dependency_graph(block_list, outmap, calibration=None, ignore_help
     if calibration is None:
         calibration = {}
     dep = {num: set() for num in range(len(block_list))}
+    inargs = set()
     for num, block in enumerate(block_list):
         if ignore_helpers and isinstance(block, HelperBlock):
             continue
@@ -133,6 +163,8 @@ def construct_dependency_graph(block_list, outmap, calibration=None, ignore_help
         else:
             inputs = set(i for o in block for i in block[o])
         for i in inputs:
+            if return_input_args:
+                inargs.add(i)
             # Each potential input to a given block will either be 1) output by another block,
             # 2) an unknown or exogenous variable, or 3) a pre-specified variable/parameter passed into
             # the steady-state computation via the `calibration' dict.
@@ -143,7 +175,10 @@ def construct_dependency_graph(block_list, outmap, calibration=None, ignore_help
             # dependency, if it were not for this resolution.
             if i in outmap and not (i in calibration and isinstance(block, HelperBlock)):
                 dep[num].add(outmap[i])
-    return dep
+    if return_input_args:
+        return dep, inargs
+    else:
+        return dep
 
 
 def find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=False):
