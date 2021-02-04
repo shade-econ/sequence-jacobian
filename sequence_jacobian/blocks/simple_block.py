@@ -113,7 +113,7 @@ class SimpleBlock:
         # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
         # are an input into the block), then return an empty dict
         if not relevant_shocks:
-            return {}
+            return JacobianDict({})
         else:
             invertedJ = {shock_name: {} for shock_name in relevant_shocks}
 

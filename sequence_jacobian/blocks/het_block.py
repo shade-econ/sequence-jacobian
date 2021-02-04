@@ -401,10 +401,13 @@ class HetBlock:
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
-        F = {o.capitalize(): {} for o in output_list}
-        J = {o.capitalize(): {} for o in output_list}
+        F, J = {}, {}
         for o in output_list:
             for i in relevant_shocks:
+                if o.capitalize() not in F:
+                    F[o.capitalize()] = {}
+                if o.capitalize() not in J:
+                    J[o.capitalize()] = {}
                 F[o.capitalize()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
 
