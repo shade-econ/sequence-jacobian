@@ -3,19 +3,18 @@
 import numpy as np
 import copy
 
-from sequence_jacobian import two_asset, nonlinear, jacobian
+from sequence_jacobian import two_asset, nonlinear, get_G, get_H_U
 from sequence_jacobian import utilities as utils
 
 
 # TODO: Figure out a more robust way to check similarity of the linear and non-linear solution.
 #   As of now just checking that the tolerance for difference (by infinity norm) is below a manually checked threshold
-
 def test_rbc_td(rbc_model):
     blocks, exogenous, unknowns, targets, ss = rbc_model
 
     T, impact, rho, news = 30, 0.01, 0.8, 10
-    G = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                       targets=targets, T=T, ss=ss)
+    G = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
+              targets=targets, T=T, ss=ss)
 
     dZ = np.empty((T, 2))
     dZ[:, 0] = impact * ss['Z'] * rho**np.arange(T)
@@ -37,8 +36,8 @@ def test_ks_td(krusell_smith_model):
     blocks, exogenous, unknowns, targets, ss = krusell_smith_model
 
     T = 30
-    G = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                       targets=targets, T=T, ss=ss)
+    G = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
+              targets=targets, T=T, ss=ss)
 
     for shock_size, tol in [(0.01, 7e-3), (0.1, 0.6)]:
         Z = ss['Z'] + shock_size * 0.8 ** np.arange(T)
@@ -55,14 +54,14 @@ def test_hank_td(one_asset_hank_model):
     blocks, exogenous, unknowns, targets, ss = one_asset_hank_model
 
     T = 30
-    G = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                       targets=targets, T=T, ss=ss, save=True)
+    G = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
+              targets=targets, T=T, ss=ss, save=True)
 
     rho_r, sig_r = 0.61, -0.01/4
     drstar = sig_r * rho_r ** (np.arange(T))
     rstar = ss['r'] + drstar
 
-    H_U = jacobian.get_H_U(blocks, unknowns, targets, T, ss, use_saved=True)
+    H_U = get_H_U(blocks, unknowns, targets, T, ss, use_saved=True)
     H_U_factored = utils.misc.factor(H_U)
 
     td_nonlin = nonlinear.td_solve(ss, blocks, unknowns, targets, H_U_factored=H_U_factored, rstar=rstar, verbose=False)
@@ -77,8 +76,8 @@ def test_two_asset_td(two_asset_hank_model):
     blocks, exogenous, unknowns, targets, ss = two_asset_hank_model
 
     T = 30
-    G = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                       targets=targets, T=T, ss=ss, save=True)
+    G = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
+              targets=targets, T=T, ss=ss, save=True)
 
     for shock_size, tol in [(0.1, 3e-4), (1, 2e-2)]:
         drstar = -0.0025 * 0.6 ** np.arange(T)
@@ -106,8 +105,8 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_model):
     targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
 
     T = 30
-    G = jacobian.get_G(blocks, exogenous, unknowns, targets, T, ss=ss, save=True)
-    G_simple = jacobian.get_G(blocks_simple, exogenous, unknowns_simple, targets_simple, T, ss=ss, save=True)
+    G = get_G(blocks, exogenous, unknowns, targets, T, ss=ss, save=True)
+    G_simple = get_G(blocks_simple, exogenous, unknowns_simple, targets_simple, T, ss=ss, save=True)
 
     drstar = -0.0025 * 0.6 ** np.arange(T)
 

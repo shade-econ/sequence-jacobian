@@ -1,6 +1,9 @@
+"""Test SimpleBlock functionality"""
+
 from sequence_jacobian import simple, utilities
 import numpy as np
 import pytest
+
 
 @simple
 def F(K, L, Z, alpha):

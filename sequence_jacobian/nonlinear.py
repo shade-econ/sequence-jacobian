@@ -3,8 +3,9 @@
 import numpy as np
 
 from . import utilities as utils
-from . import jacobian as jac
 from .blocks import het_block as het
+from .jacobian.drivers import get_H_U
+from .jacobian.support import pack_vectors, unpack_vectors
 
 
 def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
@@ -48,13 +49,13 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     
     # initialize guess for unknowns to steady state length T
     Us = {k: np.full(T, ss[k]) for k in unknowns}
-    Uvec = jac.pack_vectors(Us, unknowns, T)
+    Uvec = pack_vectors(Us, unknowns, T)
 
     # obtain H_U_factored if we don't have it already 
     if H_U_factored is None:
         if H_U is None:
             # not even H_U is supplied, get it (costly if there are HetBlocks)
-            H_U = jac.get_H_U(block_list, unknowns, targets, T, ss, save=save, use_saved=use_saved)
+            H_U = get_H_U(block_list, unknowns, targets, T, ss, save=save, use_saved=use_saved)
         H_U_factored = utils.misc.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
@@ -72,9 +73,9 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
             break
         else:
             # update guess U by -H_U^(-1) times errors H
-            Hvec = jac.pack_vectors(results, targets, T)
+            Hvec = pack_vectors(results, targets, T)
             Uvec -= utils.misc.factored_solve(H_U_factored, Hvec)
-            Us = jac.unpack_vectors(Uvec, unknowns, T)
+            Us = unpack_vectors(Uvec, unknowns, T)
     else:
         raise ValueError(f'No convergence after {maxit} backward iterations!')
     

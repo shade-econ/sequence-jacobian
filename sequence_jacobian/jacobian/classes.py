@@ -1,9 +1,10 @@
-"""Matrices with special structure, which work with simple, efficient rules"""
+"""Various classes to support the computation of Jacobians"""
 
-from .. import asymptotic
-import numpy as np
-from numba import njit
 import copy
+import numpy as np
+
+from . import support
+from .. import asymptotic
 
 
 class IdentityMatrix:
@@ -196,14 +197,14 @@ class SimpleSparse:
     def __matmul__(self, A):
         if isinstance(A, SimpleSparse):
             # multiply SimpleSparse by SimpleSparse, simple analytical rules in multiply_rs_rs
-            return multiply_rs_rs(self, A)
+            return SimpleSparse(support.multiply_rs_rs(self, A))
         elif isinstance(A, np.ndarray):
             # multiply SimpleSparse by matrix or vector, multiply_rs_matrix uses slicing
             indices, xs = self.array()
             if A.ndim == 2:
-                return multiply_rs_matrix(indices, xs, A)
+                return support.multiply_rs_matrix(indices, xs, A)
             elif A.ndim == 1:
-                return multiply_rs_matrix(indices, xs, A[:, np.newaxis])[:, 0]
+                return support.multiply_rs_matrix(indices, xs, A[:, np.newaxis])[:, 0]
             else:
                 return NotImplemented
         else:
@@ -274,74 +275,161 @@ class SimpleSparse:
         return self.elements == s.elements
 
 
-def multiply_basis(t1, t2):
-    """Matrix multiplication operation mapping two sparse basis elements to another."""
-    # equivalent to formula in Proposition 2 of Sequence Space Jacobian paper, but with
-    # signs of i and j flipped to reflect different sign convention used here
-    i, m = t1
-    j, n = t2
-    k = i + j
-    if i >= 0:
-        if j >= 0:
-            l = max(m, n - i)
-        elif k >= 0:
-            l = max(m, n - k)
+class NestedDict:
+    def __init__(self, nesteddict, outputs=None, inputs=None):
+        if isinstance(nesteddict, NestedDict):
+            self.nesteddict = nesteddict.nesteddict
+            self.outputs = nesteddict.outputs
+            self.inputs = nesteddict.inputs
         else:
-            l = max(m + k, n)
-    else:
-        if j <= 0:
-            l = max(m + j, n)
-        else:
-            l = max(m, n) + min(-i, j)
-    return k, l
+            self.nesteddict = nesteddict
+            if outputs is None:
+                outputs = list(nesteddict.keys())
+            if inputs is None:
+                inputs = []
+                for v in nesteddict.values():
+                    inputs.extend(list(v))
+                inputs = deduplicate(inputs)
 
+            self.outputs = list(outputs)
+            self.inputs = list(inputs)
 
-def multiply_rs_rs(s1, s2):
-    """Matrix multiplication operation on two SimpleSparse objects."""
-    # iterate over all pairs (i, m) -> x and (j, n) -> y in objects,
-    # add all pairwise products to get overall product
-    elements = {}
-    for im, x in s1.elements.items():
-        for jn, y in s2.elements.items():
-            kl = multiply_basis(im, jn)
-            if kl in elements:
-                elements[kl] += x * y
+    def __repr__(self):
+        return f'<{type(self).__name__} outputs={self.outputs}, inputs={self.inputs}>'
+
+    def __iter__(self):
+        return iter(self.outputs)
+
+    def __or__(self, other):
+        # non-in-place merge: make a copy, then update
+        merged = type(self)(self.nesteddict, self.outputs, self.inputs)
+        merged.update(other)
+        return merged
+
+    def __getitem__(self, x):
+        if isinstance(x, str):
+            # case 1: just a single output, give subdict
+            return self.nesteddict[x]
+        elif isinstance(x, tuple):
+            # case 2: tuple, referring to output and input
+            o, i = x
+            o = self.outputs if o == slice(None, None, None) else o
+            i = self.inputs if i == slice(None, None, None) else i
+            if isinstance(o, str):
+                if isinstance(i, str):
+                    # case 2a: one output, one input, return single Jacobian
+                    return self.nesteddict[o][i]
+                else:
+                    # case 2b: one output, multiple inputs, return dict
+                    return {ii: self.nesteddict[o][ii] for ii in i}
             else:
-                elements[kl] = x * y
-    return SimpleSparse(elements)
-
-
-@njit
-def multiply_rs_matrix(indices, xs, A):
-    """Matrix multiplication of SimpleSparse object ('indices' and 'xs') and matrix A.
-    Much more computationally demanding than multiplying two SimpleSparse (which is almost
-    free with simple analytical formula), so we implement as jitted function."""
-    n = indices.shape[0]
-    T = A.shape[0]
-    S = A.shape[1]
-    Aout = np.zeros((T, S))
-
-    for count in range(n):
-        # for Numba to jit easily, SimpleSparse with basis elements '(i, m)' with coefs 'x'
-        # was stored in 'indices' and 'xs'
-        i = indices[count, 0]
-        m = indices[count, 1]
-        x = xs[count]
-
-        # loop faster than vectorized when jitted
-        # directly use def of basis element (i, m), displacement of i and ignore first m
-        if i == 0:
-            for t in range(m, T):
-                for s in range(S):
-                    Aout[t, s] += x * A[t, s]
-        elif i > 0:
-            for t in range(m, T - i):
-                for s in range(S):
-                    Aout[t, s] += x * A[t + i, s]
+                # case 2c: multiple outputs, one or more inputs, return NestedDict with outputs o and inputs i
+                i = (i,) if isinstance(i, str) else i
+                return type(self)({oo: {ii: self.nesteddict[oo][ii] for ii in i} for oo in o}, o, i)
+        elif isinstance(x, list) or isinstance(x, set):
+            # case 3: assume that list or set refers just to outputs, get all of those
+            return type(self)({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
         else:
-            for t in range(m - i, T):
-                for s in range(S):
-                    Aout[t, s] += x * A[t + i, s]
-    return Aout
+            raise ValueError(f'Tried to get impermissible item {x}')
 
+    def get(self, *args, **kwargs):
+        # this is for compatibilty, not a huge fan
+        return self.nesteddict.get(*args, **kwargs)
+
+    def update(self, J):
+        if set(self.inputs) != set(J.inputs):
+            raise ValueError \
+                (f'Cannot merge {type(self).__name__}s with non-overlapping inputs {set(self.inputs) ^ set(J.inputs)}')
+        if not set(self.outputs).isdisjoint(J.outputs):
+            raise ValueError \
+                (f'Cannot merge {type(self).__name__}s with overlapping outputs {set(self.outputs) & set(J.outputs)}')
+        self.outputs = self.outputs + J.outputs
+        self.nesteddict = {**self.nesteddict, **J.nesteddict}
+
+    def complete(self, filler):
+        nesteddict = {}
+        for o in self.outputs:
+            nesteddict[o] = dict(self.nesteddict[o])
+            for i in self.inputs:
+                if i not in nesteddict[o]:
+                    nesteddict[o][i] = filler
+        return type(self)(nesteddict, self.outputs, self.inputs)
+
+
+def deduplicate(mylist):
+    """Remove duplicates while otherwise maintaining order"""
+    return list(dict.fromkeys(mylist))
+
+
+class JacobianDict(NestedDict):
+    @staticmethod
+    def identity(ks):
+        return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks).complete()
+
+    def complete(self):
+        return super().complete(ZeroMatrix())
+
+    def addinputs(self):
+        """Add any inputs that were not already in output list as outputs, with the identity"""
+        inputs = [x for x in self.inputs if x not in self.outputs]
+        return self | JacobianDict.identity(inputs)
+
+    def __matmul__(self, x):
+        if isinstance(x, JacobianDict):
+            return self.compose(x)
+        else:
+            return self.apply(x)
+
+    def compose(self, J):
+        o_list = self.outputs
+        m_list = tuple(set(self.inputs) & set(J.outputs))
+        i_list = J.inputs
+
+        J_om = self.nesteddict
+        J_mi = J.nesteddict
+        J_oi = {}
+
+        for o in o_list:
+            J_oi[o] = {}
+            for i in i_list:
+                Jout = ZeroMatrix()
+                for m in m_list:
+                    J_om[o][m]
+                    J_mi[m][i]
+                    Jout += J_om[o][m] @ J_mi[m][i]
+                J_oi[o][i] = Jout
+
+        return JacobianDict(J_oi, o_list, i_list)
+
+    def apply(self, x):
+        # assume that all entries in x have some length T, and infer it
+        T = len(next(iter(x.values())))
+
+        inputs = x.keys() & set(self.inputs)
+        J_oi = self.nesteddict
+        y = {}
+
+        for o in self.outputs:
+            y[o] = np.zeros(T)
+            for i in inputs:
+                y[o] += J_oi[o][i] @ x[i]
+
+        return y
+
+    def pack(self, T):
+        J = np.empty((len(self.outputs) * T, len(self.inputs) * T))
+        for iO, O in enumerate(self.outputs):
+            for iI, I in enumerate(self.inputs):
+                J[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = support.make_matrix(self[O, I], T)
+        return J
+
+    @staticmethod
+    def unpack(bigjac, outputs, inputs, T):
+        """If we have an (nO*T)*(nI*T) jacobian and provide names of nO outputs and nI inputs, output nested dictionary"""
+        jacdict = {}
+        for iO, O in enumerate(outputs):
+            jacdict[O] = {}
+            for iI, I in enumerate(inputs):
+                jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
+        return JacobianDict(jacdict, outputs, inputs)
 

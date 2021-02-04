@@ -1,8 +1,8 @@
 import numpy as np
 
-from .. import utilities as utils
-from .. import jacobian
 from .support.simple_displacement import ignore, numeric_primitive, Displace, AccumulatedDerivative
+from ..jacobian.classes import JacobianDict, SimpleSparse
+from ..utilities import misc
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
@@ -28,8 +28,8 @@ class SimpleBlock:
 
     def __init__(self, f):
         self.f = f
-        self.input_list = utils.misc.input_list(f)
-        self.output_list = utils.misc.output_list(f)
+        self.input_list = misc.input_list(f)
+        self.output_list = misc.output_list(f)
         self.inputs = set(self.input_list)
         self.outputs = set(self.output_list)
 
@@ -67,9 +67,9 @@ class SimpleBlock:
             # Because we know at least one of the outputs in `out` must be of length T
             T = np.max([np.size(o) for o in out])
             out_unif_dim = [np.full(T, numeric_primitive(o)) if np.isscalar(o) else numeric_primitive(o) for o in out]
-            return dict(zip(self.output_list, utils.misc.make_tuple(out_unif_dim)))
+            return dict(zip(self.output_list, misc.make_tuple(out_unif_dim)))
         else:
-            return dict(zip(self.output_list, utils.misc.make_tuple(numeric_primitive(out))))
+            return dict(zip(self.output_list, misc.make_tuple(numeric_primitive(out))))
 
     def td(self, ss, **kwargs):
         kwargs_new = {}
@@ -140,17 +140,17 @@ class SimpleBlock:
                 if not J[o]:
                     del J[o]
 
-            return J
+            return JacobianDict(J)
 
 
 def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):
     """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
-    input_args = {i: ignore(steady_state_dict[i]) for i in utils.misc.input_list(f)}
+    input_args = {i: ignore(steady_state_dict[i]) for i in misc.input_list(f)}
     input_args[shock_name] = AccumulatedDerivative(f_value=steady_state_dict[shock_name])
 
-    J = {o: {} for o in utils.misc.output_list(f)}
-    for o, o_name in zip(utils.misc.make_tuple(f(**input_args)), utils.misc.output_list(f)):
+    J = {o: {} for o in misc.output_list(f)}
+    for o, o_name in zip(misc.make_tuple(f(**input_args)), misc.output_list(f)):
         if isinstance(o, AccumulatedDerivative):
-            J[o_name] = utils.special_matrices.SimpleSparse(o.elements)
+            J[o_name] = SimpleSparse(o.elements)
 
     return J

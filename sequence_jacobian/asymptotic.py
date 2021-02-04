@@ -3,8 +3,8 @@
 import numpy as np
 from numpy.fft import rfft, rfftn, irfft, irfftn
 
-from . import jacobian as jac
 from . import determinacy
+from .jacobian.support import pack_asymptotic_jacobians, unpack_asymptotic_jacobians
 
 
 class AsymptoticTimeInvariant:
@@ -179,7 +179,7 @@ def invert_jacdict(jacdict, unknowns, targets, tau, test_invertible=False):
     assert k == len(targets)
 
     # stack the k^2 Jacobians relating unknowns to targets into an A matrix
-    A = jac.pack_asymptotic_jacobians(jacdict, unknowns, targets, tau)
+    A = pack_asymptotic_jacobians(jacdict, unknowns, targets, tau)
 
     if test_invertible:
         # use winding number criterion to test invertibility
@@ -205,4 +205,4 @@ def invert_jacdict(jacdict, unknowns, targets, tau, test_invertible=False):
     A_inv = irfftn(A_rfft_inv, s=(4*tau-3,), axes=(0,))[:2*tau-1, :, :]
 
     # unstack this
-    return jac.unpack_asymptotic_jacobians(A_inv, targets, unknowns, tau)
+    return unpack_asymptotic_jacobians(A_inv, targets, unknowns, tau)

@@ -3,6 +3,7 @@ import copy
 
 from .. import utilities as utils
 from .. import asymptotic
+from ..jacobian.classes import JacobianDict
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -408,9 +409,9 @@ class HetBlock:
 
         if save:
             self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
-            self.saved = {'curlyYs' : curlyYs, 'curlyDs' : curlyDs, 'curlyPs' : curlyPs, 'F': F, 'J': J}
+            self.saved = {'curlyYs': curlyYs, 'curlyDs': curlyDs, 'curlyPs': curlyPs, 'F': F, 'J': J}
 
-        return J
+        return JacobianDict(J)
 
     def ajac(self, ss, T, shock_list, output_list=None, h=1E-4, Tpost=None, save=False, use_saved=False):
         """Like .jac, but outputs asymptotic columns of Jacobians as AsymptoticTimeInvariant objects

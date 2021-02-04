@@ -14,7 +14,7 @@ from .blocks.support.simple_displacement import apply_function
 from .visualization.draw_dag import draw_dag, draw_solved, inspect_solved
 
 from .steady_state import steady_state
-from .jacobian import get_G, get_H_U, get_impulse
+from .jacobian.drivers import get_G, get_H_U, get_impulse
 from .nonlinear import td_solve
 from .utilities import discretize
 from .utilities import interpolate

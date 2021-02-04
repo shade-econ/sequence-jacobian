@@ -2,7 +2,8 @@
 
 import numpy as np
 
-from sequence_jacobian import jacobian
+from sequence_jacobian.jacobian.drivers import get_G, forward_accumulate, curlyJ_sorted
+from sequence_jacobian.jacobian.classes import JacobianDict
 
 
 def test_ks_jac(krusell_smith_model):
@@ -11,21 +12,23 @@ def test_ks_jac(krusell_smith_model):
     T = 10
 
     # Automatically calculate the general equilibrium Jacobian
-    G2 = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                        targets=targets, T=T, ss=ss)
+    G2 = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
+               targets=targets, T=T, ss=ss)
 
     # Manually calculate the general equilibrium Jacobian
     J_firm = firm.jac(ss, shock_list=['K', 'Z'])
     J_ha = household.jac(ss, T=T, shock_list=['r', 'w'])
     J_curlyK_K = J_ha['A']['r'] @ J_firm['r']['K'] + J_ha['A']['w'] @ J_firm['w']['K']
     J_curlyK_Z = J_ha['A']['r'] @ J_firm['r']['Z'] + J_ha['A']['w'] @ J_firm['w']['Z']
-    J = {**J_firm, 'curlyK': {'K': J_curlyK_K, 'Z': J_curlyK_Z}}
-    H_K = J['curlyK']['K'] - np.eye(T)
-    H_Z = J['curlyK']['Z']
+    J_curlyK = {'curlyK': {'K': J_curlyK_K, 'Z': J_curlyK_Z}}
+
+    H_K = J_curlyK['curlyK']['K'] - np.eye(T)
+    H_Z = J_curlyK['curlyK']['Z']
+
     G = {'K': -np.linalg.solve(H_K, H_Z)}  # H_K^(-1)H_Z
-    G['r'] = J['r']['Z'] + J['r']['K'] @ G['K']
-    G['w'] = J['w']['Z'] + J['w']['K'] @ G['K']
-    G['Y'] = J['Y']['Z'] + J['Y']['K'] @ G['K']
+    G['r'] = J_firm['r']['Z'] + J_firm['r']['K'] @ G['K']
+    G['w'] = J_firm['w']['Z'] + J_firm['w']['K'] @ G['K']
+    G['Y'] = J_firm['Y']['Z'] + J_firm['Y']['K'] @ G['K']
     G['C'] = J_ha['C']['r'] @ G['r'] + J_ha['C']['w'] @ G['w']
 
     for o in G:
@@ -37,19 +40,19 @@ def test_hank_jac(one_asset_hank_model):
     T = 10
 
     # Automatically calculate the general equilibrium Jacobian
-    G2 = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                        targets=targets, T=T, ss=ss)
+    G2 = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
+               targets=targets, T=T, ss=ss)
 
     # Manually calculate the general equilibrium Jacobian
-    curlyJs, required = jacobian.curlyJ_sorted(blocks, unknowns+exogenous, ss, T)
-    J_curlyH_U = jacobian.forward_accumulate(curlyJs, unknowns, targets, required)
-    J_curlyH_Z = jacobian.forward_accumulate(curlyJs, exogenous, targets, required)
+    curlyJs, required = curlyJ_sorted(blocks, unknowns+exogenous, ss, T)
+    J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)
+    J_curlyH_Z = forward_accumulate(curlyJs, exogenous, targets, required)
     H_U = J_curlyH_U[targets, unknowns].pack(T)
     H_Z = J_curlyH_Z[targets, exogenous].pack(T)
-    G_U = jacobian.JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, exogenous, T)
+    G_U = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, exogenous, T)
     curlyJs = [G_U] + curlyJs
     outputs = set().union(*(curlyJ.outputs for curlyJ in curlyJs)) - set(targets)
-    G = jacobian.forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
+    G = forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
     for o in G:
         for i in G[o]:
