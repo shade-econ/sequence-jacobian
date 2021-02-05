@@ -1,6 +1,6 @@
 import numpy as np
 
-from .support.simple_displacement import ignore, numeric_primitive, Displace, AccumulatedDerivative
+from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
 
@@ -41,9 +41,9 @@ class SimpleBlock:
         """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
         numeric primitive, as opposed to Ignore/IgnoreVector objects"""
         if len(self.output_list) > 1:
-            return tuple([numeric_primitive(o) for o in self.f(*args, **kwargs)])
+            return tuple([misc.numeric_primitive(o) for o in self.f(*args, **kwargs)])
         else:
-            return numeric_primitive(self.f(*args, **kwargs))
+            return misc.numeric_primitive(self.f(*args, **kwargs))
 
     def ss(self, *args, **kwargs):
         # Wrap args and kwargs in Ignore/IgnoreVector classes to be passed into the function "f"
@@ -67,10 +67,10 @@ class SimpleBlock:
         if len(self.output_list) > 1:
             # Because we know at least one of the outputs in `out` must be of length T
             T = np.max([np.size(o) for o in out])
-            out_unif_dim = [np.full(T, numeric_primitive(o)) if np.isscalar(o) else numeric_primitive(o) for o in out]
+            out_unif_dim = [np.full(T, misc.numeric_primitive(o)) if np.isscalar(o) else misc.numeric_primitive(o) for o in out]
             return dict(zip(self.output_list, misc.make_tuple(out_unif_dim)))
         else:
-            return dict(zip(self.output_list, misc.make_tuple(numeric_primitive(out))))
+            return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
     def td(self, ss, **kwargs):
         kwargs_new = {}

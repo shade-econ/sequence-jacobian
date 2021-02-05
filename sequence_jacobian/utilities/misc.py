@@ -34,6 +34,14 @@ def output_list(f):
     return re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
 
 
+def numeric_primitive(instance):
+    # If it is already a primitive, just return it
+    if type(instance) in {int, float, np.ndarray}:
+        return instance
+    else:
+        return instance.real if np.isscalar(instance) else instance.base
+
+
 def demean(x):
     return x - x.sum()/x.size
 

@@ -4,6 +4,7 @@ import numpy as np
 import numbers
 from warnings import warn
 
+from ...utilities.misc import numeric_primitive
 
 def ignore(x):
     if isinstance(x, int):
@@ -667,14 +668,6 @@ def compute_l(i, m, j, n):
         return max(n + i + j, m)
     else:
         return max(m, n + i)
-
-
-def numeric_primitive(instance):
-    # If it is already a primitive, just return it
-    if type(instance) in {int, float, np.ndarray}:
-        return instance
-    else:
-        return instance.real if np.isscalar(instance) else instance.base
 
 
 # TODO: This needs its own unit test
