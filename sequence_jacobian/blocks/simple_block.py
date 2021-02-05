@@ -41,9 +41,9 @@ class SimpleBlock:
         """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
         numeric primitive, as opposed to Ignore/IgnoreVector objects"""
         if len(self.output_list) > 1:
-            return tuple([misc.numeric_primitive(o) for o in self.f(*args, **kwargs)])
+            return dict(zip(self.output_list, [misc.numeric_primitive(o) for o in self.f(*args, **kwargs)]))
         else:
-            return misc.numeric_primitive(self.f(*args, **kwargs))
+            return dict(zip(self.output_list, [misc.numeric_primitive(self.f(*args, **kwargs))]))
 
     def ss(self, *args, **kwargs):
         # Wrap args and kwargs in Ignore/IgnoreVector classes to be passed into the function "f"

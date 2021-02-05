@@ -34,7 +34,7 @@ def test_block_consistency(block, ss):
     """Make sure ss, td, and jac methods are all consistent with each other.
     Requires that all inputs of simple block allow calculating Jacobians"""
     # get ss output
-    ss_results = dict(zip(block.output_list, utilities.misc.make_tuple(block.ss(*ss))))
+    ss_results = block.ss(*ss)
 
     # now if we put in constant inputs, td should give us the same!
     ss = dict(zip(block.input_list, ss))

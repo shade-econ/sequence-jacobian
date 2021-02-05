@@ -147,6 +147,7 @@ def compute_target_values(targets, potential_args):
     else:
         return target_values
 
+
 # Analogous to the SHADE workflow of having blocks call utils.apply(self._fss, inputs) but not as general.
 def eval_block_ss(block, potential_args, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False, **kwargs):
     """
@@ -160,15 +161,11 @@ def eval_block_ss(block, potential_args, consistency_check=True, ttol=1e-9, ctol
 
     # Simple and HetBlocks require different handling of block.ss() output since
     # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
-    if isinstance(block, SimpleBlock) or isinstance(block, HelperBlock):
-        output_args = utils.misc.make_tuple(block.ss(**input_args, **kwargs))
-        outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
-    else:  # assume it's a HetBlock or a SolvedBlock
-        if isinstance(block, HetBlock):  # since .ss for SolvedBlocks calls the steady_state driver function
-            outputs = block.ss(**input_args, **kwargs)
-        else:  # since .ss for SolvedBlocks calls the steady_state driver function
-            outputs = block.ss(**input_args, consistency_check=consistency_check,
-                               ttol=ttol, ctol=ctol, verbose=verbose, **kwargs)
+    if isinstance(block, SimpleBlock) or isinstance(block, HelperBlock) or isinstance(block, HetBlock):
+        outputs = block.ss(**input_args, **kwargs)
+    else:  # since .ss for SolvedBlocks calls the steady_state driver function
+        outputs = block.ss(**input_args, consistency_check=consistency_check,
+                           ttol=ttol, ctol=ctol, verbose=verbose, **kwargs)
 
     return outputs
 
