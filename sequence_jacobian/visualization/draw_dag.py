@@ -30,7 +30,7 @@ try:
 
 
     def draw_dag(block_list, exogenous=None, unknowns=None, targets=None, ignore_helpers=True, calibration=None,
-                 showdag=False, debug=False, leftright=False, filename='modeldag'):
+                 showdag=False, leftright=False, filename='modeldag'):
         """
         Visualizes a Directed Acyclic Graph (DAG) of a set of blocks, exogenous variables, unknowns, and targets
 
@@ -49,8 +49,6 @@ try:
             introduced by using HelperBlocks. Read `block_sort` docstring for more detail
         showdag: `bool`
             If True, export and plot pdf file. If false, export png file and do not plot
-        debug: `bool`
-            If True, returns list of candidate unknown and targets
         leftright: `bool`
             If True, plots DAG from left to right instead of top to bottom
 
@@ -135,20 +133,6 @@ try:
         else:
             dot.render('dagexport/' + filename, format='png', cleanup=True)
             # print(dot.source)
-
-        if debug:
-            dep, inputs, outputs = block_sort(block_list_sorted, return_io=True, ignore_helpers=ignore_helpers,
-                                              calibration=calibration)
-            required = find_outputs_that_are_intermediate_inputs(block_list_sorted, ignore_helpers=ignore_helpers)
-            # Candidate targets: outputs that are not inputs to any block
-            print("Candidate targets :")
-            cand_targets = outputs.difference(required)
-            print(cand_targets)
-            # Candidate exogenous and unknowns (also includes parameters)
-            # inputs that are not outputs of any block
-            print("Candidate exogenous/unknowns :")
-            cand_xu = inputs.difference(required)
-            print(cand_xu)
 
 
     def draw_solved(solvedblock, filename='solveddag'):

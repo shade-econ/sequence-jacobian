@@ -1,10 +1,17 @@
-"""Useful functions for debugging SSJ code"""
+"""Tools for upgrading from older SSJ code conventions"""
+
+# The code in this module is meant to assist with users who have used past versions of sequence-jacobian, and who
+# may want additional support/tools for ensuring that their attempts to upgrade to use newer versions of
+# sequence-jacobian has been successfully.
 
 import numpy as np
 
 
-# Tools for upgrading from older SSJ code conventions
 def compare_steady_states(ss_ref, ss_comp, name_map=None, verbose=True):
+    """
+    This code is meant to provide a quick comparison of `ss_ref` the reference steady state dict from old code, and
+    `ss_comp` the steady state computed from the newer code.
+    """
     if name_map is None:
         name_map = {}
 
@@ -30,4 +37,3 @@ def compare_steady_states(ss_ref, ss_comp, name_map=None, verbose=True):
     diff_keys = ss_ref_incl_mapped.symmetric_difference(ss_comp_incl_mapped)
     if diff_keys:
         print(f"The keys present in only one of the two steady state dicts are {diff_keys}")
-

@@ -333,7 +333,7 @@ class NestedDict:
             raise ValueError(f'Tried to get impermissible item {x}')
 
     def get(self, *args, **kwargs):
-        # this is for compatibilty, not a huge fan
+        # this is for compatibility, not a huge fan
         return self.nesteddict.get(*args, **kwargs)
 
     def update(self, J):
