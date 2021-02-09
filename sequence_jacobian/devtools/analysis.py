@@ -61,14 +61,8 @@ class BlockIONetwork:
     def print_unknowns_targets_links(self, unknowns, targets, calibration=None, ignore_helpers=True):
         print(f" Links between {unknowns} and {targets}")
         print(" " + "-" * (len(f" Links between {unknowns} and {targets}")))
-        unknown_target_net = xr.DataArray(np.zeros((len(unknowns), len(targets))),
-                                          coords=[unknowns, targets],
-                                          dims=["inputs", "outputs"])
-        for u in unknowns:
-            links = self.find_all_var_links(u, calibration=calibration, ignore_helpers=ignore_helpers)
-            for link in links:
-                if link[0] == u and link[-1] in targets:
-                    unknown_target_net.loc[u, link[-1]] = 1.
+        unknown_target_net = self.find_unknowns_targets_links(unknowns, targets, calibration=calibration,
+                                                              ignore_helpers=ignore_helpers)
         print(unknown_target_net)
         print("")  # To break lines
 
@@ -157,6 +151,17 @@ class BlockIONetwork:
                     if o_var in required:
                         intermediates = intermediates.union([o_var])
         return _compose_dyad_links(links)
+
+    def find_unknowns_targets_links(self, unknowns, targets, calibration=None, ignore_helpers=True):
+        unknown_target_net = xr.DataArray(np.zeros((len(unknowns), len(targets))),
+                                          coords=[unknowns, targets],
+                                          dims=["inputs", "outputs"])
+        for u in unknowns:
+            links = self.find_all_var_links(u, calibration=calibration, ignore_helpers=ignore_helpers)
+            for link in links:
+                if link[0] == u and link[-1] in targets:
+                    unknown_target_net.loc[u, link[-1]] = 1.
+        return unknown_target_net
 
     # Analysis support methods
     def _subset_by_block(self, block_name):
