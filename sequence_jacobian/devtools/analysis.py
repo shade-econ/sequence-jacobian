@@ -27,8 +27,8 @@ class BlockIONetwork:
 
     # User-facing "print" methods
     def print_block_links(self, block_name):
-        print(f" {block_name}")
-        print(" " + "-" * (len(block_name)))
+        print(f" Links in {block_name}")
+        print(" " + "-" * (len(f" Links in {block_name}")))
 
         link_inds = np.nonzero(self._subset_by_block(block_name)).data
         for i in range(np.shape(link_inds)[0]):
@@ -37,6 +37,50 @@ class BlockIONetwork:
             o_var = str(self._subset_by_block(block_name).coords["outputs"][o_ind].data)
             print(f" {i_var} -> {o_var}")
 
+    def print_var_links(self, var_name, calibration=None, ignore_helpers=True):
+        print(f" Links for {var_name}")
+        print(" " + "-" * (len(f" Links for {var_name}")))
+
+        # Find the indices of *direct* links between `var_name` and the affected `outputs`/`blocks` containing those
+        # `outputs` and instantiate the initial list of links
+        link_inds = np.nonzero(self._subset_by_vars(var_name).data)
+        links = [[var_name] for i in range(len(link_inds[0]))]
+
+        block_inds_sorted = graph.block_sort(self.blocks_as_list, calibration=calibration,
+                                             ignore_helpers=ignore_helpers)
+        required = graph.find_outputs_that_are_intermediate_inputs(self.blocks_as_list, ignore_helpers=ignore_helpers)
+        intermediates = set()
+        for ib in block_inds_sorted:
+            # Note: This block is ordered before the bottom block of code since the intermediate outputs from a block
+            #   `ib` do not need to be checked as inputs to that same block `ib`, only the subsequent blocks
+            if intermediates:
+                intm_link_inds = np.nonzero(self._subset_by_vars(list(intermediates)).data)
+                # If there are `intermediate` inputs that have been recorded, we need to find the *indirect* links
+                for iil, iilb in enumerate(intm_link_inds[0]):
+                    # Check if those inputs are inputs to block `ib`
+                    if ib == iilb:
+                        # If so, repeat the logic from below, where you find the input-output var link
+                        o_var = str(self._subset_by_vars(list(intermediates)).coords["outputs"][intm_link_inds[2][iil]].data)
+                        intm_i_var = str(self._subset_by_vars(list(intermediates)).coords["inputs"][intm_link_inds[1][iil]].data)
+
+                        # And add it to the set of all links, recording this new links' output if it hasn't appeared
+                        # before and if it is an intermediate input
+                        links.append([intm_i_var, o_var])
+                        if o_var in required:
+                            intermediates = intermediates.union(o_var)
+
+            # Check if `var_name` enters into that block as an input, and if so add the link between it and the output
+            # it directly affects, recording that output as an intermediate input if needed
+            # Note: link_inds' 0-th row indicates the blocks and 1st row indicates the outputs
+            for il, ilb in enumerate(link_inds[0]):
+                if ib == ilb:
+                    o_var = str(self._subset_by_vars(var_name).coords["outputs"][link_inds[1][il]].data)
+                    links[il].append(o_var)
+                    if o_var in required:
+                        intermediates = intermediates.union(o_var)
+
+        for link_c in _compose_dyad_links(links):
+            print(" -> ".join(link_c))
 
     # User-facing "analysis" methods
     def record_input_variable_paths(self, inputs_to_be_recorded, block_input_args):
@@ -81,6 +125,44 @@ class BlockIONetwork:
             self.darray.loc[block_name, i, o] = 1.
 
 
+def _compose_dyad_links(links):
+    links_composed = []
+    inds_to_ignore = set()
+    outputs = set()
+
+    for il, link in enumerate(links):
+        if il in inds_to_ignore:
+            continue
+        if links_composed:
+            if link[0] in outputs:
+                # Since `link` has as its input one of the outputs recorded from prior links in `links_composed`
+                # search through the links in `links_composed` to see which links need to be extended with `link`
+                # and the other links with the same input as `link`
+                link_extensions = []
+                # Potential link extensions will only be located past the stage il that we are at
+                for il_e in range(il, len(links)):
+                    if links[il_e][0] == link[0]:
+                        link_extensions.append(links[il_e])
+                        outputs = outputs.union([links[il_e][-1]])
+                        inds_to_ignore = inds_to_ignore.union([il_e])
+
+                links_to_add = []
+                inds_to_omit = []
+                for il_c, link_c in enumerate(links_composed):
+                    if link_c[-1] == link[0]:
+                        inds_to_omit.append(il_c)
+                        links_to_add.extend([link_c + [ext[-1]] for ext in link_extensions])
+
+                links_composed = [link_c for i, link_c in enumerate(links_composed) if i not in inds_to_omit] + links_to_add
+            else:
+                links_composed.append(link)
+                outputs = outputs.union([link[-1]])
+        else:
+            links_composed.append(link)
+            outputs = outputs.union([link[-1]])
+    return links_composed
+
+
 def find_io_links(block, input_args, block_input_args):
     """
     For a given `block`, see which output arguments the input argument `input_args` affects
@@ -104,4 +186,3 @@ def find_io_links(block, input_args, block_input_args):
     for o in J.outputs:
         links[o] = list(J.nesteddict[o].keys())
     return links
-
