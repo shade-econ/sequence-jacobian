@@ -2,6 +2,7 @@
 
 import numpy as np
 import xarray as xr
+from collections.abc import Iterable
 
 from ..utilities import graph
 
@@ -36,8 +37,6 @@ class BlockIONetwork:
             o_var = str(self._subset_by_block(block_name).coords["outputs"][o_ind].data)
             print(f" {i_var} -> {o_var}")
 
-    def print_var_links(self, var_name):
-        pass
 
     # User-facing "analysis" methods
     def record_input_variable_paths(self, inputs_to_be_recorded, block_input_args):
@@ -70,8 +69,12 @@ class BlockIONetwork:
     def _subset_by_block(self, block_name):
         return self.darray.loc[block_name, list(self.blocks[block_name].inputs), list(self.blocks[block_name].outputs)]
 
-    def _subset_by_var(self, var_name):
-        return self.darray.loc[[b.name for b in self.blocks.values() if var_name in b.inputs], [var_name], :]
+    def _subset_by_vars(self, vars_names):
+        if isinstance(vars_names, Iterable):
+            return self.darray.loc[[b.name for b in self.blocks.values() if np.any(v in b.inputs for v in vars_names)],
+                                    vars_names, :]
+        else:
+            return self.darray.loc[[b.name for b in self.blocks.values() if vars_names in b.inputs], vars_names, :]
 
     def _record_io_links(self, block_name, io_links):
         for o, i in io_links.items():
