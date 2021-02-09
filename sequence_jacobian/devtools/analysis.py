@@ -44,9 +44,14 @@ class BlockIONetwork:
         print(" " + "-" * (len(f" Links for {var_name}")))
 
         links = self.find_var_links(var_name, calibration=calibration, ignore_helpers=ignore_helpers)
+        link_strs = []
 
-        for link_c in links:
-            print(" " + " -> ".join(link_c))
+        # Create " -> " linked strings and sort them for nicer printing
+        for link in links:
+            link_strs.append(" " + " -> ".join(link))
+        link_strs.sort()
+        for link_str in link_strs:
+            print(link_str)
         print("")  # To break lines
 
     def print_unknowns_targets_links(self, unknowns, targets, calibration=None, ignore_helpers=True):
