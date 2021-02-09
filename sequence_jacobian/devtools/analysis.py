@@ -36,11 +36,60 @@ class BlockIONetwork:
             i_var = str(self._subset_by_block(block_name).coords["inputs"][i_ind].data)
             o_var = str(self._subset_by_block(block_name).coords["outputs"][o_ind].data)
             print(f" {i_var} -> {o_var}")
+        print("")  # To break lines
 
     def print_var_links(self, var_name, calibration=None, ignore_helpers=True):
-        print(f" Links for {var_name}")
+        print(f" Links from {var_name}")
         print(" " + "-" * (len(f" Links for {var_name}")))
 
+        links = self.find_var_links(var_name, calibration=calibration, ignore_helpers=ignore_helpers)
+
+        for link_c in links:
+            print(" " + " -> ".join(link_c))
+        print("")  # To break lines
+
+    def print_unknowns_targets_links(self, unknowns, targets, calibration=None, ignore_helpers=True):
+        print(f"Links between {unknowns} and {targets}")
+        print(" " + "-" * (len(f"Links between {unknowns} and {targets}")))
+        unknown_target_net = xr.DataArray(np.zeros((len(unknowns), len(targets))),
+                                          coords=[unknowns, targets],
+                                          dims=["inputs", "outputs"])
+        for u in unknowns:
+            links = self.find_var_links(u, calibration=calibration, ignore_helpers=ignore_helpers)
+            for link in links:
+                if link[0] == u and link[-1] in targets:
+                    unknown_target_net.loc[u, link[-1]] = 1.
+        print(unknown_target_net)
+        print("")  # To break lines
+
+    # User-facing "analysis" methods
+    def record_input_variables_paths(self, inputs_to_be_recorded, block_input_args):
+        """
+        Updates the VariableIONetwork with the paths that a set of inputs influence, as they propagate through the DAG
+
+        Parameters
+        ----------
+        inputs_to_be_recorded: `list(str)`
+            A list of input variable names, whose paths will be traced and recorded in the VariableIONetwork
+        block_input_args: `dict`
+            A dict of variable/parameter names and values (typically from the steady state of the model) on which,
+            a block can perform a valid evaluation
+        """
+        block_inds_sorted = graph.block_sort(self.blocks_as_list)
+        for input_var in inputs_to_be_recorded:
+            all_input_vars = set(input_var)
+            for ib in block_inds_sorted:
+                ib_input_args = {k: v for k, v in block_input_args.items() if k in self.blocks_as_list[ib].inputs}
+                # This extra step is needed because some arguments required for calling .jac on
+                # HetBlock and SolvedBlock are not a part of .inputs
+                ib_input_args.update(**self.blocks_as_list[ib].ss(**ib_input_args))
+                io_links = find_io_links(self.blocks_as_list[ib], list(all_input_vars), ib_input_args)
+                if io_links:
+                    self._record_io_links(self.blocks_names[ib], io_links)
+                    # Need to also track the paths of outputs which could be intermediate inputs further down the DAG
+                    all_input_vars = all_input_vars.union(set(io_links.keys()))
+
+    def find_var_links(self, var_name, calibration=None, ignore_helpers=True):
         # Find the indices of *direct* links between `var_name` and the affected `outputs`/`blocks` containing those
         # `outputs` and instantiate the initial list of links
         link_inds = np.nonzero(self._subset_by_vars(var_name).data)
@@ -78,36 +127,7 @@ class BlockIONetwork:
                     links[il].append(o_var)
                     if o_var in required:
                         intermediates = intermediates.union(o_var)
-
-        for link_c in _compose_dyad_links(links):
-            print(" -> ".join(link_c))
-
-    # User-facing "analysis" methods
-    def record_input_variable_paths(self, inputs_to_be_recorded, block_input_args):
-        """
-        Updates the VariableIONetwork with the paths that a set of inputs influence, as they propagate through the DAG
-
-        Parameters
-        ----------
-        inputs_to_be_recorded: `list(str)`
-            A list of input variable names, whose paths will be traced and recorded in the VariableIONetwork
-        block_input_args: `dict`
-            A dict of variable/parameter names and values (typically from the steady state of the model) on which,
-            a block can perform a valid evaluation
-        """
-        block_inds_sorted = graph.block_sort(self.blocks_as_list)
-        for input_var in inputs_to_be_recorded:
-            all_input_vars = set(input_var)
-            for ib in block_inds_sorted:
-                ib_input_args = {k: v for k, v in block_input_args.items() if k in self.blocks_as_list[ib].inputs}
-                # This extra step is needed because some arguments required for calling .jac on
-                # HetBlock and SolvedBlock are not a part of .inputs
-                ib_input_args.update(**self.blocks_as_list[ib].ss(**ib_input_args))
-                io_links = find_io_links(self.blocks_as_list[ib], list(all_input_vars), ib_input_args)
-                if io_links:
-                    self._record_io_links(self.blocks_names[ib], io_links)
-                    # Need to also track the paths of outputs which could be intermediate inputs further down the DAG
-                    all_input_vars = all_input_vars.union(set(io_links.keys()))
+        return _compose_dyad_links(links)
 
     # Analysis support methods
     def _subset_by_block(self, block_name):
