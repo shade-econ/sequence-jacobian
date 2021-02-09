@@ -12,8 +12,9 @@ class BlockIONetwork:
     A 3-d axis-labeled DataArray (blocks x inputs x outputs), which allows for the analysis of the input-output
     structure of a DAG.
     """
-    def __init__(self, blocks):
-        topsorted, inset, outset = graph.block_sort(blocks, return_io=True)
+    def __init__(self, blocks, calibration=None, ignore_helpers=True):
+        topsorted, inset, outset = graph.block_sort(blocks, return_io=True, calibration=calibration,
+                                                    ignore_helpers=ignore_helpers)
         self.blocks = {b.name: b for b in blocks}
         self.blocks_names = list(self.blocks.keys())
         self.blocks_as_list = list(self.blocks.values())
@@ -63,7 +64,8 @@ class BlockIONetwork:
         print("")  # To break lines
 
     # User-facing "analysis" methods
-    def record_input_variables_paths(self, inputs_to_be_recorded, block_input_args):
+    def record_input_variables_paths(self, inputs_to_be_recorded, block_input_args,
+                                     calibration=None, ignore_helpers=True):
         """
         Updates the VariableIONetwork with the paths that a set of inputs influence, as they propagate through the DAG
 
@@ -74,8 +76,12 @@ class BlockIONetwork:
         block_input_args: `dict`
             A dict of variable/parameter names and values (typically from the steady state of the model) on which,
             a block can perform a valid evaluation
+        calibration: `dict` or None
+            Refer to `block_sort` docstring on using this to reconcile HelperBlock cyclic dependencies
+        ignore_helpers: bool
+            Refer to `block_sort` docstring on using this to reconcile HelperBlock cyclic dependencies
         """
-        block_inds_sorted = graph.block_sort(self.blocks_as_list)
+        block_inds_sorted = graph.block_sort(self.blocks_as_list, calibration=calibration, ignore_helpers=ignore_helpers)
         for input_var in inputs_to_be_recorded:
             all_input_vars = set(input_var)
             for ib in block_inds_sorted:
@@ -116,7 +122,7 @@ class BlockIONetwork:
                         # before and if it is an intermediate input
                         links.append([intm_i_var, o_var])
                         if o_var in required:
-                            intermediates = intermediates.union(o_var)
+                            intermediates = intermediates.union([o_var])
 
             # Check if `var_name` enters into that block as an input, and if so add the link between it and the output
             # it directly affects, recording that output as an intermediate input if needed
@@ -126,7 +132,7 @@ class BlockIONetwork:
                     o_var = str(self._subset_by_vars(var_name).coords["outputs"][link_inds[1][il]].data)
                     links[il].append(o_var)
                     if o_var in required:
-                        intermediates = intermediates.union(o_var)
+                        intermediates = intermediates.union([o_var])
         return _compose_dyad_links(links)
 
     # Analysis support methods
