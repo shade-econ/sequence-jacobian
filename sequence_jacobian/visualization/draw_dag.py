@@ -1,14 +1,7 @@
 """Provides the functionality for basic DAG visualization"""
 
 import warnings
-
-# Force warnings.warn() to omit the source code line in the message
-formatwarning_orig = warnings.formatwarning
-warnings.formatwarning = lambda message, category, filename, lineno, line=None: \
-    formatwarning_orig(message, category, filename, lineno, line='')
-
-from ..utilities.graph import block_sort, construct_output_map, construct_dependency_graph,\
-    find_outputs_that_are_intermediate_inputs
+from ..utilities.graph import block_sort, construct_output_map, construct_dependency_graph
 
 
 # Implement DAG drawing functions as "soft" dependencies to not enforce the installation of graphviz, since

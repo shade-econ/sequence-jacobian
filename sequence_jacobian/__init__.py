@@ -20,3 +20,12 @@ from .utilities import discretize
 from .utilities import interpolate
 from .utilities.discretize import agrid
 from .utilities.optimized_routines import setmin
+
+# Ensure warning uniformity across package
+import warnings
+
+# Force warnings.warn() to omit the source code line in the message
+formatwarning_orig = warnings.formatwarning
+warnings.formatwarning = lambda message, category, filename, lineno, line=None: \
+    formatwarning_orig(message, category, filename, lineno, line='')
+
