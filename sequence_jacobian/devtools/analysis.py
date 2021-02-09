@@ -32,20 +32,24 @@ class BlockIONetwork:
         print(" " + "-" * (len(f" Links in {block_name}")))
 
         link_inds = np.nonzero(self._subset_by_block(block_name)).data
+        links = []
         for i in range(np.shape(link_inds)[0]):
             i_ind, o_ind = link_inds[:, i]
             i_var = str(self._subset_by_block(block_name).coords["inputs"][i_ind].data)
             o_var = str(self._subset_by_block(block_name).coords["outputs"][o_ind].data)
-            print(f" {i_var} -> {o_var}")
-        print("")  # To break lines
+            links.append([i_var, o_var])
+        self._print_links(links)
 
-    def print_var_links(self, var_name, calibration=None, ignore_helpers=True):
+    def print_all_var_links(self, var_name, calibration=None, ignore_helpers=True):
         print(f" Links from {var_name}")
         print(" " + "-" * (len(f" Links for {var_name}")))
 
-        links = self.find_var_links(var_name, calibration=calibration, ignore_helpers=ignore_helpers)
-        link_strs = []
+        links = self.find_all_var_links(var_name, calibration=calibration, ignore_helpers=ignore_helpers)
+        self._print_links(links)
 
+    @staticmethod
+    def _print_links(links):
+        link_strs = []
         # Create " -> " linked strings and sort them for nicer printing
         for link in links:
             link_strs.append(" " + " -> ".join(link))
@@ -55,18 +59,32 @@ class BlockIONetwork:
         print("")  # To break lines
 
     def print_unknowns_targets_links(self, unknowns, targets, calibration=None, ignore_helpers=True):
-        print(f"Links between {unknowns} and {targets}")
-        print(" " + "-" * (len(f"Links between {unknowns} and {targets}")))
+        print(f" Links between {unknowns} and {targets}")
+        print(" " + "-" * (len(f" Links between {unknowns} and {targets}")))
         unknown_target_net = xr.DataArray(np.zeros((len(unknowns), len(targets))),
                                           coords=[unknowns, targets],
                                           dims=["inputs", "outputs"])
         for u in unknowns:
-            links = self.find_var_links(u, calibration=calibration, ignore_helpers=ignore_helpers)
+            links = self.find_all_var_links(u, calibration=calibration, ignore_helpers=ignore_helpers)
             for link in links:
                 if link[0] == u and link[-1] in targets:
                     unknown_target_net.loc[u, link[-1]] = 1.
         print(unknown_target_net)
         print("")  # To break lines
+
+    # TODO: Implement an enhancement to display the "closest" link if missing.
+    def query_var_link(self, input_var, output_var, calibration=None, ignore_helpers=True):
+        all_links = self.find_all_var_links(input_var, calibration=calibration, ignore_helpers=ignore_helpers)
+        link_paths = []
+        for link in all_links:
+            if link[0] == input_var and link[-1] == output_var:
+                link_paths.append(link)
+        if link_paths:
+            print(f" Links between {input_var} and {output_var}")
+            print(" " + "-" * (len(f" Links between {input_var} and {output_var}")))
+            self._print_links(link_paths)
+        else:
+            print(f"There are no links within the DAG connecting {input_var} to {output_var}")
 
     # User-facing "analysis" methods
     def record_input_variables_paths(self, inputs_to_be_recorded, block_input_args,
@@ -100,7 +118,7 @@ class BlockIONetwork:
                     # Need to also track the paths of outputs which could be intermediate inputs further down the DAG
                     all_input_vars = all_input_vars.union(set(io_links.keys()))
 
-    def find_var_links(self, var_name, calibration=None, ignore_helpers=True):
+    def find_all_var_links(self, var_name, calibration=None, ignore_helpers=True):
         # Find the indices of *direct* links between `var_name` and the affected `outputs`/`blocks` containing those
         # `outputs` and instantiate the initial list of links
         link_inds = np.nonzero(self._subset_by_vars(var_name).data)
