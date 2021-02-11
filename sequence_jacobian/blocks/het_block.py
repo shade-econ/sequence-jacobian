@@ -2,7 +2,6 @@ import numpy as np
 import copy
 
 from .. import utilities as utils
-from .. import asymptotic
 from ..jacobian.classes import JacobianDict
 
 
@@ -416,88 +415,6 @@ class HetBlock:
             self.saved = {'curlyYs': curlyYs, 'curlyDs': curlyDs, 'curlyPs': curlyPs, 'F': F, 'J': J}
 
         return JacobianDict(J)
-
-    def ajac(self, ss, T, shock_list, output_list=None, h=1E-4, Tpost=None, save=False, use_saved=False):
-        """Like .jac, but outputs asymptotic columns of Jacobians as AsymptoticTimeInvariant objects
-        with nonzero entries -(T-1),...,(Tpost-1) representing asymptotic entries in diagonals,
-        measured relative to main diagonal.
-        
-        Does additional iteration on curlyPs as necessary to extend Tpost beyond T, since common case
-        is that curlyYs and curlyDs from backward iteration converge to zero much more quickly than
-        curlyPs from forward iteration."""
-
-        # default outputs are just all outputs of back it function except backward variables
-        if output_list is None:
-            output_list = self.non_back_iter_outputs
-
-        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in shock_list]
-
-        # if Tpost not provided, assume it is 2*T by default
-        if Tpost is None:
-            Tpost = 2*T
-        elif Tpost < T:
-            raise ValueError(f'must have Tpost={Tpost} less than T={T}')
-
-        # saved last by ajac, directly extract
-        if use_saved and 'curlyYs' not in self.saved:
-            asympJ = {}
-            for o in output_list:
-                asympJ[o.capitalize()] = {}
-                for i in relevant_shocks:
-                    asympJ[o.capitalize()][i] = asymptotic.AsymptoticTimeInvariant(
-                                                self.saved['asympJ'][o.capitalize()][i][-(Tpost-1): Tpost])
-            return asympJ
-
-        # was either saved last by jac or not saved at all, need to do more work!
-
-        # step 0: preliminary processing of steady state
-        (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
-                        sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save, use_saved)
-
-        if use_saved and 'curlyYs' in self.saved:
-            # was saved by jac, first copy curlyYs, curlyDs, curlyPs
-            curlyYs = utils.misc.extract_nested_dict(savedA=self.saved['curlyYs'],
-                                                keys1=relevant_shocks, keys2=output_list, shape=(T,))
-            curlyDs = utils.misc.extract_dict(savedA=self.saved['curlyDs'], keys=relevant_shocks, shape=(T,))
-            curlyPs_old = utils.misc.extract_dict(savedA=self.saved['curlyPs'], keys=output_list, shape=(T - 1,))
-
-            # now need curlyPs that go to T+Tpost-1, not just T
-            curlyPs = {}
-            for o in output_list:
-                curlyP_extrarows = self.forward_iteration_fakenews(curlyPs_old[o][-1, ...], 
-                                                                   Pi, sspol_i, sspol_pi, Tpost)
-                curlyPs[o] = np.concatenate((curlyPs_old[o][:-1, ...], curlyP_extrarows), axis=0)
-        else:
-            # was not saved at all, get curlyYs, curlyDs, curlyPs for ourselves
-            # step 1: compute curlyY and curlyD (backward iteration) for each input i (same as jac)
-            curlyYs, curlyDs = {}, {}
-            for i in relevant_shocks:
-                curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, 
-                                                    ssin_dict, ssout_list, ss['D'], Pi.T.copy(), sspol_i, 
-                                                    sspol_pi, sspol_space, T, h, ss_for_hetinput)
-
-            # step 2: compute prediction vectors curlyP (forward iteration) for each outcome o
-            # here go to (T-1) + (Tpost-1) rather than (T-1)
-            curlyPs = {}
-            for o in output_list:
-                curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1+Tpost-1)
-
-        # steps 3-4: make fake news matrix and Jacobian for each outcome-input pair
-        J = {o.capitalize(): {} for o in output_list}
-        asympJ = {o.capitalize(): {} for o in output_list}
-        for o in output_list:
-            for i in relevant_shocks:
-                F = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
-                J[o.capitalize()][i] = HetBlock.J_from_F(F)
-                asympJ[o.capitalize()][i] = asymptotic.AsymptoticTimeInvariant(
-                    np.concatenate((np.zeros(Tpost-T), J[o.capitalize()][i][:, -1])))
-
-        # if supposed to save, record J and asympJ for use by jac or ajac
-        if save:
-            self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
-            self.saved = {'J': J, 'asympJ': asympJ}
-
-        return asympJ
 
     def add_hetinput(self, hetinput, overwrite=False, verbose=True):
         """Add a hetinput to this HetBlock. Any call to self.back_step_fun will first process

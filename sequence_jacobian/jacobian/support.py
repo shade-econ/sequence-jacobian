@@ -3,8 +3,6 @@
 import numpy as np
 from numba import njit
 
-from .. import asymptotic
-
 
 # For supporting SimpleSparse
 def multiply_basis(t1, t2):
@@ -78,34 +76,6 @@ def multiply_rs_matrix(indices, xs, A):
     return Aout
 
 
-def pack_asymptotic_jacobians(jacdict, inputs, outputs, tau):
-    """If we have -(tau-1),...,(tau-1) AsymptoticTimeInvariant Jacobians (or SimpleSparse) from
-    nI inputs to nO outputs in jacdict, combine into (2*tau-1,nO,nI) array A"""
-    nI, nO = len(inputs), len(outputs)
-    A = np.empty((2*tau-1, nI, nO))
-    for iO in range(nO):
-        subdict = jacdict.get(outputs[iO], {})
-        for iI in range(nI):
-            if inputs[iI] in subdict:
-                A[:, iO, iI] = make_ATI_v(jacdict[outputs[iO]][inputs[iI]], tau)
-            else:
-                A[:, iO, iI] = 0
-    return A
-
-
-def unpack_asymptotic_jacobians(A, inputs, outputs, tau):
-    """If we have (2*tau-1, nO, nI) array A where each A[:,o,i] is vector for AsymptoticTimeInvariant
-    Jacobian mapping output o to output i, output nested dict of AsymptoticTimeInvariant objects"""
-    nI, nO = len(inputs), len(outputs)
-
-    jacdict = {}
-    for iO in range(nO):
-        jacdict[outputs[iO]] = {}
-        for iI in range(nI):
-            jacdict[outputs[iO]][inputs[iI]] = asymptotic.AsymptoticTimeInvariant(A[:, iO, iI])
-    return jacdict
-
-
 def pack_vectors(vs, names, T):
     v = np.zeros(len(names)*T)
     for i, name in enumerate(names):
@@ -128,12 +98,3 @@ def make_matrix(A, T):
         return A.matrix(T)
     else:
         return A
-
-
-def make_ATI_v(x, tau):
-    """If x is either a AsymptoticTimeInvariant or something that can be converted to it, e.g.
-    SimpleSparse, report the underlying length 2*tau-1 vector with entries -(tau-1),...,(tau-1)"""
-    if not isinstance(x, asymptotic.AsymptoticTimeInvariant):
-        return x.asymptotic_time_invariant.changetau(tau).v
-    else:
-        return x.v

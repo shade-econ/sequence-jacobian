@@ -1,5 +1,5 @@
 from .. import nonlinear
-from ..jacobian.drivers import get_G, get_G_asymptotic
+from ..jacobian.drivers import get_G
 from ..jacobian.classes import JacobianDict
 from ..steady_state import steady_state
 from ..blocks.simple_block import simple
@@ -72,11 +72,3 @@ class SolvedBlock:
             # H_U_factored caching could be helpful here too
             return get_G(self.block_list, relevant_shocks, list(self.unknowns.keys()), self.targets,
                          T, ss, output_list, save=save, use_saved=use_saved)
-
-    def ajac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False, Tpost=None):
-        relevant_shocks = [i for i in self.inputs if i in shock_list]
-
-        if Tpost is None:
-            Tpost = 2*T
-        return get_G_asymptotic(self.block_list, relevant_shocks, list(self.unknowns.keys()),
-                                self.targets, T, ss, output_list, save=save, use_saved=use_saved, Tpost=Tpost)

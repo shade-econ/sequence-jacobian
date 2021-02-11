@@ -3,22 +3,21 @@
 import numpy as np
 
 from .classes import JacobianDict
-from .support import pack_vectors, unpack_vectors, pack_asymptotic_jacobians
-from .. import asymptotic
+from .support import pack_vectors, unpack_vectors
 from ..utilities import misc, graph
+from ..blocks.simple_block import SimpleBlock
 
 '''Drivers: 
     - get_H_U               : get H_U matrix mapping all unknowns to all targets
     - get_impulse           : get single GE impulse response
     - get_G                 : get G matrices characterizing all GE impulse responses
-    - get_G_asymptotic      : get asymptotic diagonals of the G matrices returned by get_G
 
     - curlyJs_sorted        : get block Jacobians curlyJ and return them topologically sorted
     - forward_accumulate    : forward accumulation on DAG, taking in topologically sorted Jacobians
 '''
 
 
-def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
+def get_H_U(block_list, unknowns, targets, T, ss=None, save=False, use_saved=False):
     """Get T*n_u by T*n_u matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
@@ -29,8 +28,6 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
     T          : int, truncation horizon
                     (if asymptotic, truncation horizon for backward iteration in HetBlocks)
     ss         : [optional] dict, steady state required if block_list contains any non-jacdicts
-    asymptotic : [optional] bool, flag for returning asymptotic H_U
-    Tpost      : [optional] int, truncation horizon for asymptotic -(Tpost-1),...,0,...,(Tpost-1)
     save       : [optional] bool, flag for saving Jacobians inside HetBlocks
     use_saved  : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
@@ -44,20 +41,13 @@ def get_H_U(block_list, unknowns, targets, T, ss=None, asymptotic=False, Tpost=N
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, asymptotic, Tpost, save, use_saved)
+    curlyJs, required = curlyJ_sorted(block_list, unknowns, ss, T, save, use_saved)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
 
-    if not asymptotic:
-        # pack these n_u^2 matrices, each T*T, into a single matrix
-        return H_U_unpacked[targets, unknowns].pack(T)
-        # return pack_jacobians(H_U_unpacked, unknowns, targets, T)
-    else:
-        # pack these n_u^2 AsymptoticTimeInvariant objects into a single (2*Tpost-1,n_u,n_u) array
-        if Tpost is None:
-            Tpost = 2 * T
-        return pack_asymptotic_jacobians(H_U_unpacked, unknowns, targets, Tpost)
+    # pack these n_u^2 matrices, each T*T, into a single matrix
+    return H_U_unpacked[targets, unknowns].pack(T)
 
 
 def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None,
@@ -187,32 +177,7 @@ def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
-def get_G_asymptotic(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
-                     save=False, use_saved=False, Tpost=None):
-    """Like get_G, but rather than returning the actual matrices G, return
-    asymptotic.AsymptoticTimeInvariant objects representing their asymptotic columns."""
-
-    # step 1: do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(block_list, unknowns + exogenous, ss, T, save=save,
-                                      use_saved=use_saved, asymptotic=True, Tpost=Tpost)
-
-    # step 2: do (matrix) forward accumulation to get
-    # H_U = J^(curlyH, curlyU)
-    J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)
-
-    # step 3: invert H_U and forward accumulate to get G_U = H_U^(-1)H_Z
-    U_H_unpacked = asymptotic.invert_jacdict(J_curlyH_U, unknowns, targets, Tpost)
-    G_U = forward_accumulate(curlyJs + [U_H_unpacked], exogenous, unknowns, required | set(targets))
-
-    # step 4: forward accumulation to get all outputs starting with G_U
-    # by default, don't calculate targets!
-    curlyJs = [G_U] + curlyJs
-    if outputs is None:
-        outputs = set().union(*(curlyJ.outputs for curlyJ in curlyJs)) - set(targets)
-    return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
-
-
-def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=None, save=False, use_saved=False):
+def curlyJ_sorted(block_list, inputs, ss=None, T=None, save=False, use_saved=False):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -223,8 +188,6 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     inputs     : list, input names we need to differentiate with respect to
     ss         : [optional] dict, steady state, needed if block_list includes blocks themselves
     T          : [optional] int, horizon for differentiation, needed if block_list includes hetblock itself
-    asymptotic : [optional] bool, flag for returning asymptotic Jacobians
-    Tpost      : [optional] int, truncation horizon for asymptotic -(Tpost-1),...,0,...,(Tpost-1)
     save       : [optional] bool, flag for saving Jacobians inside HetBlocks
     use_saved  : [optional] bool, flag for using saved Jacobians inside HetBlocks
 
@@ -249,15 +212,12 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, asymptotic=False, Tpost=N
     shocks = set(inputs) | required
     for num in topsorted:
         block = block_list[num]
-        if hasattr(block, 'ajac'):
-            # has 'ajac' function, is some block other than SimpleBlock
-            if asymptotic:
-                jac = block.ajac(ss, T=T, shock_list=list(shocks), Tpost=Tpost, save=save, use_saved=use_saved)
+
+        if hasattr(block, 'jac'):
+            if isinstance(block, SimpleBlock):
+                jac = block.jac(ss, shock_list=list(shocks))
             else:
-                jac = block.jac(ss, T=T, shock_list=list(shocks), save=save, use_saved=use_saved)
-        elif hasattr(block, 'jac'):
-            # has 'jac' but not 'ajac', must be SimpleBlock where no distinction (given SimpleSparse)
-            jac = block.jac(ss, shock_list=list(shocks))
+                jac = block.jac(ss, shock_list=list(shocks), T=T, save=save, use_saved=use_saved)
         else:
             # doesn't have 'jac', must be nested dict that is jac directly
             jac = block
