@@ -4,6 +4,7 @@ import numpy as np
 import scipy.optimize as opt
 from copy import deepcopy
 
+from numbers import Real
 from . import utilities as utils
 from .utilities.misc import unprime, dict_diff, smart_zip, smart_zeros, find_blocks_with_hetoutputs
 from .blocks.simple_block import SimpleBlock
@@ -114,6 +115,27 @@ def find_target_block(blocks, target):
     for block in blocks:
         if target in blocks.output:
             return block
+
+
+def provide_solver_default(unknowns):
+    if len(unknowns) == 1:
+        bounds = list(unknowns.values())[0]
+        if not isinstance(bounds, tuple) or bounds[0] > bounds[1]:
+            raise ValueError("Unable to find a compatible one-dimensional solver with provided `unknowns`.\n"
+                             " Please provide valid lower/upper bounds, e.g. unknowns = {`a`: (0, 1)}")
+        else:
+            return "brentq"
+    elif len(unknowns) > 1:
+        init_values = list(unknowns.values())
+        if not np.all([isinstance(v, Real) for v in init_values]):
+            raise ValueError("Unable to find a compatible multi-dimensional solver with provided `unknowns`.\n"
+                             " Please provide valid initial values, e.g. unknowns = {`a`: 1, `b`: 2}")
+        else:
+            return "broyden_custom"
+    else:
+        raise ValueError("`unknowns` is empty! Please provide a dict of keys/values equal to the number of unknowns"
+                         " that need to be solved for.")
+
 
 
 # Allow targets to be specified in the following formats
