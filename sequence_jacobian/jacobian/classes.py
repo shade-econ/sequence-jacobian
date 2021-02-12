@@ -366,6 +366,9 @@ class JacobianDict(NestedDict):
         else:
             return self.apply(x)
 
+    def __bool__(self):
+        return bool(self.outputs) and bool(self.inputs)
+
     def compose(self, J):
         o_list = self.outputs
         m_list = tuple(set(self.inputs) & set(J.outputs))
