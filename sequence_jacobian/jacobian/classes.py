@@ -332,6 +332,8 @@ class NestedDict:
         self.outputs = self.outputs + J.outputs
         self.nesteddict = {**self.nesteddict, **J.nesteddict}
 
+    # Ensure that every output in self has either a Jacobian or filler value for each input,
+    # s.t. all inputs map to all outputs
     def complete(self, filler):
         nesteddict = {}
         for o in self.outputs:
@@ -374,8 +376,8 @@ class JacobianDict(NestedDict):
         m_list = tuple(set(self.inputs) & set(J.outputs))
         i_list = J.inputs
 
-        J_om = self.nesteddict
-        J_mi = J.nesteddict
+        J_om = self.complete().nesteddict
+        J_mi = J.complete().nesteddict
         J_oi = {}
 
         for o in o_list:
