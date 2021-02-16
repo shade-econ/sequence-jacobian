@@ -1,7 +1,9 @@
+import warnings
+
 from .. import nonlinear
+from ..steady_state import steady_state
 from ..jacobian.drivers import get_G
 from ..jacobian.classes import JacobianDict
-from ..steady_state import steady_state
 from ..blocks.simple_block import simple
 
 
@@ -48,7 +50,25 @@ class SolvedBlock:
         self.outputs = (set.union(*(b.outputs for b in block_list)) | set(list(self.unknowns.keys()))) - set(self.targets)
         self.inputs = set.union(*(b.inputs for b in block_list)) - self.outputs
 
-    def ss(self, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False, **calibration):
+    # TODO: Deprecated methods, to be removed!
+    def ss(self, *args, **kwargs):
+        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
+        return self.steady_state(*args, **kwargs)
+
+    def td(self, *args, **kwargs):
+        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
+                      DeprecationWarning)
+        return self.impulse_nonlinear(*args, **kwargs)
+
+    def jac(self, ss, T=None, shock_list=None, **kwargs):
+        if shock_list is None:
+            shock_list = []
+        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
+                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
+                      DeprecationWarning)
+        return self.jacobian(ss, T, shock_list, **kwargs)
+
+    def steady_state(self, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False, **calibration):
         if self.solver is None:
             raise RuntimeError("Cannot call the ss method on this SolvedBlock without specifying a solver.")
         else:
@@ -56,15 +76,18 @@ class SolvedBlock:
                                 consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose,
                                 solver=self.solver, **self.solver_kwargs)
 
-    def td(self, ss, monotonic=False, returnindividual=False, verbose=False, **kwargs):
+    def impulse_nonlinear(self, ss, monotonic=False, returnindividual=False, verbose=False, **shocked_paths):
         # TODO: add H_U_factored caching of some kind
         # also, inefficient since we are repeatedly starting from the steady state, need option
         # to provide a guess (not a big deal with just SimpleBlocks, of course)
         return nonlinear.td_solve(ss, self.block_list, list(self.unknowns.keys()), self.targets, monotonic=monotonic,
-                                  returnindividual=returnindividual, verbose=verbose, **kwargs)
-    
-    def jac(self, ss, T, shock_list, output_list=None, save=False, use_saved=False):
-        relevant_shocks = [i for i in self.inputs if i in shock_list]
+                                  returnindividual=returnindividual, verbose=verbose, **shocked_paths)
+
+    def impulse_linear(self, ss, T=None, **shocked_paths):
+        return self.jacobian(ss, T, list(shocked_paths.keys())).apply(shocked_paths)
+
+    def jacobian(self, ss, T, shocked_vars, output_list=None, save=False, use_saved=False):
+        relevant_shocks = [i for i in self.inputs if i in shocked_vars]
 
         if not relevant_shocks:
             return JacobianDict({})

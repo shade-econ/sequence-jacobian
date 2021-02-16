@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
@@ -37,6 +38,24 @@ class SimpleBlock:
     def __repr__(self):
         return f"<SimpleBlock '{self.f.__name__}'>"
 
+    # TODO: Deprecated methods, to be removed!
+    def ss(self, *args, **kwargs):
+        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
+        return self.steady_state(*args, **kwargs)
+
+    def td(self, *args, **kwargs):
+        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
+                      DeprecationWarning)
+        return self.impulse_nonlinear(*args, **kwargs)
+
+    def jac(self, ss, T=None, shock_list=None):
+        if shock_list is None:
+            shock_list = []
+        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
+                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
+                      DeprecationWarning)
+        return self.jacobian(ss, T=T, shocked_vars=shock_list)
+
     def _output_in_ss_format(self, *args, **kwargs):
         """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
         numeric primitive, as opposed to Ignore/IgnoreVector objects"""
@@ -45,7 +64,7 @@ class SimpleBlock:
         else:
             return dict(zip(self.output_list, [misc.numeric_primitive(self.f(*args, **kwargs))]))
 
-    def ss(self, *args, **kwargs):
+    def steady_state(self, *args, **kwargs):
         # Wrap args and kwargs in Ignore/IgnoreVector classes to be passed into the function "f"
         args = [ignore(x) for x in args]
         kwargs = {k: ignore(v) for k, v in kwargs.items()}
@@ -72,20 +91,23 @@ class SimpleBlock:
         else:
             return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
-    def td(self, ss, **kwargs):
-        kwargs_new = {}
-        for k, v in kwargs.items():
+    def impulse_nonlinear(self, ss, **shocked_paths):
+        input_args = {}
+        for k, v in shocked_paths.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
-            kwargs_new[k] = Displace(v, ss=ss.get(k, None), name=k)
+            input_args[k] = Displace(v, ss=ss.get(k, None), name=k)
 
         for k in self.input_list:
-            if k not in kwargs_new:
-                kwargs_new[k] = ignore(ss[k])
+            if k not in input_args:
+                input_args[k] = ignore(ss[k])
 
-        return self._output_in_td_format(**kwargs_new)
+        return self._output_in_td_format(**input_args)
 
-    def jac(self, ss, T=None, shock_list=[]):
+    def impulse_linear(self, ss, T=None, **shocked_paths):
+        return self.jacobian(ss, T=T, shocked_vars=list(shocked_paths.keys())).apply(shocked_paths)
+
+    def jacobian(self, ss, T=None, shocked_vars=None):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -108,7 +130,10 @@ class SimpleBlock:
             if zero
         """
 
-        relevant_shocks = [i for i in self.inputs if i in shock_list]
+        if shocked_vars is None:
+            shocked_vars = []
+
+        relevant_shocks = [i for i in self.inputs if i in shocked_vars]
 
         # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
         # are an input into the block), then return an empty dict

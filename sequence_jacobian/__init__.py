@@ -4,6 +4,8 @@ from . import estimation, jacobian, nonlinear, utilities, devtools
 
 from .models import rbc, krusell_smith, hank, two_asset
 
+from .base import create_model
+
 from .blocks.simple_block import simple
 from .blocks.het_block import het, hetoutput
 from .blocks.helper_block import helper

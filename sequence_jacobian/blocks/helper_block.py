@@ -1,5 +1,7 @@
 """HelperBlock class and @helper decorator to generate it"""
 
+import warnings
+
 from ..utilities import misc
 
 
@@ -23,6 +25,11 @@ class HelperBlock:
     def __repr__(self):
         return f"<HelperBlock '{self.f.__name__}'>"
 
+    # TODO: Deprecated methods, to be removed!
+    def ss(self, *args, **kwargs):
+        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
+        return self.steady_state(*args, **kwargs)
+
     def _output_in_ss_format(self, *args, **kwargs):
         """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
         numeric primitive, as opposed to Ignore/IgnoreVector objects"""
@@ -33,7 +40,7 @@ class HelperBlock:
 
     # Currently does not use any of the machinery in SimpleBlock to deal with time displacements and hence
     # can handle non-scalar inputs.
-    def ss(self, *args, **kwargs):
+    def steady_state(self, *args, **kwargs):
         args = [x for x in args]
         kwargs = {k: v for k, v in kwargs.items()}
         return self._output_in_ss_format(*args, **kwargs)
