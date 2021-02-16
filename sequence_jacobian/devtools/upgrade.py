@@ -27,7 +27,7 @@ def compare_steady_states(ss_ref, ss_comp, name_map=None, verbose=True):
             if np.isscalar(ss_ref[key_ref]):
                 print(f"{key_ref} resid: {abs(ss_ref[key_ref] - ss_comp[key_comp])}")
             else:
-                print(f"{key_ref} resid: {np.linalg.norm(ss_ref[key_ref] - ss_comp[key_comp], np.inf)}")
+                print(f"{key_ref} resid: {np.linalg.norm(ss_ref[key_ref].flatten() - ss_comp[key_comp].flatten(), np.inf)}")
         else:
             assert np.isclose(ss_ref[key_ref], ss_comp[key_comp])
 
