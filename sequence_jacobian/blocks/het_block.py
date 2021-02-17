@@ -5,6 +5,8 @@ import numpy as np
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
 
+from ..devtools.deprecate import deprecated_shock_input_convention
+
 
 def het(exogenous, policy, backward, backward_init=None):
     def decorator(back_step_fun):
@@ -249,7 +251,8 @@ class HetBlock:
 
         return ss
 
-    def impulse_nonlinear(self, ss, monotonic=False, returnindividual=False, grid_paths=None, **shocked_vars):
+    def impulse_nonlinear(self, ss, shocked_paths=None, monotonic=False, returnindividual=False,
+                          grid_paths=None, **kwargs):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -267,7 +270,7 @@ class HetBlock:
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
-        shocked_vars : dict of {str : array(T, ...)}
+        shocked_paths : dict of {str : array(T, ...)}
             all time-varying inputs here, with first dimension being time
             this must have same length T for all entries (all outputs will be calculated up to T)
 
@@ -279,11 +282,12 @@ class HetBlock:
             if returnindividual = True, additionally time paths for distribution and for all outputs
                 of self.back_Step_fun on the full grid
         """
+        shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
 
-        # infer T from shocked_vars, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in shocked_vars.values()]
+        # infer T from shocked_paths, check that all shocks have same length
+        shock_lengths = [x.shape[0] for x in shocked_paths.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (shocked_vars) are same length!')
+            raise ValueError('Not all shocks in kwargs (shocked_paths) are same length!')
         T = shock_lengths[0]
 
         # copy from ss info
@@ -309,8 +313,8 @@ class HetBlock:
         # backward iteration
         backdict = ss.copy()
         for t in reversed(range(T)):
-            # be careful: if you include vars from self.back_iter_vars in shocked_vars, agents will use them!
-            backdict.update({k: v[t,...] for k, v in shocked_vars.items()})
+            # be careful: if you include vars from self.back_iter_vars in shocked_paths, agents will use them!
+            backdict.update({k: v[t,...] for k, v in shocked_paths.items()})
             individual = {k: v for k, v in zip(self.back_step_output_list,
                                                self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
@@ -359,16 +363,14 @@ class HetBlock:
         else:
             return {**aggregates, **aggregate_hetoutputs}
 
-    # TODO: Change shocked_vars to enter *not* through kwargs, and symmetrically change impulse_nonlinear
-    #   then add the option to pass kwargs into the self.jacobian invocation below
-    def impulse_linear(self, ss, **shocked_paths):
+    def impulse_linear(self, ss, shocked_paths, **kwargs):
         # infer T from shocked_paths, check that all shocks have same length
         shock_lengths = [x.shape[0] for x in shocked_paths.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
             raise ValueError('Not all shocks in kwargs (shocked_paths) are same length!')
         T = shock_lengths[0]
 
-        return self.jacobian(ss, T, list(shocked_paths.keys())).apply(shocked_paths)
+        return self.jacobian(ss, T, list(shocked_paths.keys()), **kwargs).apply(shocked_paths)
 
     def jacobian(self, ss, T, shock_list, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.

@@ -5,6 +5,8 @@ from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
 
+from ..devtools.deprecate import deprecated_shock_input_convention
+
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
 
@@ -91,7 +93,9 @@ class SimpleBlock:
         else:
             return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
-    def impulse_nonlinear(self, ss, **shocked_paths):
+    def impulse_nonlinear(self, ss, shocked_paths=None, **kwargs):
+        shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
+
         input_args = {}
         for k, v in shocked_paths.items():
             if np.isscalar(v):
@@ -104,7 +108,7 @@ class SimpleBlock:
 
         return self._output_in_td_format(**input_args)
 
-    def impulse_linear(self, ss, T=None, **shocked_paths):
+    def impulse_linear(self, ss, shocked_paths, T=None):
         return self.jacobian(ss, T=T, shocked_vars=list(shocked_paths.keys())).apply(shocked_paths)
 
     def jacobian(self, ss, T=None, shocked_vars=None):

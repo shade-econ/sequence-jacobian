@@ -7,8 +7,10 @@ from .blocks import het_block as het
 from .jacobian.drivers import get_H_U
 from .jacobian.support import pack_vectors, unpack_vectors
 
+from .devtools.deprecate import deprecated_shock_input_convention
 
-def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
+
+def td_solve(ss, block_list, unknowns, targets, shocked_paths=None, H_U=None, H_U_factored=None, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False,
              grid_paths=None, **kwargs):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
@@ -21,6 +23,7 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     block_list      : list, blocks in model (SimpleBlocks or HetBlocks)
     unknowns        : list, unknowns of SHADE DAG, the 'U' in H(U, Z)
     targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
+    shocked_paths   : dict, all shocked Z go here, must all have same length T
     H_U             : [optional] array (nU*nU), Jacobian of targets with respect to unknowns
     H_U_factored    : [optional] tuple, LU decomposition of H_U, save time by supplying this from utils.misc.factor()
     monotonic       : [optional] bool, flag indicating HetBlock policy for some k' is monotonic in state k
@@ -31,19 +34,20 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     verbose           : [optional] bool, flag to print largest absolute error for each target
     save            : [optional] bool, flag for saving Jacobians inside HetBlocks during calc of H_U
     use_saved       : [optional] bool, flag for using saved Jacobians inside HetBlocks during calc of H_U
-    kwargs          : dict, all shocked Z go here, must all have same length T
 
     Returns
     ----------
     results : dict, return paths for all aggregate variables, plus individual outcomes of HetBlock if returnindividual
     """
-    # check to make sure that kwargs are valid shocks
+    shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
+
+    # check to make sure that shocked_paths are valid shocks
     for x in unknowns + targets:
-        if x in kwargs:
+        if x in shocked_paths:
             raise ValueError(f'Shock {x} in td_solve cannot also be an unknown or target!')
 
-    # infer T from a single shocked Z in kwargs
-    for v in kwargs.values():
+    # infer T from a single shocked Z in shocked_paths
+    for v in shocked_paths.values():
         T = v.shape[0]
         break
     
@@ -63,7 +67,8 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
 
     # iterate until convergence
     for it in range(maxit):
-        results = td_map(ss, block_list, sort, monotonic, returnindividual, grid_paths=grid_paths, **kwargs, **Us)
+        results = td_map(ss, block_list, sort=sort, monotonic=monotonic, returnindividual=returnindividual,
+                         grid_paths=grid_paths, **shocked_paths, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if verbose:
             print(f'On iteration {it}')
@@ -82,11 +87,13 @@ def td_solve(ss, block_list, unknowns, targets, H_U=None, H_U_factored=None, mon
     return results
 
 
-def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, grid_paths=None, **kwargs):
+def td_map(ss, block_list, shocked_paths=None, sort=None, monotonic=False, returnindividual=False,
+           grid_paths=None, **kwargs):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
     
     Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
+    shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
 
     hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual, 'grid_paths': grid_paths}
 
@@ -100,7 +107,7 @@ def td_map(ss, block_list, sort=None, monotonic=False, returnindividual=False, g
     # TODO: Rename the various references to kwargs/results to be more informative
     #   if we do end up keeping this top-level functionality for passing in variables
     # initialize results
-    results = kwargs
+    results = shocked_paths
     for n in sort:
         block = block_list[n]
 

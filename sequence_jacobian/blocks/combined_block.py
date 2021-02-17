@@ -61,12 +61,12 @@ class CombinedBlock:
             ss_partial_eq.update(eval_block_ss(block, ss_partial_eq))
         return ss_partial_eq
 
-    def impulse_nonlinear(self, ss, shocked_paths, in_deviations=True):
+    def impulse_nonlinear(self, ss, shocked_paths, in_deviations=True, **kwargs):
         irf_nonlin_partial_eq = {k: ss[k] + v for k, v in shocked_paths.items()}
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
             # To only return dynamic paths of variables that do not remain at their steady state value
-            irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, **input_args).items()
+            irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs).items()
                                           if not np.all(v == ss[k])})
         # Default to percentage deviations from steady state. If the steady state value is zero, then just return
         # the level deviations from zero.
@@ -111,7 +111,7 @@ class CombinedBlock:
 
     def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets, in_deviations=True, **kwargs):
         irf_nonlin_gen_eq = td_solve(ss, self.blocks, unknowns, targets,
-                                     **{k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
+                                     shocked_paths={k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
         # Default to percentage deviations from steady state. If the steady state value is zero, then just return
         # the level deviations from zero.
         if in_deviations:
