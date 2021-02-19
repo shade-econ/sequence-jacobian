@@ -106,7 +106,7 @@ class SimpleBlock:
         return self._output_in_td_format(**input_args)
 
     def impulse_linear(self, ss, exogenous, T=None):
-        return self.jacobian(ss, T=T, exogenous=list(exogenous.keys())).apply(exogenous)
+        return self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous)
 
     def jacobian(self, ss, exogenous=None, T=None):
         """Assemble nested dict of Jacobians

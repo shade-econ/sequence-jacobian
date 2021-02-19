@@ -397,7 +397,7 @@ class JacobianDict(NestedDict):
         T = len(next(iter(x.values())))
 
         inputs = x.keys() & set(self.inputs)
-        J_oi = self.nesteddict
+        J_oi = self.complete().nesteddict
         y = {}
 
         for o in self.outputs:

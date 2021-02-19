@@ -6,8 +6,9 @@ import numpy as np
 from .. import utilities as utils
 from ..steady_state import eval_block_ss, steady_state, provide_solver_default
 from ..nonlinear import td_solve
-from ..jacobian.drivers import get_G, forward_accumulate, curlyJ_sorted
+from ..jacobian.drivers import get_G
 from ..jacobian.classes import JacobianDict
+from ..blocks.het_block import HetBlock
 
 
 def combine(*args, name="", model_alias=False):
@@ -26,6 +27,8 @@ class CombinedBlock:
         self.blocks_w_helpers = None
 
         self._sorted_indices_w_o_helpers = utils.graph.block_sort(blocks, ignore_helpers=True)
+        self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
+
         self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices_w_o_helpers]
 
         if not name:
@@ -61,13 +64,13 @@ class CombinedBlock:
             ss_partial_eq.update(eval_block_ss(block, ss_partial_eq))
         return ss_partial_eq
 
-    def impulse_nonlinear(self, ss, shocked_paths, in_deviations=True, **kwargs):
-        irf_nonlin_partial_eq = {k: ss[k] + v for k, v in shocked_paths.items()}
+    def impulse_nonlinear(self, ss, exogenous, in_deviations=True, **kwargs):
+        irf_nonlin_partial_eq = {k: ss[k] + v for k, v in exogenous.items()}
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
-            # To only return dynamic paths of variables that do not remain at their steady state value
-            irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs).items()
-                                          if not np.all(v == ss[k])})
+
+            if input_args:  # If this block is actually perturbed
+                irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs).items()})
 
         # Default to percentage deviations from steady state. If the steady state value is zero, then just return
         # the level deviations from zero.
@@ -76,12 +79,13 @@ class CombinedBlock:
         else:
             return irf_nonlin_partial_eq
 
-    def impulse_linear(self, ss, exogenous_paths, T=None, in_deviations=True):
-        exogenous = list(exogenous_paths.keys())
-        if T is None:
-            T = len(list(exogenous_paths.values())[0])
-        J_partial_eq = self.jacobian(ss, exogenous=exogenous, T=T)
-        irf_lin_partial_eq = J_partial_eq.apply(exogenous_paths)
+    def impulse_linear(self, ss, exogenous, T=None, in_deviations=True):
+        irf_lin_partial_eq = deepcopy(exogenous)
+        for block in self.blocks:
+            input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs}
+
+            if input_args:  # If this block is actually perturbed
+                irf_lin_partial_eq.update({k: v for k, v in block.impulse_linear(ss, input_args, T=T).items()})
 
         # Default to percentage deviations from steady state. If the steady state value is zero, then just return
         # the level deviations from zero.
@@ -93,9 +97,20 @@ class CombinedBlock:
     def jacobian(self, ss, exogenous=None, T=None, outputs=None, save=False, use_saved=False):
         if exogenous is None:
             exogenous = list(self.inputs)
+        if outputs is None:
+            outputs = self.outputs
 
-        curlyJs, required = curlyJ_sorted(self.blocks, exogenous, ss, T=T, save=save, use_saved=use_saved)
-        J_partial_eq = forward_accumulate(curlyJs, exogenous, outputs=outputs, required=required)
+        J_partial_eq = JacobianDict.identity(exogenous)
+        for block in self.blocks:
+            if isinstance(block, HetBlock):
+                curlyJ = block.jacobian(ss, exogenous, T, save=save, use_saved=use_saved).complete()
+            else:
+                curlyJ = block.jacobian(ss, exogenous, T).complete()
+
+            # If we want specific list of outputs, restrict curlyJ to that before continuing
+            curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]
+            J_partial_eq.update(curlyJ.compose(J_partial_eq))
+
         return J_partial_eq
 
     def solve_steady_state(self, calibration, unknowns, targets, solver=None, **kwargs):
@@ -113,7 +128,7 @@ class CombinedBlock:
 
     def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets, in_deviations=True, **kwargs):
         irf_nonlin_gen_eq = td_solve(ss, self.blocks, unknowns, targets,
-                                     shocked_paths={k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
+                                     exogenous={k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
 
         # Default to percentage deviations from steady state. If the steady state value is zero, then just return
         # the level deviations from zero.

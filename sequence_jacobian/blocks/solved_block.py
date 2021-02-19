@@ -90,7 +90,14 @@ class SolvedBlock:
                                   returnindividual=returnindividual, verbose=verbose)
 
     def impulse_linear(self, ss, exogenous, T=None):
-        return self.jacobian(ss, T, list(exogenous.keys())).apply(exogenous)
+        if T is None:
+            # infer T from exogenous, check that all shocks have same length
+            shock_lengths = [x.shape[0] for x in exogenous.values()]
+            if shock_lengths[1:] != shock_lengths[:-1]:
+                raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
+            T = shock_lengths[0]
+
+        return self.jacobian(ss, list(exogenous.keys()), T=T).apply(exogenous)
 
     def jacobian(self, ss, exogenous, T, output_list=None, save=False, use_saved=False):
         relevant_shocks = [i for i in self.inputs if i in exogenous]
