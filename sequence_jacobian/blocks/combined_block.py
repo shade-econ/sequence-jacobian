@@ -17,18 +17,27 @@ def combine(*args, name="", model_alias=False):
 
 
 class CombinedBlock:
+    """A combined `Block` object comprised of several `Block` objects, which topologically sorts them and provides
+    a set of partial and general equilibrium methods for evaluating their steady state, computes impulse responses,
+    and calculates Jacobians along the DAG"""
     # To users: Do *not* manually change the attributes via assignment. Instantiating a
     #   CombinedBlock has some automated features that are inferred from initial instantiation but not from
     #   re-assignment of attributes post-instantiation.
     def __init__(self, *blocks, name="", model_alias=False):
+        # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
         self._blocks_unsorted = blocks
 
-        self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
-        self.blocks_w_helpers = None
-
+        # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
+        # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
+        # Hence, we will cache that info upon first invocation of the steady_state
         self._sorted_indices_w_o_helpers = utils.graph.block_sort(blocks, ignore_helpers=True)
+        self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
         self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
 
+        # User-facing attributes for accessing blocks
+        # .blocks_w_helpers meant to only interface with steady_state functionality
+        # .blocks meant to interface with dynamic functionality (impulses and jacobian calculations)
+        self.blocks_w_helpers = None
         self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices_w_o_helpers]
 
         if not name:
@@ -43,6 +52,7 @@ class CombinedBlock:
         all_inputs = set().union(*[block.inputs for block in self.blocks])
         self.inputs = all_inputs.difference(self.outputs)
 
+        # If the create_model() is used instead of combine(), we will have __repr__ show this object as a 'Model'
         self._model_alias = model_alias
 
     def __repr__(self):
@@ -52,6 +62,7 @@ class CombinedBlock:
             return f"<CombinedBlock '{self.name}'>"
 
     def steady_state(self, calibration):
+        """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:
@@ -65,6 +76,8 @@ class CombinedBlock:
         return ss_partial_eq
 
     def impulse_nonlinear(self, ss, exogenous, in_deviations=True, **kwargs):
+        """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
+        a steady state, `ss`"""
         irf_nonlin_partial_eq = {k: ss[k] + v for k, v in exogenous.items()}
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
@@ -80,6 +93,8 @@ class CombinedBlock:
             return irf_nonlin_partial_eq
 
     def impulse_linear(self, ss, exogenous, T=None, in_deviations=True):
+        """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
+        a steady_state, `ss`"""
         irf_lin_partial_eq = deepcopy(exogenous)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs}
@@ -95,6 +110,8 @@ class CombinedBlock:
             return irf_lin_partial_eq
 
     def jacobian(self, ss, exogenous=None, T=None, outputs=None, save=False, use_saved=False):
+        """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
+        a steady state, `ss`"""
         if exogenous is None:
             exogenous = list(self.inputs)
         if outputs is None:
@@ -114,6 +131,9 @@ class CombinedBlock:
         return J_partial_eq
 
     def solve_steady_state(self, calibration, unknowns, targets, solver=None, **kwargs):
+        """Evaluate a general equilibrium steady state of the CombinedBlock given a `calibration`
+        and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
+        the target conditions that must hold in general equilibrium"""
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:
@@ -127,6 +147,9 @@ class CombinedBlock:
         return ss_gen_eq
 
     def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets, in_deviations=True, **kwargs):
+        """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
         irf_nonlin_gen_eq = td_solve(ss, self.blocks, unknowns, targets,
                                      exogenous={k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
 
@@ -138,8 +161,16 @@ class CombinedBlock:
             return irf_nonlin_gen_eq
 
     def solve_impulse_linear(self, ss, exogenous, unknowns, targets, T=None, in_deviations=True, **kwargs):
+        """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
         if T is None:
-            T = len(list(exogenous.values())[0])
+            # infer T from exogenous, check that all shocks have same length
+            shock_lengths = [x.shape[0] for x in exogenous.values()]
+            if shock_lengths[1:] != shock_lengths[:-1]:
+                raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
+            T = shock_lengths[0]
+
         J_gen_eq = get_G(self.blocks, list(exogenous.keys()), unknowns, targets, T=T, ss=ss, **kwargs)
         irf_lin_gen_eq = J_gen_eq.apply(exogenous)
 
@@ -151,6 +182,9 @@ class CombinedBlock:
             return irf_lin_gen_eq
 
     def solve_jacobian(self, ss, exogenous, unknowns, targets, T=None, **kwargs):
+        """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
+        at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
         J_gen_eq = get_G(self.blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
         return J_gen_eq
 
