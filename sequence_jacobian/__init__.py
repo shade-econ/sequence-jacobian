@@ -18,9 +18,10 @@ from .visualization.draw_dag import draw_dag, draw_solved, inspect_solved
 from .steady_state import steady_state
 from .jacobian.drivers import get_G, get_H_U, get_impulse
 from .nonlinear import td_solve
-from .utilities import discretize
-from .utilities import interpolate
-from .utilities.discretize import agrid
+
+# Useful utilities for setting up HetBlocks
+from .utilities.discretize import agrid, markov_rouwenhorst, markov_tauchen
+from .utilities.interpolate import interpolate_y
 from .utilities.optimized_routines import setmin
 
 # Ensure warning uniformity across package
