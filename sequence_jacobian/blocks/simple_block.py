@@ -41,14 +41,14 @@ class SimpleBlock:
         return f"<SimpleBlock '{self.f.__name__}'>"
 
     # TODO: Deprecated methods, to be removed!
-    def ss(self, *args, **kwargs):
+    def ss(self, **kwargs):
         warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(*args, **kwargs)
+        return self.steady_state(kwargs)
 
-    def td(self, *args, **kwargs):
+    def td(self, ss, **kwargs):
         warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
                       DeprecationWarning)
-        return self.impulse_nonlinear(*args, **kwargs)
+        return self.impulse_nonlinear(ss, exogenous=kwargs)
 
     def jac(self, ss, T=None, shock_list=None):
         if shock_list is None:
@@ -56,22 +56,19 @@ class SimpleBlock:
         warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
                       "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
                       DeprecationWarning)
-        return self.jacobian(ss, T=T, shocked_vars=shock_list)
+        return self.jacobian(ss, exogenous=shock_list, T=T)
 
-    def _output_in_ss_format(self, *args, **kwargs):
+    def _output_in_ss_format(self, **kwargs):
         """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
         numeric primitive, as opposed to Ignore/IgnoreVector objects"""
         if len(self.output_list) > 1:
-            return dict(zip(self.output_list, [misc.numeric_primitive(o) for o in self.f(*args, **kwargs)]))
+            return dict(zip(self.output_list, [misc.numeric_primitive(o) for o in self.f(**kwargs)]))
         else:
-            return dict(zip(self.output_list, [misc.numeric_primitive(self.f(*args, **kwargs))]))
+            return dict(zip(self.output_list, [misc.numeric_primitive(self.f(**kwargs))]))
 
-    def steady_state(self, *args, **kwargs):
-        # Wrap args and kwargs in Ignore/IgnoreVector classes to be passed into the function "f"
-        args = [ignore(x) for x in args]
-        kwargs = {k: ignore(v) for k, v in kwargs.items()}
-
-        return self._output_in_ss_format(*args, **kwargs)
+    def steady_state(self, calibration, **kwargs):
+        input_args = {k: ignore(v) for k, v in calibration.items()}
+        return self._output_in_ss_format(**input_args, **kwargs)
 
     def _output_in_td_format(self, **kwargs_new):
         """Returns output of the method td as a dict mapping output names to numeric primitives (scalars/vectors)
@@ -93,11 +90,11 @@ class SimpleBlock:
         else:
             return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
-    def impulse_nonlinear(self, ss, shocked_paths=None, **kwargs):
-        shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
+    def impulse_nonlinear(self, ss, exogenous=None, **kwargs):
+        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
 
         input_args = {}
-        for k, v in shocked_paths.items():
+        for k, v in exogenous.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
             input_args[k] = Displace(v, ss=ss.get(k, None), name=k)
@@ -108,10 +105,10 @@ class SimpleBlock:
 
         return self._output_in_td_format(**input_args)
 
-    def impulse_linear(self, ss, shocked_paths, T=None):
-        return self.jacobian(ss, T=T, shocked_vars=list(shocked_paths.keys())).apply(shocked_paths)
+    def impulse_linear(self, ss, exogenous, T=None):
+        return self.jacobian(ss, T=T, exogenous=list(exogenous.keys())).apply(exogenous)
 
-    def jacobian(self, ss, T=None, shocked_vars=None):
+    def jacobian(self, ss, exogenous=None, T=None):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -121,7 +118,7 @@ class SimpleBlock:
         T : int, optional
             number of time periods for explicit T*T Jacobian
             if omitted, more efficient SimpleSparse objects returned
-        shock_list : list of str, optional
+        exogenous : list of str, optional
             names of input variables to differentiate wrt; if omitted, assume all inputs
         h : float, optional
             radius for symmetric numerical differentiation
@@ -134,10 +131,10 @@ class SimpleBlock:
             if zero
         """
 
-        if shocked_vars is None:
-            shocked_vars = []
+        if exogenous is None:
+            exogenous = list(self.inputs)
 
-        relevant_shocks = [i for i in self.inputs if i in shocked_vars]
+        relevant_shocks = [i for i in self.inputs if i in exogenous]
 
         # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
         # are an input into the block), then return an empty dict

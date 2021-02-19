@@ -27,17 +27,17 @@ def taylor(r, pi, phi):
     return i
 
 
-@pytest.mark.parametrize("block,ss", [(F, (1, 1, 1, 0.5)),
-                                      (investment, (1, 1, 0.05, 1, 1, 1, 0.05, 2, 0.5)),
-                                      (taylor, (0.05, 0.01, 1.5))])
+@pytest.mark.parametrize("block,ss", [(F, {"K": 1, "L": 1, "Z": 1, "alpha": 0.5}),
+                                      (investment, {"Q": 1, "K": 1, "r": 0.05, "N": 1, "mc": 1, "Z": 1, "delta": 0.05,
+                                                    "epsI": 2, "alpha": 0.5}),
+                                      (taylor, {"r": 0.05, "pi": 0.01, "phi": 1.5})])
 def test_block_consistency(block, ss):
     """Make sure ss, td, and jac methods are all consistent with each other.
     Requires that all inputs of simple block allow calculating Jacobians"""
     # get ss output
-    ss_results = block.ss(*ss)
+    ss_results = block.ss(**ss)
 
     # now if we put in constant inputs, td should give us the same!
-    ss = dict(zip(block.input_list, ss))
     td_results = block.td(ss, **{k: np.full(20, v) for k, v in ss.items()})
     for k, v in td_results.items():
         assert np.all(v == ss_results[k])

@@ -30,17 +30,15 @@ class HelperBlock:
         warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
         return self.steady_state(*args, **kwargs)
 
-    def _output_in_ss_format(self, *args, **kwargs):
+    def _output_in_ss_format(self, calibration, **kwargs):
         """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
         numeric primitive, as opposed to Ignore/IgnoreVector objects"""
         if len(self.output_list) > 1:
-            return dict(zip(self.output_list, [misc.numeric_primitive(o) for o in self.f(*args, **kwargs)]))
+            return dict(zip(self.output_list, [misc.numeric_primitive(o) for o in self.f(**calibration, **kwargs)]))
         else:
-            return dict(zip(self.output_list, [misc.numeric_primitive(self.f(*args, **kwargs))]))
+            return dict(zip(self.output_list, [misc.numeric_primitive(self.f(**calibration, **kwargs))]))
 
     # Currently does not use any of the machinery in SimpleBlock to deal with time displacements and hence
     # can handle non-scalar inputs.
-    def steady_state(self, *args, **kwargs):
-        args = [x for x in args]
-        kwargs = {k: v for k, v in kwargs.items()}
-        return self._output_in_ss_format(*args, **kwargs)
+    def steady_state(self, calibration, **kwargs):
+        return self._output_in_ss_format(calibration, **kwargs)

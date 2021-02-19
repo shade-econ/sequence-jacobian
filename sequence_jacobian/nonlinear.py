@@ -10,7 +10,7 @@ from .jacobian.support import pack_vectors, unpack_vectors
 from .devtools.deprecate import deprecated_shock_input_convention
 
 
-def td_solve(ss, block_list, unknowns, targets, shocked_paths=None, H_U=None, H_U_factored=None, monotonic=False,
+def td_solve(ss, block_list, unknowns, targets, exogenous=None, H_U=None, H_U_factored=None, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False,
              grid_paths=None, **kwargs):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
@@ -23,7 +23,7 @@ def td_solve(ss, block_list, unknowns, targets, shocked_paths=None, H_U=None, H_
     block_list      : list, blocks in model (SimpleBlocks or HetBlocks)
     unknowns        : list, unknowns of SHADE DAG, the 'U' in H(U, Z)
     targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
-    shocked_paths   : dict, all shocked Z go here, must all have same length T
+    exogenous       : dict, all shocked Z go here, must all have same length T
     H_U             : [optional] array (nU*nU), Jacobian of targets with respect to unknowns
     H_U_factored    : [optional] tuple, LU decomposition of H_U, save time by supplying this from utils.misc.factor()
     monotonic       : [optional] bool, flag indicating HetBlock policy for some k' is monotonic in state k
@@ -39,15 +39,15 @@ def td_solve(ss, block_list, unknowns, targets, shocked_paths=None, H_U=None, H_
     ----------
     results : dict, return paths for all aggregate variables, plus individual outcomes of HetBlock if returnindividual
     """
-    shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
+    exogenous = deprecated_shock_input_convention(exogenous, kwargs)
 
-    # check to make sure that shocked_paths are valid shocks
+    # check to make sure that exogenous are valid shocks
     for x in unknowns + targets:
-        if x in shocked_paths:
+        if x in exogenous:
             raise ValueError(f'Shock {x} in td_solve cannot also be an unknown or target!')
 
-    # infer T from a single shocked Z in shocked_paths
-    for v in shocked_paths.values():
+    # infer T from a single shocked Z in exogenous
+    for v in exogenous.values():
         T = v.shape[0]
         break
     
@@ -68,7 +68,7 @@ def td_solve(ss, block_list, unknowns, targets, shocked_paths=None, H_U=None, H_
     # iterate until convergence
     for it in range(maxit):
         results = td_map(ss, block_list, sort=sort, monotonic=monotonic, returnindividual=returnindividual,
-                         grid_paths=grid_paths, **shocked_paths, **Us)
+                         grid_paths=grid_paths, **exogenous, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if verbose:
             print(f'On iteration {it}')
@@ -87,13 +87,13 @@ def td_solve(ss, block_list, unknowns, targets, shocked_paths=None, H_U=None, H_
     return results
 
 
-def td_map(ss, block_list, shocked_paths=None, sort=None, monotonic=False, returnindividual=False,
+def td_map(ss, block_list, exogenous=None, sort=None, monotonic=False, returnindividual=False,
            grid_paths=None, **kwargs):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
     
     Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
-    shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
+    exogenous = deprecated_shock_input_convention(exogenous, kwargs)
 
     hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual, 'grid_paths': grid_paths}
 
@@ -107,7 +107,7 @@ def td_map(ss, block_list, shocked_paths=None, sort=None, monotonic=False, retur
     # TODO: Rename the various references to kwargs/results to be more informative
     #   if we do end up keeping this top-level functionality for passing in variables
     # initialize results
-    results = shocked_paths
+    results = exogenous
     for n in sort:
         block = block_list[n]
 
@@ -121,5 +121,3 @@ def td_map(ss, block_list, shocked_paths=None, sort=None, monotonic=False, retur
             results.update(block.td(ss, **blockoptions, **{k: results[k] for k in block.inputs if k in results}))
 
     return results
-
-

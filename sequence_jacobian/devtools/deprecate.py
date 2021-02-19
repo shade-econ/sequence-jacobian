@@ -11,17 +11,17 @@ import warnings
 
 
 # For impulse_nonlinear, td_solve, and td_map
-def deprecated_shock_input_convention(shocked_paths, kwargs):
+def deprecated_shock_input_convention(exogenous, kwargs):
     if kwargs:
-        warnings.warn("Passing shock paths through kwargs is deprecated. Please explicitly specify"
-                      " the dict of shocks in the keyword argument `shocked_paths`.", DeprecationWarning)
-        if shocked_paths is None:
+        warnings.warn("Passing shock paths/exogenous through kwargs is deprecated. Please explicitly specify"
+                      " the dict of shocks in the keyword argument `exogenous`.", DeprecationWarning)
+        if exogenous is None:
             return kwargs
         else:
-            # If for whatever reason kwargs and shocked_paths is non-empty?
-            shocked_paths.update(kwargs)
+            # If for whatever reason kwargs and exogenous is non-empty?
+            exogenous.update(kwargs)
     else:
-        if shocked_paths is None:
+        if exogenous is None:
             return {}
         else:
-            return shocked_paths
+            return exogenous

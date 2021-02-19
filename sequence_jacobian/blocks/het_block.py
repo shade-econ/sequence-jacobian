@@ -163,25 +163,25 @@ class HetBlock:
     '''
 
     # TODO: Deprecated methods, to be removed!
-    def ss(self, *args, **kwargs):
+    def ss(self, **kwargs):
         warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(*args, **kwargs)
+        return self.steady_state(kwargs)
 
-    def td(self, *args, **kwargs):
+    def td(self, ss, **kwargs):
         warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
                       DeprecationWarning)
-        return self.impulse_nonlinear(*args, **kwargs)
+        return self.impulse_nonlinear(ss, **kwargs)
 
-    def jac(self, ss, T=None, shock_list=None, **kwargs):
+    def jac(self, ss, shock_list=None, T=None, **kwargs):
         if shock_list is None:
-            shock_list = []
+            shock_list = list(self.inputs)
         warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
                       "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
                       DeprecationWarning)
-        return self.jacobian(ss, T, shock_list, **kwargs)
+        return self.jacobian(ss, shock_list, T, **kwargs)
 
-    def steady_state(self, backward_tol=1E-8, backward_maxit=5000, forward_tol=1E-10, forward_maxit=100_000,
-                     hetoutput=False, **kwargs):
+    def steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
+                     forward_tol=1E-10, forward_maxit=100_000, hetoutput=False):
         """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
 
         Parameters
@@ -218,16 +218,16 @@ class HetBlock:
             - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
         """
 
-        ss = copy.deepcopy(kwargs)
+        ss = copy.deepcopy(calibration)
 
-        # extract information from kwargs
-        Pi = kwargs[self.exogenous]
-        grid = {k: kwargs[k+'_grid'] for k in self.policy}
-        D_seed = kwargs.get('D', None)
-        pi_seed = kwargs.get(self.exogenous + '_seed', None)
+        # extract information from calibration
+        Pi = calibration[self.exogenous]
+        grid = {k: calibration[k+'_grid'] for k in self.policy}
+        D_seed = calibration.get('D', None)
+        pi_seed = calibration.get(self.exogenous + '_seed', None)
 
         # run backward iteration
-        sspol = self.policy_ss(kwargs, tol=backward_tol, maxit=backward_maxit)
+        sspol = self.policy_ss(calibration, tol=backward_tol, maxit=backward_maxit)
         ss.update(sspol)
 
         # run forward iteration
@@ -251,7 +251,7 @@ class HetBlock:
 
         return ss
 
-    def impulse_nonlinear(self, ss, shocked_paths=None, monotonic=False, returnindividual=False,
+    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, returnindividual=False,
                           grid_paths=None, **kwargs):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
@@ -270,7 +270,7 @@ class HetBlock:
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
-        shocked_paths : dict of {str : array(T, ...)}
+        exogenous : dict of {str : array(T, ...)}
             all time-varying inputs here, with first dimension being time
             this must have same length T for all entries (all outputs will be calculated up to T)
 
@@ -282,12 +282,12 @@ class HetBlock:
             if returnindividual = True, additionally time paths for distribution and for all outputs
                 of self.back_Step_fun on the full grid
         """
-        shocked_paths = deprecated_shock_input_convention(shocked_paths, kwargs)
+        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
 
-        # infer T from shocked_paths, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in shocked_paths.values()]
+        # infer T from exogenous, check that all shocks have same length
+        shock_lengths = [x.shape[0] for x in exogenous.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (shocked_paths) are same length!')
+            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
         T = shock_lengths[0]
 
         # copy from ss info
@@ -313,8 +313,8 @@ class HetBlock:
         # backward iteration
         backdict = ss.copy()
         for t in reversed(range(T)):
-            # be careful: if you include vars from self.back_iter_vars in shocked_paths, agents will use them!
-            backdict.update({k: v[t,...] for k, v in shocked_paths.items()})
+            # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
+            backdict.update({k: v[t,...] for k, v in exogenous.items()})
             individual = {k: v for k, v in zip(self.back_step_output_list,
                                                self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
@@ -363,16 +363,16 @@ class HetBlock:
         else:
             return {**aggregates, **aggregate_hetoutputs}
 
-    def impulse_linear(self, ss, shocked_paths, **kwargs):
-        # infer T from shocked_paths, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in shocked_paths.values()]
+    def impulse_linear(self, ss, exogenous, **kwargs):
+        # infer T from exogenous, check that all shocks have same length
+        shock_lengths = [x.shape[0] for x in exogenous.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (shocked_paths) are same length!')
+            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
         T = shock_lengths[0]
 
-        return self.jacobian(ss, T, list(shocked_paths.keys()), **kwargs).apply(shocked_paths)
+        return self.jacobian(ss, T, list(exogenous.keys()), **kwargs).apply(exogenous)
 
-    def jacobian(self, ss, T, shock_list, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous, T, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -381,7 +381,7 @@ class HetBlock:
             all steady-state info, intended to be from .ss()
         T : [optional] int
             number of time periods for T*T Jacobian
-        shock_list : list of str
+        exogenous : list of str
             names of input variables to differentiate wrt (main cost scales with # of inputs)
         output_list : list of str
             names of output variables to get derivatives of, if not provided assume all outputs of
@@ -404,7 +404,7 @@ class HetBlock:
         if output_list is None:
             output_list = self.non_back_iter_outputs
 
-        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in shock_list]
+        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
 
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
