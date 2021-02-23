@@ -1,5 +1,6 @@
 """Various lower-level functions to support the computation of steady states"""
 
+import warnings
 from numbers import Real
 import numpy as np
 
@@ -22,6 +23,20 @@ def provide_solver_default(unknowns):
     else:
         raise ValueError("`unknowns` is empty! Please provide a dict of keys/values equal to the number of unknowns"
                          " that need to be solved for.")
+
+
+def run_consistency_check(cresid, ctol=1e-9, fragile=False):
+    if cresid > ctol:
+        if fragile:
+            raise RuntimeError(f"The target values evaluated for the proposed set of unknowns produce a "
+                               f"maximum residual value of {cresid}, which is greater than the ctol {ctol}.\n"
+                               f" If used, check if HelperBlocks are indeed compatible with the DAG.\n"
+                               f" If this is not an issue, adjust ctol accordingly.")
+        else:
+            warnings.warn(f"The target values evaluated for the proposed set of unknowns produce a "
+                          f"maximum residual value of {cresid}, which is greater than the ctol {ctol}.\n"
+                          f" If used, check if HelperBlocks are indeed compatible with the DAG.\n"
+                          f" If this is not an issue, adjust ctol accordingly.")
 
 
 def find_target_block(blocks, target):
