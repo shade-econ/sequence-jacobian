@@ -1,7 +1,7 @@
 import warnings
 
 from .. import nonlinear
-from ..steady_state import steady_state
+from ..steady_state.drivers import steady_state
 from ..jacobian.drivers import get_G
 from ..jacobian.classes import JacobianDict
 from ..blocks.simple_block import simple

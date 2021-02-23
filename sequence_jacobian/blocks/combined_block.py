@@ -4,7 +4,8 @@ from copy import deepcopy
 import numpy as np
 
 from .. import utilities as utils
-from ..steady_state import eval_block_ss, steady_state, provide_solver_default
+from ..steady_state.drivers import eval_block_ss, steady_state
+from ..steady_state.support import provide_solver_default
 from ..nonlinear import td_solve
 from ..jacobian.drivers import get_G
 from ..jacobian.classes import JacobianDict
