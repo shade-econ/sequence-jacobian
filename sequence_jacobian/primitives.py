@@ -1,50 +1,85 @@
 """Primitives to provide clarity and structure on blocks/models work"""
 
-import numpy as np
 import abc
 from numbers import Real
-from typing import Dict, Union, List
+from typing import Dict, Union, Tuple, Optional, List
 
-from . import utilities as utils
-from .base import BlockArray
+from .base import Array
+from .jacobian.classes import JacobianDict
+from .steady_state.drivers import steady_state
+from .nonlinear import td_solve
+from .jacobian.drivers import get_G
 
 
-# TODO: Refactor .ss, .td, and .jac methods for SimpleBlock and HetBlock to be cleaner so they can be interpreted from
-#   this more abstract representation of what canonical "Block"-like behavior should be
-class Block(object):
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def __init__(self, f):
-        self.f = f
-        self.inputs = set(utils.misc.input_list(f))
-        self.outputs = set(utils.misc.output_list(f))
+class Block(abc.ABC):
+    """The abstract base class for all `Block` objects."""
 
     @abc.abstractmethod
-    def ss(self, *ss_args, **ss_kwargs) -> Dict[str, Union[Real, np.ndarray]]:
-        """Call the block's function attribute `.f` on the pre-processed steady state (keyword) arguments,
-        ensuring that any time displacements will be ignored when `.f` is called.
-        See blocks.support.simple_displacement for an example of how SimpleBlocks do this pre-processing."""
-        return self.f(*ss_args, **ss_kwargs)
+    def __init__(self):
+        pass
 
+    @property
     @abc.abstractmethod
-    def td(self, ss: Dict[str, Real], shock_paths: Dict[str, np.ndarray], **kwargs) -> Dict[str, np.ndarray]:
+    def inputs(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def outputs(self):
+        pass
+
+    # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
+    # input and output argument structure
+    @abc.abstractmethod
+    def steady_state(self, *ss_args, **ss_kwargs) -> Dict[str, Union[Real, Array]]:
         pass
 
     @abc.abstractmethod
-    def jac(self, ss, shock_list, T):
+    def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
+                          shocked_paths: Dict[str, Array], **kwargs) -> Dict[str, Array]:
         pass
 
-
-class Model(object):
-    __metaclass__ = abc.ABCMeta
+    @abc.abstractmethod
+    def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
+                       shocked_paths: Dict[str, Array], **kwargs) -> Dict[str, Array]:
+        pass
 
     @abc.abstractmethod
-    def __init__(self, blocks: BlockArray, exogenous: List[str], unknowns: List[str], targets: List[str]) -> None:
-        self.blocks = blocks
-        self.exogenous = exogenous
-        self.unknowns = unknowns
-        self.targets = targets
+    def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous=None, T=None, **kwargs) -> JacobianDict:
+        pass
 
-        # TODO: Implement standard checks, as in CombinedBlock in SHADE, for cyclic dependence, the right number of
-        #  unknowns and targets etc. to ensure that the model is well-defined.
+    @abc.abstractmethod
+    def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
+                           unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
+                           targets: Union[Array, Dict[str, Union[str, Real]]],
+                           solver: Optional[str] = "", **kwargs) -> Dict[str, Union[Real, Array]]:
+        # What is a consistent interface for passing things to steady_state?
+        # Should change steady_state from expecting a block_list to a *single* Block object
+        # duck-type by checking for attr ".blocks", to signify if is a CombinedBlock
+        # Should try to figure out a nicer way to pass variable kwargs to eval_block_ss to clean that function up
+
+        # Also should change td_solve and get_G to also only expect *single* Block objects, with a deprecation
+        # allowing for lists to be passed, which will then automatically build those lists into CombinedBlocks
+        pass
+
+    @abc.abstractmethod
+    def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
+                                exogenous: Dict[str, Array],
+                                unknowns: List[str], targets: List[str],
+                                in_deviations: Optional[bool] = True, **kwargs) -> Dict[str, Array]:
+        pass
+
+    @abc.abstractmethod
+    def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
+                             exogenous: Dict[str, Array],
+                             unknowns: List[str], targets: List[str],
+                             T: Optional[int] = None, in_deviations: Optional[bool] = True,
+                             **kwargs) -> Dict[str, Array]:
+        pass
+
+    @abc.abstractmethod
+    def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
+                       exogenous: List[str],
+                       unknowns: List[str], targets: List[str],
+                       T: Optional[int] = None, **kwargs) -> Dict[str, Array]:
+        pass
