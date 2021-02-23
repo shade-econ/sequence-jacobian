@@ -39,3 +39,6 @@ class SteadyStateDict:
 
     def aggregates(self):
         return {k: v for k, v in self.data.items() if np.isscalar(v)}
+
+    def idiosyncratic_variables(self):
+        return {k: v for k, v in self.data.items() if not np.isscalar(v)}
