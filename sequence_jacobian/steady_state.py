@@ -1,5 +1,6 @@
 """A general function for computing a model's steady state variables and parameters values"""
 
+import warnings
 import numpy as np
 import scipy.optimize as opt
 from copy import deepcopy
@@ -13,8 +14,9 @@ from .blocks.het_block import HetBlock
 
 # Find the steady state solution
 def steady_state(blocks, calibration, unknowns, targets,
-                 consistency_check=True, ttol=1e-9, ctol=1e-9,
-                 verbose=False, solver=None, solver_kwargs=None,
+                 consistency_check=True, ttol=2e-12, ctol=1e-9,
+                 backward_tol=1e-8, forward_tol=1e-10,
+                 verbose=False, fragile=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
     """
     For a given model (blocks), calibration, unknowns, and targets, solve for the steady state values.
@@ -35,6 +37,12 @@ def steady_state(blocks, calibration, unknowns, targets,
     ctol: `float`
         The tolerance for the consistency check---how close the user wants the computed target values, without the
         use of HelperBlocks, to equal the desired values
+    backward_tol/forward_tol: `float`
+        See `HetBlock` .ss method docstring for details on these additional convergence tolerances
+    verbose: `bool`
+        Display the content of optional print statements within the solver for more responsive feedback
+    fragile: `bool`
+        Throw errors instead of warnings when certain criteria are not met, i.e if the consistency_check fails
     solver: `string`
         The name of the numerical solver that the user would like to user. Can either be a custom solver the user
         implemented, or one of the standard root-finding methods in scipy.optim.root_scalar or scipy.optim.root
@@ -72,7 +80,8 @@ def steady_state(blocks, calibration, unknowns, targets,
                 continue
             else:
                 outputs = eval_block_ss(blocks[i], ss_values, consistency_check=consistency_check,
-                                        ttol=ttol, ctol=ctol, verbose=verbose)
+                                        ttol=ttol, ctol=ctol, backward_tol=backward_tol,
+                                        forward_tol=forward_tol, verbose=verbose)
                 if include_helpers and isinstance(blocks[i], HelperBlock):
                     helper_outputs.update(outputs)
                     ss_values.update(outputs)
@@ -98,7 +107,8 @@ def steady_state(blocks, calibration, unknowns, targets,
 
     # Check that the solution is consistent with what would come out of the DAG without the helper blocks
     if consistency_check:
-        assert abs(np.max(residual(unknown_solutions, include_helpers=False))) < ctol
+        cresid = abs(np.max(residual(unknown_solutions, include_helpers=False)))
+        run_consistency_check(cresid, ctol=ctol, fragile=fragile)
 
     # Update to set the solutions for the steady state values of the unknowns
     ss_values.update(zip(unknowns, utils.misc.make_tuple(unknown_solutions)))
@@ -108,6 +118,20 @@ def steady_state(blocks, calibration, unknowns, targets,
         ss_values.update(eval_block_ss(blocks[i], ss_values, hetoutput=True))
 
     return ss_values
+
+
+def run_consistency_check(cresid, ctol=1e-9, fragile=False):
+    if cresid > ctol:
+        if fragile:
+            raise RuntimeError(f"The target values evaluated for the proposed set of unknowns produce a "
+                               f"maximum residual value of {cresid}, which is greater than the ctol {ctol}.\n"
+                               f" If used, check if HelperBlocks are indeed compatible with the DAG.\n"
+                               f" If this is not an issue, adjust ctol accordingly.")
+        else:
+            warnings.warn(f"The target values evaluated for the proposed set of unknowns produce a "
+                          f"maximum residual value of {cresid}, which is greater than the ctol {ctol}.\n"
+                          f" If used, check if HelperBlocks are indeed compatible with the DAG.\n"
+                          f" If this is not an issue, adjust ctol accordingly.")
 
 
 def find_target_block(blocks, target):
@@ -148,7 +172,8 @@ def compute_target_values(targets, potential_args):
         return target_values
 
 # Analogous to the SHADE workflow of having blocks call utils.apply(self._fss, inputs) but not as general.
-def eval_block_ss(block, potential_args, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False, **kwargs):
+def eval_block_ss(block, potential_args, consistency_check=True, ttol=2e-12, ctol=1e-9,
+                  backward_tol=1e-8, forward_tol=1e-10, verbose=False, **kwargs):
     """
     Evaluate the .ss method of a block, given a dictionary of potential arguments.
 
@@ -165,7 +190,7 @@ def eval_block_ss(block, potential_args, consistency_check=True, ttol=1e-9, ctol
         outputs = {o: output_args[i] for i, o in enumerate(block.output_list)}
     else:  # assume it's a HetBlock or a SolvedBlock
         if isinstance(block, HetBlock):  # since .ss for SolvedBlocks calls the steady_state driver function
-            outputs = block.ss(**input_args, **kwargs)
+            outputs = block.ss(**input_args, backward_tol=backward_tol, forward_tol=forward_tol, **kwargs)
         else:  # since .ss for SolvedBlocks calls the steady_state driver function
             outputs = block.ss(**input_args, consistency_check=consistency_check,
                                ttol=ttol, ctol=ctol, verbose=verbose, **kwargs)
@@ -175,7 +200,7 @@ def eval_block_ss(block, potential_args, consistency_check=True, ttol=1e-9, ctol
 
 def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
                         constrained_method, constrained_kwargs,
-                        tol=1e-9, verbose=False):
+                        tol=2e-12, verbose=False):
     """
     Given a residual function (constructed within steady_state) and a set of bounds or initial values for
     the set of unknowns, solve for the root.
