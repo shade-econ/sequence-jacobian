@@ -17,8 +17,26 @@ def make_tuple(x):
 
 
 def input_list(f):
-    """Return list of function inputs"""
-    return inspect.getfullargspec(f).args
+    """Return list of function inputs (both positional and keyword arguments)"""
+    return list(inspect.signature(f).parameters)
+
+
+def input_arg_list(f):
+    """Return list of function positional arguments *only*"""
+    arg_list = []
+    for p in inspect.signature(f).parameters.values():
+        if p.default == p.empty:
+            arg_list.append(p.name)
+    return arg_list
+
+
+def input_kwarg_list(f):
+    """Return list of function keyword arguments *only*"""
+    kwarg_list = []
+    for p in inspect.signature(f).parameters.values():
+        if p.default != p.empty:
+            kwarg_list.append(p.name)
+    return kwarg_list
 
 
 def output_list(f):
