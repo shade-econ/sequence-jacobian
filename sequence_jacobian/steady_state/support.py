@@ -39,12 +39,6 @@ def run_consistency_check(cresid, ctol=1e-9, fragile=False):
                           f" If this is not an issue, adjust ctol accordingly.")
 
 
-def find_target_block(blocks, target):
-    for block in blocks:
-        if target in blocks.output:
-            return block
-
-
 # Allow targets to be specified in the following formats
 # 1) target = {"asset_mkt": 0} or ["asset_mkt"] (the standard case, where the target = 0)
 # 2) target = {"r": 0.01} (allowing for the target to be non-zero)

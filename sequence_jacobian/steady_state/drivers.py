@@ -7,17 +7,15 @@ from copy import deepcopy
 from .support import compute_target_values, extract_multivariate_initial_values_and_bounds,\
     extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check
 from ..utilities import solvers, graph
-from ..utilities.misc import unprime, dict_diff, smart_zip, smart_zeros, find_blocks_with_hetoutputs, make_tuple
-from ..blocks.simple_block import SimpleBlock
+from ..utilities.misc import dict_diff, smart_zip, smart_zeros, find_blocks_with_hetoutputs,\
+    make_tuple, input_kwarg_list
 from ..blocks.helper_block import HelperBlock
-from ..blocks.het_block import HetBlock
 
 
 # Find the steady state solution
 def steady_state(blocks, calibration, unknowns, targets,
                  consistency_check=True, ttol=2e-12, ctol=1e-9,
-                 backward_tol=1e-8, forward_tol=1e-10,
-                 verbose=False, fragile=False, solver=None, solver_kwargs=None,
+                 block_kwargs=None, verbose=False, fragile=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
     """
     For a given model (blocks), calibration, unknowns, and targets, solve for the steady state values.
@@ -38,8 +36,10 @@ def steady_state(blocks, calibration, unknowns, targets,
     ctol: `float`
         The tolerance for the consistency check---how close the user wants the computed target values, without the
         use of HelperBlocks, to equal the desired values
-    backward_tol/forward_tol: `float`
-        See `HetBlock` .ss method docstring for details on these additional convergence tolerances
+    block_kwargs: `dict`
+        A dict of any kwargs that specify additional settings in order to evaluate block.steady_state for any
+        potential Block object, e.g. HetBlocks have backward_tol and forward_tol settings that are specific to that
+        Block sub-class.
     verbose: `bool`
         Display the content of optional print statements within the solver for more responsive feedback
     fragile: `bool`
@@ -61,6 +61,8 @@ def steady_state(blocks, calibration, unknowns, targets,
     """
 
     # Populate otherwise mutable default arguments
+    if block_kwargs is None:
+        block_kwargs = {}
     if solver_kwargs is None:
         solver_kwargs = {}
     if constrained_kwargs is None:
@@ -81,8 +83,7 @@ def steady_state(blocks, calibration, unknowns, targets,
                 continue
             else:
                 outputs = eval_block_ss(blocks[i], ss_values, consistency_check=consistency_check,
-                                        ttol=ttol, ctol=ctol, backward_tol=backward_tol,
-                                        forward_tol=forward_tol, verbose=verbose)
+                                        ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
                 if include_helpers and isinstance(blocks[i], HelperBlock):
                     helper_outputs.update(outputs)
                     ss_values.update(outputs)
@@ -116,39 +117,20 @@ def steady_state(blocks, calibration, unknowns, targets,
 
     # Find the hetoutputs of the Hetblocks that have hetoutputs
     for i in find_blocks_with_hetoutputs(blocks):
-        ss_values.update(eval_block_ss(blocks[i], ss_values, hetoutput=True))
+        ss_values.update(eval_block_ss(blocks[i], ss_values, hetoutput=True, **block_kwargs))
 
     return ss_values
 
 
-# Analogous to the SHADE workflow of having blocks call utils.apply(self._fss, inputs) but not as general.
-def eval_block_ss(block, potential_args, consistency_check=True, ttol=2e-12, ctol=1e-9,
-                  backward_tol=1e-8, forward_tol=1e-10, verbose=False, **kwargs):
-    """
-    Evaluate the .ss method of a block, given a dictionary of potential arguments.
-
-    Refer to the `steady_state` function docstring for information on args/kwargs
-
-    return: A `dict` of output names (as `str`) and output values from evaluating the .ss method of a block
-    """
-    input_args = {unprime(arg_name): potential_args[unprime(arg_name)] for arg_name in block.inputs}
-
-    # Simple and HetBlocks require different handling of block.ss() output since
-    # SimpleBlocks return a tuple of un-labeled arguments, whereas HetBlocks return dictionaries
-    if isinstance(block, SimpleBlock) or isinstance(block, HelperBlock):
-        outputs = block.steady_state(input_args, **kwargs)
-    elif isinstance(block, HetBlock):
-        outputs = block.steady_state(input_args, backward_tol=backward_tol, forward_tol=forward_tol, **kwargs)
-    else:  # since .ss for SolvedBlocks calls the steady_state driver function
-        outputs = block.steady_state(input_args, consistency_check=consistency_check,
-                                     ttol=ttol, ctol=ctol, verbose=verbose, **kwargs)
-
-    return outputs
+def eval_block_ss(block, calibration, **kwargs):
+    """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
+    return block.steady_state({k: v for k, v in calibration.items() if k in block.inputs},
+                              **{k: v for k, v in kwargs.items() if k in input_kwarg_list(block.steady_state)})
 
 
 def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
                         constrained_method, constrained_kwargs,
-                        tol=1e-9, verbose=False):
+                        tol=2e-12, verbose=False):
     """
     Given a residual function (constructed within steady_state) and a set of bounds or initial values for
     the set of unknowns, solve for the root.
