@@ -1,30 +1,63 @@
 """Primitives to provide clarity and structure on blocks/models work"""
 
 import abc
+from abc import ABCMeta as NativeABCMeta
 from numbers import Real
-from typing import Dict, Union, Tuple, Optional, List
+from typing import Any, Dict, Union, Tuple, Optional, List
 
-from .base import Array
 from .jacobian.classes import JacobianDict
-from .steady_state.drivers import steady_state
-from .nonlinear import td_solve
-from .jacobian.drivers import get_G
+
+# Basic types
+Array = Any
 
 
-class Block(abc.ABC):
+###############################################################################
+# Because abc doesn't implement "abstract attribute"s
+# https://stackoverflow.com/questions/23831510/abstract-attribute-not-property
+class DummyAttribute:
+    pass
+
+
+def abstract_attribute(obj=None):
+    if obj is None:
+        obj = DummyAttribute()
+    obj.__is_abstract_attribute__ = True
+    return obj
+
+
+class ABCMeta(NativeABCMeta):
+
+    def __call__(cls, *args, **kwargs):
+        instance = NativeABCMeta.__call__(cls, *args, **kwargs)
+        abstract_attributes = {
+            name
+            for name in dir(instance)
+            if getattr(getattr(instance, name), '__is_abstract_attribute__', False)
+        }
+        if abstract_attributes:
+            raise NotImplementedError(
+                "Can't instantiate abstract class {} with"
+                " abstract attributes: {}".format(
+                    cls.__name__,
+                    ', '.join(abstract_attributes)
+                )
+            )
+        return instance
+###############################################################################
+
+
+class Block(abc.ABC, metaclass=ABCMeta):
     """The abstract base class for all `Block` objects."""
 
     @abc.abstractmethod
     def __init__(self):
         pass
 
-    @property
-    @abc.abstractmethod
+    @abstract_attribute
     def inputs(self):
         pass
 
-    @property
-    @abc.abstractmethod
+    @abstract_attribute
     def outputs(self):
         pass
 
@@ -53,13 +86,6 @@ class Block(abc.ABC):
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]],
                            solver: Optional[str] = "", **kwargs) -> Dict[str, Union[Real, Array]]:
-        # What is a consistent interface for passing things to steady_state?
-        # Should change steady_state from expecting a block_list to a *single* Block object
-        # duck-type by checking for attr ".blocks", to signify if is a CombinedBlock
-        # Should try to figure out a nicer way to pass variable kwargs to eval_block_ss to clean that function up
-
-        # Also should change td_solve and get_G to also only expect *single* Block objects, with a deprecation
-        # allowing for lists to be passed, which will then automatically build those lists into CombinedBlocks
         pass
 
     @abc.abstractmethod
