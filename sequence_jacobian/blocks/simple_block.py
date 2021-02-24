@@ -2,6 +2,7 @@ import warnings
 import numpy as np
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
+from ..primitives import Block
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
 
@@ -14,7 +15,7 @@ def simple(f):
     return SimpleBlock(f)
 
 
-class SimpleBlock:
+class SimpleBlock(Block):
     """Generated from simple block written in Dynare-ish style and decorated with @simple, e.g.
     
     @simple
@@ -168,6 +169,20 @@ class SimpleBlock:
                     del J[o]
 
             return JacobianDict(J)
+
+    def solve_steady_state(self, calibration, unknowns, targets, solver="", **kwargs):
+        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, **kwargs)
+
+    def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets,
+                                in_deviations=True, **kwargs):
+        pass
+
+    def solve_impulse_linear(self, ss, exogenous, unknowns, targets,
+                             T=None, in_deviations=True, **kwargs):
+        pass
+
+    def solve_jacobian(self, ss, exogenous, unknowns, targets, T=None, **kwargs):
+        pass
 
 
 def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):

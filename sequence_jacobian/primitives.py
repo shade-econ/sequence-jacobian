@@ -5,6 +5,9 @@ from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 
+from .steady_state.drivers import steady_state
+from .nonlinear import td_solve
+from .jacobian.drivers import get_G
 from .jacobian.classes import JacobianDict
 
 # Basic types
@@ -86,7 +89,10 @@ class Block(abc.ABC, metaclass=ABCMeta):
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]],
                            solver: Optional[str] = "", **kwargs) -> Dict[str, Union[Real, Array]]:
-        pass
+        if hasattr(self, "blocks_w_helpers"):
+            return steady_state(self.blocks_w_helpers, calibration, unknowns, targets, solver=solver, **kwargs)
+        else:
+            return steady_state([self], calibration, unknowns, targets, solver=solver, **kwargs)
 
     @abc.abstractmethod
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],

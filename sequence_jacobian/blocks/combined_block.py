@@ -3,8 +3,9 @@
 from copy import deepcopy
 import numpy as np
 
+from ..primitives import Block
 from .. import utilities as utils
-from ..steady_state.drivers import eval_block_ss, steady_state
+from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..nonlinear import td_solve
 from ..jacobian.drivers import get_G
@@ -17,7 +18,7 @@ def combine(*args, name="", model_alias=False):
     return CombinedBlock(*args, name=name, model_alias=model_alias)
 
 
-class CombinedBlock:
+class CombinedBlock(Block):
     """A combined `Block` object comprised of several `Block` objects, which topologically sorts them and provides
     a set of partial and general equilibrium methods for evaluating their steady state, computes impulse responses,
     and calculates Jacobians along the DAG"""
@@ -144,8 +145,8 @@ class CombinedBlock:
 
         if solver is None:
             solver = provide_solver_default(unknowns)
-        ss_gen_eq = steady_state(self.blocks_w_helpers, calibration, unknowns, targets, solver=solver, **kwargs)
-        return ss_gen_eq
+
+        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, **kwargs)
 
     def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets, in_deviations=True, **kwargs):
         """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
