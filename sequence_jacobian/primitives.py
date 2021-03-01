@@ -3,10 +3,9 @@
 import numpy as np
 import abc
 from numbers import Real
-from typing import Dict, Union, List
+from typing import Dict, Union
 
 from . import utilities as utils
-from .base import BlockArray
 
 
 # TODO: Refactor .ss, .td, and .jac methods for SimpleBlock and HetBlock to be cleaner so they can be interpreted from
@@ -34,17 +33,3 @@ class Block(object):
     @abc.abstractmethod
     def jac(self, ss, shock_list, T):
         pass
-
-
-class Model(object):
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def __init__(self, blocks: BlockArray, exogenous: List[str], unknowns: List[str], targets: List[str]) -> None:
-        self.blocks = blocks
-        self.exogenous = exogenous
-        self.unknowns = unknowns
-        self.targets = targets
-
-        # TODO: Implement standard checks, as in CombinedBlock in SHADE, for cyclic dependence, the right number of
-        #  unknowns and targets etc. to ensure that the model is well-defined.
