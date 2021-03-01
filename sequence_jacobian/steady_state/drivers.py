@@ -6,9 +6,7 @@ from copy import deepcopy
 
 from .support import compute_target_values, extract_multivariate_initial_values_and_bounds,\
     extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check
-from ..utilities import solvers, graph
-from ..utilities.misc import dict_diff, smart_zip, smart_zeros, find_blocks_with_hetoutputs,\
-    make_tuple, input_kwarg_list
+from ..utilities import solvers, graph, misc
 from ..blocks.helper_block import HelperBlock
 
 
@@ -72,7 +70,7 @@ def steady_state(blocks, calibration, unknowns, targets,
     topsorted = graph.block_sort(blocks, calibration=calibration)
 
     def residual(unknown_values, include_helpers=True, update_unknowns_inplace=False):
-        ss_values.update(smart_zip(unknowns.keys(), unknown_values))
+        ss_values.update(misc.smart_zip(unknowns.keys(), unknown_values))
 
         helper_outputs = {}
 
@@ -90,14 +88,14 @@ def steady_state(blocks, calibration, unknowns, targets,
                 else:
                     # Don't overwrite entries in ss_values corresponding to what has already
                     # been solved for in helper_blocks so we can check for consistency after-the-fact
-                    ss_values.update(dict_diff(outputs, helper_outputs))
+                    ss_values.update(misc.dict_diff(outputs, helper_outputs))
 
         # Update the "unknowns" dictionary *in place* with its steady state values.
         # i.e. the "unknowns" in the namespace in which this function is invoked will change!
         # Useful for a) if the unknown values are updated while iterating each blocks' ss computation within the DAG,
         # and/or b) if the user wants to update "unknowns" in place for use in other computations.
         if update_unknowns_inplace:
-            unknowns.update(smart_zip(unknowns.keys(), [ss_values[key] for key in unknowns.keys()]))
+            unknowns.update(misc.smart_zip(unknowns.keys(), [ss_values[key] for key in unknowns.keys()]))
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
         # dict of ss_values to compute the "unknown_solutions"
@@ -113,10 +111,10 @@ def steady_state(blocks, calibration, unknowns, targets,
         run_consistency_check(cresid, ctol=ctol, fragile=fragile)
 
     # Update to set the solutions for the steady state values of the unknowns
-    ss_values.update(zip(unknowns, make_tuple(unknown_solutions)))
+    ss_values.update(zip(unknowns, misc.make_tuple(unknown_solutions)))
 
     # Find the hetoutputs of the Hetblocks that have hetoutputs
-    for i in find_blocks_with_hetoutputs(blocks):
+    for i in misc.find_blocks_with_hetoutputs(blocks):
         ss_values.update(eval_block_ss(blocks[i], ss_values, hetoutput=True, **block_kwargs))
 
     return ss_values
@@ -125,7 +123,7 @@ def steady_state(blocks, calibration, unknowns, targets,
 def eval_block_ss(block, calibration, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
     return block.steady_state({k: v for k, v in calibration.items() if k in block.inputs},
-                              **{k: v for k, v in kwargs.items() if k in input_kwarg_list(block.steady_state)})
+                              **{k: v for k, v in kwargs.items() if k in misc.input_kwarg_list(block.steady_state)})
 
 
 def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
@@ -211,7 +209,7 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         # Call residual() once to update ss_values and to check the targets match the provided solution.
         # The initial value passed into residual (np.zeros()) in this case is irrelevant, but something
         # must still be passed in since the residual function requires an argument.
-        assert abs(np.max(residual(smart_zeros(len(unknowns)), update_unknowns_inplace=True))) < tol
+        assert abs(np.max(residual(misc.smart_zeros(len(unknowns)), update_unknowns_inplace=True))) < tol
         unknown_solutions = list(unknowns.values())
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")

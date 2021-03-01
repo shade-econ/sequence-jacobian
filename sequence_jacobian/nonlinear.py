@@ -2,15 +2,14 @@
 
 import numpy as np
 
-from . import utilities as utils
-from .blocks import het_block as het
+from .utilities import misc, graph
 from .jacobian.drivers import get_H_U
 from .jacobian.support import pack_vectors, unpack_vectors
 
 from .devtools.deprecate import deprecated_shock_input_convention
 
 
-def td_solve(ss, block_list, unknowns, targets, exogenous=None, H_U=None, H_U_factored=None, monotonic=False,
+def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_factored=None, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False,
              grid_paths=None, **kwargs):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
@@ -19,8 +18,8 @@ def td_solve(ss, block_list, unknowns, targets, exogenous=None, H_U=None, H_U_fa
     
     Parameters
     ----------
-    ss              : dict, all steady-state information
     block_list      : list, blocks in model (SimpleBlocks or HetBlocks)
+    ss              : dict, all steady-state information
     unknowns        : list, unknowns of SHADE DAG, the 'U' in H(U, Z)
     targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
     exogenous       : dict, all shocked Z go here, must all have same length T
@@ -60,14 +59,14 @@ def td_solve(ss, block_list, unknowns, targets, exogenous=None, H_U=None, H_U_fa
         if H_U is None:
             # not even H_U is supplied, get it (costly if there are HetBlocks)
             H_U = get_H_U(block_list, unknowns, targets, T, ss, save=save, use_saved=use_saved)
-        H_U_factored = utils.misc.factor(H_U)
+        H_U_factored = misc.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
-    sort = utils.graph.block_sort(block_list, ignore_helpers=True)
+    sort = graph.block_sort(block_list, ignore_helpers=True)
 
     # iterate until convergence
     for it in range(maxit):
-        results = td_map(ss, block_list, sort=sort, monotonic=monotonic, returnindividual=returnindividual,
+        results = td_map(block_list, ss, sort=sort, monotonic=monotonic, returnindividual=returnindividual,
                          grid_paths=grid_paths, **exogenous, **Us)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if verbose:
@@ -79,7 +78,7 @@ def td_solve(ss, block_list, unknowns, targets, exogenous=None, H_U=None, H_U_fa
         else:
             # update guess U by -H_U^(-1) times errors H
             Hvec = pack_vectors(results, targets, T)
-            Uvec -= utils.misc.factored_solve(H_U_factored, Hvec)
+            Uvec -= misc.factored_solve(H_U_factored, Hvec)
             Us = unpack_vectors(Uvec, unknowns, T)
     else:
         raise ValueError(f'No convergence after {maxit} backward iterations!')
@@ -87,7 +86,7 @@ def td_solve(ss, block_list, unknowns, targets, exogenous=None, H_U=None, H_U_fa
     return results
 
 
-def td_map(ss, block_list, exogenous=None, sort=None, monotonic=False, returnindividual=False,
+def td_map(block_list, ss, exogenous=None, sort=None, monotonic=False, returnindividual=False,
            grid_paths=None, **kwargs):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
     
@@ -99,13 +98,8 @@ def td_map(ss, block_list, exogenous=None, sort=None, monotonic=False, returnind
 
     # first get topological sort if none already provided
     if sort is None:
-        sort = utils.graph.block_sort(block_list, ignore_helpers=True)
+        sort = graph.block_sort(block_list, ignore_helpers=True)
 
-    # TODO: Seems a bit weird that you pass variables ad hoc from the top-level
-    #   e.g. calling nonlinear.td_solve() with rstar as a kwarg in one asset HANK.
-    #   look more into why this is done and if it could be done better.
-    # TODO: Rename the various references to kwargs/results to be more informative
-    #   if we do end up keeping this top-level functionality for passing in variables
     # initialize results
     results = exogenous
     for n in sort:
@@ -116,8 +110,9 @@ def td_map(ss, block_list, exogenous=None, sort=None, monotonic=False, returnind
             raise ValueError(f'Block {block} outputting already-present outputs {block.outputs & results.keys()}')
 
         # if any input to the block has changed, run the block
-        blockoptions = hetoptions if isinstance(block, het.HetBlock) else {}
         if not block.inputs.isdisjoint(results):
-            results.update(block.td(ss, **blockoptions, **{k: results[k] for k in block.inputs if k in results}))
+            results.update(block.impulse_nonlinear(ss, **{k: v for k, v in hetoptions.items()
+                                                          if k in misc.input_kwarg_list(block.impulse_nonlinear)},
+                                                   **{k: results[k] for k in block.inputs if k in results}))
 
     return results

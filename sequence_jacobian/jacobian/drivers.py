@@ -5,7 +5,6 @@ import numpy as np
 from .classes import JacobianDict
 from .support import pack_vectors, unpack_vectors
 from ..utilities import misc, graph
-from ..blocks.simple_block import SimpleBlock
 
 '''Drivers: 
     - get_H_U               : get H_U matrix mapping all unknowns to all targets
@@ -213,11 +212,9 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, save=False, use_saved=Fal
     for num in topsorted:
         block = block_list[num]
 
-        if hasattr(block, 'jac'):
-            if isinstance(block, SimpleBlock):
-                jac = block.jac(ss, shock_list=list(shocks))
-            else:
-                jac = block.jac(ss, shock_list=list(shocks), T=T, save=save, use_saved=use_saved)
+        if hasattr(block, 'jacobian'):
+            jac = block.jacobian(ss, shock_list=list(shocks), **{k: v for k, v in {"T": T, "save": save, "use_saved": use_saved}
+                                                                 if k in misc.input_kwarg_list(block.jacobian)})
         else:
             # doesn't have 'jac', must be nested dict that is jac directly
             jac = block

@@ -84,7 +84,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous=None, T=None, **kwargs) -> JacobianDict:
         pass
 
-    @abc.abstractmethod
+    # TODO: Implement this as a concrete method
+    # @abc.abstractmethod
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]],
