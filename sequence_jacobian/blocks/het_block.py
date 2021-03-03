@@ -509,7 +509,7 @@ class HetBlock:
             # 2) objects computed within hetoutput that enter into hetoutput's aggregation (self.hetoutput.outputs)
             # 3) D, the cross-sectional distribution of agents, which is used in the hetoutput aggregation
             # but is computed after the backward iteration
-            self.inputs |= (self.hetoutput_inputs - self.back_step_outputs - self.hetoutput_outputs - set("D"))
+            self.inputs |= (self.hetoutput_inputs - self.hetinput_outputs - self.back_step_outputs - self.hetoutput_outputs - set("D"))
             # Modify the HetBlock's outputs to include the aggregated hetoutputs
             self.outputs |= set([o.capitalize() for o in self.hetoutput_outputs])
 
