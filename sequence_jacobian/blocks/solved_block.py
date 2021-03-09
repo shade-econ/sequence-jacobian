@@ -1,12 +1,10 @@
 import warnings
 
 from .. import nonlinear
-from ..steady_state import steady_state
+from ..steady_state.drivers import steady_state
 from ..jacobian.drivers import get_G
 from ..jacobian.classes import JacobianDict
 from ..blocks.simple_block import simple
-
-from ..devtools.deprecate import deprecated_shock_input_convention
 
 
 def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name=""):
@@ -79,15 +77,13 @@ class SolvedBlock:
                                 solver=self.solver, **self.solver_kwargs)
 
     def impulse_nonlinear(self, ss, exogenous=None, monotonic=False,
-                          returnindividual=False, verbose=False, **kwargs):
-        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
-
+                          returnindividual=False, verbose=False):
         # TODO: add H_U_factored caching of some kind
-        # also, inefficient since we are repeatedly starting from the steady state, need option
-        # to provide a guess (not a big deal with just SimpleBlocks, of course)
-        return nonlinear.td_solve(ss, self.block_list, list(self.unknowns.keys()), self.targets,
-                                  exogenous=exogenous, monotonic=monotonic,
-                                  returnindividual=returnindividual, verbose=verbose)
+        #   also, inefficient since we are repeatedly starting from the steady state, need option
+        #   to provide a guess (not a big deal with just SimpleBlocks, of course)
+        return nonlinear.td_solve(self.block_list, ss, exogenous=exogenous,
+                                  unknowns=list(self.unknowns.keys()), targets=self.targets,
+                                  monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
     def impulse_linear(self, ss, exogenous, T=None):
         if T is None:
@@ -99,7 +95,7 @@ class SolvedBlock:
 
         return self.jacobian(ss, list(exogenous.keys()), T=T).apply(exogenous)
 
-    def jacobian(self, ss, exogenous, T, output_list=None, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous, T=300, output_list=None, save=False, use_saved=False):
         relevant_shocks = [i for i in self.inputs if i in exogenous]
 
         if not relevant_shocks:

@@ -1,35 +1,143 @@
 """Primitives to provide clarity and structure on blocks/models work"""
 
-import numpy as np
 import abc
+from abc import ABCMeta as NativeABCMeta
 from numbers import Real
-from typing import Dict, Union
+from typing import Any, Dict, Union, Tuple, Optional, List
+import numpy as np
 
-from . import utilities as utils
+from .steady_state.drivers import steady_state
+from .nonlinear import td_solve
+from .jacobian.drivers import get_impulse, get_G
+from .jacobian.classes import JacobianDict
+
+# Basic types
+Array = Any
 
 
-# TODO: Refactor .ss, .td, and .jac methods for SimpleBlock and HetBlock to be cleaner so they can be interpreted from
-#   this more abstract representation of what canonical "Block"-like behavior should be
-class Block(object):
-    __metaclass__ = abc.ABCMeta
+###############################################################################
+# Because abc doesn't implement "abstract attribute"s
+# https://stackoverflow.com/questions/23831510/abstract-attribute-not-property
+class DummyAttribute:
+    pass
+
+
+def abstract_attribute(obj=None):
+    if obj is None:
+        obj = DummyAttribute()
+    obj.__is_abstract_attribute__ = True
+    return obj
+
+
+class ABCMeta(NativeABCMeta):
+
+    def __call__(cls, *args, **kwargs):
+        instance = NativeABCMeta.__call__(cls, *args, **kwargs)
+        abstract_attributes = {
+            name
+            for name in dir(instance)
+            if getattr(getattr(instance, name), '__is_abstract_attribute__', False)
+        }
+        if abstract_attributes:
+            raise NotImplementedError(
+                "Can't instantiate abstract class {} with"
+                " abstract attributes: {}".format(
+                    cls.__name__,
+                    ', '.join(abstract_attributes)
+                )
+            )
+        return instance
+###############################################################################
+
+
+class Block(abc.ABC, metaclass=ABCMeta):
+    """The abstract base class for all `Block` objects."""
 
     @abc.abstractmethod
-    def __init__(self, f):
-        self.f = f
-        self.inputs = set(utils.misc.input_list(f))
-        self.outputs = set(utils.misc.output_list(f))
+    def __init__(self):
+        pass
 
-    @abc.abstractmethod
-    def ss(self, *ss_args, **ss_kwargs) -> Dict[str, Union[Real, np.ndarray]]:
-        """Call the block's function attribute `.f` on the pre-processed steady state (keyword) arguments,
-        ensuring that any time displacements will be ignored when `.f` is called.
-        See blocks.support.simple_displacement for an example of how SimpleBlocks do this pre-processing."""
-        return self.f(*ss_args, **ss_kwargs)
+    @abstract_attribute
+    def inputs(self):
+        pass
 
+    @abstract_attribute
+    def outputs(self):
+        pass
+
+    # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
+    # input and output argument structure
     @abc.abstractmethod
-    def td(self, ss: Dict[str, Real], shock_paths: Dict[str, np.ndarray], **kwargs) -> Dict[str, np.ndarray]:
+    def steady_state(self, *ss_args, **ss_kwargs) -> Dict[str, Union[Real, Array]]:
         pass
 
     @abc.abstractmethod
-    def jac(self, ss, shock_list, T):
+    def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
+                          exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
         pass
+
+    @abc.abstractmethod
+    def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
+                       exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
+        pass
+
+    @abc.abstractmethod
+    def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous=None, T=None, **kwargs) -> JacobianDict:
+        pass
+
+    def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
+                           unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
+                           targets: Union[Array, Dict[str, Union[str, Real]]],
+                           solver: Optional[str] = "", **kwargs) -> Dict[str, Union[Real, Array]]:
+        """Evaluate a general equilibrium steady state of Block given a `calibration`
+        and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
+        the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks_w_helpers if hasattr(self, "blocks_w_helpers") else [self]
+        return steady_state(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
+
+    def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
+                                exogenous: Dict[str, Array],
+                                unknowns: List[str], targets: List[str],
+                                in_deviations: Optional[bool] = True, **kwargs) -> Dict[str, Array]:
+        """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        irf_nonlin_gen_eq = td_solve(blocks, ss,
+                                     exogenous={k: ss[k] + v for k, v in exogenous.items()},
+                                     unknowns=unknowns, targets=targets, **kwargs)
+
+        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
+        # the level deviations from zero.
+        if in_deviations:
+            return {k: v/ss[k] - 1 if not np.isclose(ss[k], 0) else v for k, v in irf_nonlin_gen_eq.items()}
+        else:
+            return irf_nonlin_gen_eq
+
+    def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
+                             exogenous: Dict[str, Array],
+                             unknowns: List[str], targets: List[str],
+                             T: Optional[int] = None, in_deviations: Optional[bool] = True,
+                             **kwargs) -> Dict[str, Array]:
+        """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
+
+        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
+        # the level deviations from zero.
+        if in_deviations:
+            return {k: v/ss[k] if not np.isclose(ss[k], 0) else v for k, v in irf_lin_gen_eq.items()}
+        else:
+            return irf_lin_gen_eq
+
+    def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
+                       exogenous: List[str],
+                       unknowns: List[str], targets: List[str],
+                       T: Optional[int] = None, **kwargs) -> JacobianDict:
+        """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
+        at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)

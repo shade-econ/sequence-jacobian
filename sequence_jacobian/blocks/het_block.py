@@ -2,10 +2,9 @@ import warnings
 import copy
 import numpy as np
 
+from ..primitives import Block
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
-
-from ..devtools.deprecate import deprecated_shock_input_convention
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -14,7 +13,7 @@ def het(exogenous, policy, backward, backward_init=None):
     return decorator
 
 
-class HetBlock:
+class HetBlock(Block):
     """Part 1: Initializer for HetBlock, intended to be called via @het() decorator on backward step function.
 
     IMPORTANT: All `policy` and non-aggregate output variables of this HetBlock need to be *lower-case*, since
@@ -251,8 +250,7 @@ class HetBlock:
 
         return ss
 
-    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, returnindividual=False,
-                          grid_paths=None, **kwargs):
+    def impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -263,6 +261,9 @@ class HetBlock:
         ----------
         ss : dict
             all steady-state info, intended to be from .ss()
+        exogenous : dict of {str : array(T, ...)}
+            all time-varying inputs here, with first dimension being time
+            this must have same length T for all entries (all outputs will be calculated up to T)
         monotonic : [optional] bool
             flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
@@ -270,9 +271,6 @@ class HetBlock:
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
-        exogenous : dict of {str : array(T, ...)}
-            all time-varying inputs here, with first dimension being time
-            this must have same length T for all entries (all outputs will be calculated up to T)
 
         Returns
         ----------
@@ -282,8 +280,6 @@ class HetBlock:
             if returnindividual = True, additionally time paths for distribution and for all outputs
                 of self.back_Step_fun on the full grid
         """
-        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
-
         # infer T from exogenous, check that all shocks have same length
         shock_lengths = [x.shape[0] for x in exogenous.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
@@ -372,7 +368,7 @@ class HetBlock:
 
         return self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous)
 
-    def jacobian(self, ss, exogenous, T, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -401,6 +397,8 @@ class HetBlock:
         """
         # The default set of outputs are all outputs of the backward iteration function
         # except for the backward iteration variables themselves
+        if exogenous is None:
+            exogenous = list(self.inputs)
         if output_list is None:
             output_list = self.non_back_iter_outputs
 

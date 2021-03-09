@@ -2,10 +2,9 @@ import warnings
 import numpy as np
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
+from ..primitives import Block
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
-
-from ..devtools.deprecate import deprecated_shock_input_convention
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
@@ -14,7 +13,7 @@ def simple(f):
     return SimpleBlock(f)
 
 
-class SimpleBlock:
+class SimpleBlock(Block):
     """Generated from simple block written in Dynare-ish style and decorated with @simple, e.g.
     
     @simple
@@ -66,9 +65,9 @@ class SimpleBlock:
         else:
             return dict(zip(self.output_list, [misc.numeric_primitive(self.f(**kwargs))]))
 
-    def steady_state(self, calibration, **kwargs):
+    def steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items()}
-        return self._output_in_ss_format(**input_args, **kwargs)
+        return self._output_in_ss_format(**input_args)
 
     def _output_in_td_format(self, **kwargs_new):
         """Returns output of the method td as a dict mapping output names to numeric primitives (scalars/vectors)
@@ -90,9 +89,7 @@ class SimpleBlock:
         else:
             return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
-    def impulse_nonlinear(self, ss, exogenous=None, **kwargs):
-        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
-
+    def impulse_nonlinear(self, ss, exogenous):
         input_args = {}
         for k, v in exogenous.items():
             if np.isscalar(v):

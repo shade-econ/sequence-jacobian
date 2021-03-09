@@ -3,10 +3,10 @@
 from copy import deepcopy
 import numpy as np
 
+from ..primitives import Block
 from .. import utilities as utils
-from ..steady_state import eval_block_ss, steady_state, provide_solver_default
-from ..nonlinear import td_solve
-from ..jacobian.drivers import get_G
+from ..steady_state.drivers import eval_block_ss
+from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
 from ..blocks.het_block import HetBlock
 
@@ -16,7 +16,7 @@ def combine(*args, name="", model_alias=False):
     return CombinedBlock(*args, name=name, model_alias=model_alias)
 
 
-class CombinedBlock:
+class CombinedBlock(Block):
     """A combined `Block` object comprised of several `Block` objects, which topologically sorts them and provides
     a set of partial and general equilibrium methods for evaluating their steady state, computes impulse responses,
     and calculates Jacobians along the DAG"""
@@ -143,48 +143,5 @@ class CombinedBlock:
 
         if solver is None:
             solver = provide_solver_default(unknowns)
-        ss_gen_eq = steady_state(self.blocks_w_helpers, calibration, unknowns, targets, solver=solver, **kwargs)
-        return ss_gen_eq
 
-    def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets, in_deviations=True, **kwargs):
-        """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
-        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
-        variables to be solved for and the target conditions that must hold in general equilibrium"""
-        irf_nonlin_gen_eq = td_solve(ss, self.blocks, unknowns, targets,
-                                     exogenous={k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
-
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] - 1 if not np.isclose(ss[k], 0) else v for k, v in irf_nonlin_gen_eq.items()}
-        else:
-            return irf_nonlin_gen_eq
-
-    def solve_impulse_linear(self, ss, exogenous, unknowns, targets, T=None, in_deviations=True, **kwargs):
-        """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
-        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
-        variables to be solved for and the target conditions that must hold in general equilibrium"""
-        if T is None:
-            # infer T from exogenous, check that all shocks have same length
-            shock_lengths = [x.shape[0] for x in exogenous.values()]
-            if shock_lengths[1:] != shock_lengths[:-1]:
-                raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-            T = shock_lengths[0]
-
-        J_gen_eq = get_G(self.blocks, list(exogenous.keys()), unknowns, targets, T=T, ss=ss, **kwargs)
-        irf_lin_gen_eq = J_gen_eq.apply(exogenous)
-
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] if not np.isclose(ss[k], 0) else v for k, v in irf_lin_gen_eq.items()}
-        else:
-            return irf_lin_gen_eq
-
-    def solve_jacobian(self, ss, exogenous, unknowns, targets, T=None, **kwargs):
-        """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
-        at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
-        variables to be solved for and the target conditions that must hold in general equilibrium"""
-        J_gen_eq = get_G(self.blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
-        return J_gen_eq
-
+        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, **kwargs)
