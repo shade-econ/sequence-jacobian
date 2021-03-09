@@ -4,10 +4,11 @@ import abc
 from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
+import numpy as np
 
 from .steady_state.drivers import steady_state
 from .nonlinear import td_solve
-from .jacobian.drivers import get_G
+from .jacobian.drivers import get_impulse, get_G
 from .jacobian.classes import JacobianDict
 
 # Basic types
@@ -72,47 +73,71 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
     @abc.abstractmethod
     def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
-                          shocked_paths: Dict[str, Array], **kwargs) -> Dict[str, Array]:
+                          exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
         pass
 
     @abc.abstractmethod
     def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
-                       shocked_paths: Dict[str, Array], **kwargs) -> Dict[str, Array]:
+                       exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
         pass
 
     @abc.abstractmethod
     def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous=None, T=None, **kwargs) -> JacobianDict:
         pass
 
-    # TODO: Implement this as a concrete method
-    # @abc.abstractmethod
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]],
                            solver: Optional[str] = "", **kwargs) -> Dict[str, Union[Real, Array]]:
-        if hasattr(self, "blocks_w_helpers"):
-            return steady_state(self.blocks_w_helpers, calibration, unknowns, targets, solver=solver, **kwargs)
-        else:
-            return steady_state([self], calibration, unknowns, targets, solver=solver, **kwargs)
+        """Evaluate a general equilibrium steady state of Block given a `calibration`
+        and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
+        the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks_w_helpers if hasattr(self, "blocks_w_helpers") else [self]
+        return steady_state(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
-    @abc.abstractmethod
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],
                                 unknowns: List[str], targets: List[str],
                                 in_deviations: Optional[bool] = True, **kwargs) -> Dict[str, Array]:
-        pass
+        """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        irf_nonlin_gen_eq = td_solve(blocks, ss,
+                                     exogenous={k: ss[k] + v for k, v in exogenous.items()},
+                                     unknowns=unknowns, targets=targets, **kwargs)
 
-    @abc.abstractmethod
+        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
+        # the level deviations from zero.
+        if in_deviations:
+            return {k: v/ss[k] - 1 if not np.isclose(ss[k], 0) else v for k, v in irf_nonlin_gen_eq.items()}
+        else:
+            return irf_nonlin_gen_eq
+
     def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
                              exogenous: Dict[str, Array],
                              unknowns: List[str], targets: List[str],
                              T: Optional[int] = None, in_deviations: Optional[bool] = True,
                              **kwargs) -> Dict[str, Array]:
-        pass
+        """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
 
-    @abc.abstractmethod
+        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
+        # the level deviations from zero.
+        if in_deviations:
+            return {k: v/ss[k] if not np.isclose(ss[k], 0) else v for k, v in irf_lin_gen_eq.items()}
+        else:
+            return irf_lin_gen_eq
+
     def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
                        exogenous: List[str],
                        unknowns: List[str], targets: List[str],
-                       T: Optional[int] = None, **kwargs) -> Dict[str, Array]:
-        pass
+                       T: Optional[int] = None, **kwargs) -> JacobianDict:
+        """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
+        at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)

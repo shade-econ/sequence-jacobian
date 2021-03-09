@@ -89,7 +89,7 @@ class SimpleBlock(Block):
         else:
             return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
-    def impulse_nonlinear(self, ss, exogenous=None):
+    def impulse_nonlinear(self, ss, exogenous):
         input_args = {}
         for k, v in exogenous.items():
             if np.isscalar(v):
@@ -165,22 +165,6 @@ class SimpleBlock(Block):
                     del J[o]
 
             return JacobianDict(J)
-
-    def solve_steady_state(self, calibration, unknowns, targets, solver="", **kwargs):
-        input_args = {k: ignore(v) for k, v in calibration.items() if k in self.inputs}
-        ss = super().solve_steady_state(input_args, unknowns, targets, solver=solver, **kwargs)
-        return {k: misc.numeric_primitive(v) for k, v in ss.items()}
-
-    def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets,
-                                in_deviations=True, **kwargs):
-        pass
-
-    def solve_impulse_linear(self, ss, exogenous, unknowns, targets,
-                             T=None, in_deviations=True, **kwargs):
-        pass
-
-    def solve_jacobian(self, ss, exogenous, unknowns, targets, T=None, **kwargs):
-        pass
 
 
 def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):
