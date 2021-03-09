@@ -2,6 +2,7 @@ import warnings
 import copy
 import numpy as np
 
+from ..primitives import Block
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
 
@@ -12,7 +13,7 @@ def het(exogenous, policy, backward, backward_init=None):
     return decorator
 
 
-class HetBlock:
+class HetBlock(Block):
     """Part 1: Initializer for HetBlock, intended to be called via @het() decorator on backward step function.
 
     IMPORTANT: All `policy` and non-aggregate output variables of this HetBlock need to be *lower-case*, since
@@ -249,8 +250,7 @@ class HetBlock:
 
         return ss
 
-    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, returnindividual=False,
-                          grid_paths=None):
+    def impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -368,7 +368,7 @@ class HetBlock:
 
         return self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous)
 
-    def jacobian(self, ss, exogenous, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -397,6 +397,8 @@ class HetBlock:
         """
         # The default set of outputs are all outputs of the backward iteration function
         # except for the backward iteration variables themselves
+        if exogenous is None:
+            exogenous = list(self.inputs)
         if output_list is None:
             output_list = self.non_back_iter_outputs
 
