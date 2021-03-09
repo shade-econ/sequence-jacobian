@@ -6,12 +6,10 @@ from .utilities import misc, graph
 from .jacobian.drivers import get_H_U
 from .jacobian.support import pack_vectors, unpack_vectors
 
-from .devtools.deprecate import deprecated_shock_input_convention
 
-
-def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_factored=None, monotonic=False,
+def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False,
-             grid_paths=None, **kwargs):
+             grid_paths=None):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
     Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
@@ -20,9 +18,9 @@ def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_fa
     ----------
     block_list      : list, blocks in model (SimpleBlocks or HetBlocks)
     ss              : dict, all steady-state information
+    exogenous       : dict, all shocked Z go here, must all have same length T
     unknowns        : list, unknowns of SHADE DAG, the 'U' in H(U, Z)
     targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
-    exogenous       : dict, all shocked Z go here, must all have same length T
     H_U             : [optional] array (nU*nU), Jacobian of targets with respect to unknowns
     H_U_factored    : [optional] tuple, LU decomposition of H_U, save time by supplying this from utils.misc.factor()
     monotonic       : [optional] bool, flag indicating HetBlock policy for some k' is monotonic in state k
@@ -38,7 +36,6 @@ def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_fa
     ----------
     results : dict, return paths for all aggregate variables, plus individual outcomes of HetBlock if returnindividual
     """
-    exogenous = deprecated_shock_input_convention(exogenous, kwargs)
 
     # check to make sure that exogenous are valid shocks
     for x in unknowns + targets:
@@ -51,8 +48,8 @@ def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_fa
         break
     
     # initialize guess for unknowns to steady state length T
-    Us = {k: np.full(T, ss[k]) for k in unknowns}
-    Uvec = pack_vectors(Us, unknowns, T)
+    unknown_paths = {k: np.full(T, ss[k]) for k in unknowns}
+    Uvec = pack_vectors(unknown_paths, unknowns, T)
 
     # obtain H_U_factored if we don't have it already 
     if H_U_factored is None:
@@ -66,8 +63,9 @@ def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_fa
 
     # iterate until convergence
     for it in range(maxit):
-        results = td_map(block_list, ss, sort=sort, monotonic=monotonic, returnindividual=returnindividual,
-                         grid_paths=grid_paths, **exogenous, **Us)
+        results = td_map(block_list, ss, exogenous, unknown_paths, sort=sort,
+                         monotonic=monotonic, returnindividual=returnindividual,
+                         grid_paths=grid_paths)
         errors = {k: np.max(np.abs(results[k])) for k in targets}
         if verbose:
             print(f'On iteration {it}')
@@ -79,20 +77,22 @@ def td_solve(block_list, ss, unknowns, targets, exogenous=None, H_U=None, H_U_fa
             # update guess U by -H_U^(-1) times errors H
             Hvec = pack_vectors(results, targets, T)
             Uvec -= misc.factored_solve(H_U_factored, Hvec)
-            Us = unpack_vectors(Uvec, unknowns, T)
+            unknown_paths = unpack_vectors(Uvec, unknowns, T)
     else:
         raise ValueError(f'No convergence after {maxit} backward iterations!')
     
     return results
 
 
-def td_map(block_list, ss, exogenous=None, sort=None, monotonic=False, returnindividual=False,
-           grid_paths=None, **kwargs):
+def td_map(block_list, ss, exogenous, unknowns=None, sort=None,
+           monotonic=False, returnindividual=False, grid_paths=None):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
     
     Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
-    exogenous = deprecated_shock_input_convention(exogenous, kwargs)
+
+    if unknowns is None:
+        unknowns = {}
 
     hetoptions = {'monotonic': monotonic, 'returnindividual': returnindividual, 'grid_paths': grid_paths}
 
@@ -101,7 +101,7 @@ def td_map(block_list, ss, exogenous=None, sort=None, monotonic=False, returnind
         sort = graph.block_sort(block_list, ignore_helpers=True)
 
     # initialize results
-    results = exogenous
+    results = {**exogenous, **unknowns}
     for n in sort:
         block = block_list[n]
 
@@ -111,8 +111,8 @@ def td_map(block_list, ss, exogenous=None, sort=None, monotonic=False, returnind
 
         # if any input to the block has changed, run the block
         if not block.inputs.isdisjoint(results):
-            results.update(block.impulse_nonlinear(ss, **{k: v for k, v in hetoptions.items()
-                                                          if k in misc.input_kwarg_list(block.impulse_nonlinear)},
-                                                   **{k: results[k] for k in block.inputs if k in results}))
+            results.update(block.impulse_nonlinear(ss, exogenous={k: results[k] for k in block.inputs if k in results},
+                                                   **{k: v for k, v in hetoptions.items()
+                                                      if k in misc.input_kwarg_list(block.impulse_nonlinear)}))
 
     return results

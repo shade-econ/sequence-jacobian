@@ -5,8 +5,6 @@ import numpy as np
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
 
-from ..devtools.deprecate import deprecated_shock_input_convention
-
 
 def het(exogenous, policy, backward, backward_init=None):
     def decorator(back_step_fun):
@@ -252,7 +250,7 @@ class HetBlock:
         return ss
 
     def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, returnindividual=False,
-                          grid_paths=None, **kwargs):
+                          grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -263,6 +261,9 @@ class HetBlock:
         ----------
         ss : dict
             all steady-state info, intended to be from .ss()
+        exogenous : dict of {str : array(T, ...)}
+            all time-varying inputs here, with first dimension being time
+            this must have same length T for all entries (all outputs will be calculated up to T)
         monotonic : [optional] bool
             flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
@@ -270,9 +271,6 @@ class HetBlock:
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
-        exogenous : dict of {str : array(T, ...)}
-            all time-varying inputs here, with first dimension being time
-            this must have same length T for all entries (all outputs will be calculated up to T)
 
         Returns
         ----------
@@ -282,8 +280,6 @@ class HetBlock:
             if returnindividual = True, additionally time paths for distribution and for all outputs
                 of self.back_Step_fun on the full grid
         """
-        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
-
         # infer T from exogenous, check that all shocks have same length
         shock_lengths = [x.shape[0] for x in exogenous.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:

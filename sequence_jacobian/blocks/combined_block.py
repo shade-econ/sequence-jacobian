@@ -152,8 +152,8 @@ class CombinedBlock(Block):
         """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
-        irf_nonlin_gen_eq = td_solve(self.blocks, ss, unknowns, targets,
-                                     exogenous={k: ss[k] + v for k, v in exogenous.items()}, **kwargs)
+        irf_nonlin_gen_eq = td_solve(self.blocks, ss, exogenous={k: ss[k] + v for k, v in exogenous.items()},
+                                     unknowns=unknowns, targets=targets, **kwargs)
 
         # Default to percentage deviations from steady state. If the steady state value is zero, then just return
         # the level deviations from zero.

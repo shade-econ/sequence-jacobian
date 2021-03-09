@@ -6,8 +6,6 @@ from ..primitives import Block
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
 
-from ..devtools.deprecate import deprecated_shock_input_convention
-
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
 
@@ -67,9 +65,9 @@ class SimpleBlock(Block):
         else:
             return dict(zip(self.output_list, [misc.numeric_primitive(self.f(**kwargs))]))
 
-    def steady_state(self, calibration, **kwargs):
+    def steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items()}
-        return self._output_in_ss_format(**input_args, **kwargs)
+        return self._output_in_ss_format(**input_args)
 
     def _output_in_td_format(self, **kwargs_new):
         """Returns output of the method td as a dict mapping output names to numeric primitives (scalars/vectors)
@@ -91,9 +89,7 @@ class SimpleBlock(Block):
         else:
             return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
 
-    def impulse_nonlinear(self, ss, exogenous=None, **kwargs):
-        exogenous = deprecated_shock_input_convention(exogenous, kwargs)
-
+    def impulse_nonlinear(self, ss, exogenous=None):
         input_args = {}
         for k, v in exogenous.items():
             if np.isscalar(v):
@@ -171,7 +167,9 @@ class SimpleBlock(Block):
             return JacobianDict(J)
 
     def solve_steady_state(self, calibration, unknowns, targets, solver="", **kwargs):
-        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, **kwargs)
+        input_args = {k: ignore(v) for k, v in calibration.items() if k in self.inputs}
+        ss = super().solve_steady_state(input_args, unknowns, targets, solver=solver, **kwargs)
+        return {k: misc.numeric_primitive(v) for k, v in ss.items()}
 
     def solve_impulse_nonlinear(self, ss, exogenous, unknowns, targets,
                                 in_deviations=True, **kwargs):
