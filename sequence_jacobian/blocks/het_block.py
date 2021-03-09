@@ -372,7 +372,7 @@ class HetBlock:
 
         return self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous)
 
-    def jacobian(self, ss, exogenous, T, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters

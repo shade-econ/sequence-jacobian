@@ -117,7 +117,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
     return {o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}
 
 
-def get_G(block_list, exogenous, unknowns, targets, T, ss=None, outputs=None,
+def get_G(block_list, exogenous, unknowns, targets, T=300, ss=None, outputs=None,
           H_U=None, H_U_factored=None, save=False, use_saved=False):
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
@@ -213,8 +213,8 @@ def curlyJ_sorted(block_list, inputs, ss=None, T=None, save=False, use_saved=Fal
         block = block_list[num]
 
         if hasattr(block, 'jacobian'):
-            jac = block.jacobian(ss, shock_list=list(shocks), **{k: v for k, v in {"T": T, "save": save, "use_saved": use_saved}
-                                                                 if k in misc.input_kwarg_list(block.jacobian)})
+            jac = block.jacobian(ss, exogenous=list(shocks), **{k: v for k, v in {"T": T, "save": save, "use_saved": use_saved}.items()
+                                                                if k in misc.input_kwarg_list(block.jacobian)})
         else:
             # doesn't have 'jac', must be nested dict that is jac directly
             jac = block
