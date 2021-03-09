@@ -79,6 +79,10 @@ def steady_state(blocks, calibration, unknowns, targets,
         for i in topsorted:
             if not include_helpers and isinstance(blocks[i], HelperBlock):
                 continue
+            # Want to see hetoutputs
+            elif hasattr(blocks[i], 'hetoutput') and blocks[i].hetoutput is not None:
+                outputs = eval_block_ss(blocks[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
+                ss_values.update(misc.dict_diff(outputs, helper_outputs))
             else:
                 outputs = eval_block_ss(blocks[i], ss_values, consistency_check=consistency_check,
                                         ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
