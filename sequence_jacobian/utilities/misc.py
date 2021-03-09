@@ -54,8 +54,21 @@ def output_list(f):
 
 def numeric_primitive(instance):
     # If it is already a primitive, just return it
-    if type(instance) in {int, float, np.ndarray}:
+    if type(instance) in {int, float}:
         return instance
+    elif isinstance(instance, np.ndarray):
+        if np.issubdtype(instance.dtype, np.number):
+            return instance
+        else:
+            raise ValueError(f"The tuple/list argument provided to numeric_primitive has dtype: {instance.dtype},"
+                             f" which is not a valid numeric type.")
+    elif type(instance) in {tuple, list}:
+        instance_array = np.asarray(instance)
+        if np.issubdtype(instance_array.dtype, np.number):
+            return type(instance)(instance_array)
+        else:
+            raise ValueError(f"The tuple/list argument provided to numeric_primitive has dtype: {instance_array.dtype},"
+                             f" which is not a valid numeric type.")
     else:
         return instance.real if np.isscalar(instance) else instance.base
 
