@@ -1,9 +1,6 @@
 """Topological sort and related code"""
 
-from ..blocks.simple_block import SimpleBlock
-from ..blocks.het_block import HetBlock
 from ..blocks.helper_block import HelperBlock
-from ..blocks.solved_block import SolvedBlock
 
 
 def block_sort(block_list, ignore_helpers=False, calibration=None, return_io=False):
@@ -115,7 +112,7 @@ def construct_output_map(block_list, ignore_helpers=False, return_output_args=Fa
             continue
 
         # Find the relevant set of outputs corresponding to a block
-        if isinstance(block, SimpleBlock) or isinstance(block, HetBlock) or isinstance(block, HelperBlock) or isinstance(block, SolvedBlock):
+        if hasattr(block, "outputs"):
             outputs = block.outputs
         elif isinstance(block, dict):
             outputs = block.keys()
