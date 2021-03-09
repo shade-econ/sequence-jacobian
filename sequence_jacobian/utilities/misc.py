@@ -58,7 +58,7 @@ def numeric_primitive(instance):
         return instance
     elif isinstance(instance, np.ndarray):
         if np.issubdtype(instance.dtype, np.number):
-            return instance
+            return np.array(instance)
         else:
             raise ValueError(f"The tuple/list argument provided to numeric_primitive has dtype: {instance.dtype},"
                              f" which is not a valid numeric type.")
