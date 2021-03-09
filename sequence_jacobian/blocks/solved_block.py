@@ -85,7 +85,7 @@ class SolvedBlock:
         # TODO: add H_U_factored caching of some kind
         # also, inefficient since we are repeatedly starting from the steady state, need option
         # to provide a guess (not a big deal with just SimpleBlocks, of course)
-        return nonlinear.td_solve(ss, self.block_list, list(self.unknowns.keys()), self.targets,
+        return nonlinear.td_solve(self.block_list, ss, list(self.unknowns.keys()), self.targets,
                                   exogenous=exogenous, monotonic=monotonic,
                                   returnindividual=returnindividual, verbose=verbose)
 
@@ -99,7 +99,7 @@ class SolvedBlock:
 
         return self.jacobian(ss, list(exogenous.keys()), T=T).apply(exogenous)
 
-    def jacobian(self, ss, exogenous, T, output_list=None, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous, T=300, output_list=None, save=False, use_saved=False):
         relevant_shocks = [i for i in self.inputs if i in exogenous]
 
         if not relevant_shocks:
