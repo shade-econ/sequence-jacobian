@@ -1,1 +1,2 @@
-"""Other classes and helpers to aid in the implementation of standard block functionality: .ss, .td, .jac"""
+"""Other classes and helpers to aid standard block functionality: .steady_state, .impulse_linear, .impulse_nonlinear,
+.jacobian"""
