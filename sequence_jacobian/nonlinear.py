@@ -111,7 +111,7 @@ def td_map(block_list, ss, exogenous, unknowns=None, sort=None,
 
         # if any input to the block has changed, run the block
         if not block.inputs.isdisjoint(results):
-            results.update(block.impulse_nonlinear(ss, exogenous={k: results[k] for k in block.inputs if k in results},
+            results.update(block.impulse_nonlinear(ss, exogenous={k: results[k] - ss[k] for k in block.inputs if k in results},
                                                    **{k: v for k, v in hetoptions.items()
                                                       if k in misc.input_kwarg_list(block.impulse_nonlinear)}))
 

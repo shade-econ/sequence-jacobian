@@ -109,7 +109,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         irf_nonlin_gen_eq = td_solve(blocks, ss,
                                      exogenous={k: ss[k] + v for k, v in exogenous.items()},
                                      unknowns=unknowns, targets=targets, **kwargs)
-        return ImpulseDict(irf_nonlin_gen_eq, ss).deviations()
+        return ImpulseDict(irf_nonlin_gen_eq, ss)
 
     def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
                              exogenous: Dict[str, Array],

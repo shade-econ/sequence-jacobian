@@ -76,22 +76,17 @@ class CombinedBlock(Block):
             ss_partial_eq.update(eval_block_ss(block, ss_partial_eq))
         return ss_partial_eq
 
-    def impulse_nonlinear(self, ss, exogenous, in_deviations=True, **kwargs):
+    def impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
         a steady state, `ss`"""
-        irf_nonlin_partial_eq = {k: ss[k] + v for k, v in exogenous.items()}
+        irf_nonlin_partial_eq = deepcopy(exogenous)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs).items()})
+                irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs)})
 
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] - 1 if not np.isclose(ss[k], 0) else v for k, v in irf_nonlin_partial_eq.items()}
-        else:
-            return irf_nonlin_partial_eq
+        return ImpulseDict(irf_lin_partial_eq, ss)
 
     def impulse_linear(self, ss, exogenous, T=None):
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
