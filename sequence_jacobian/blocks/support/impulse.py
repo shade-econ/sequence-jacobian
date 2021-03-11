@@ -14,6 +14,9 @@ class ImpulseDict:
             self.impulse = impulse
             self.ss = ss
 
+    def __iter__(self):
+        return iter(self.impulse.items())
+
     def __mul__(self, x):
         return type(self)({k: x * v for k, v in self.impulse.items()}, self.ss)
 

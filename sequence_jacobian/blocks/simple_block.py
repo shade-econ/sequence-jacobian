@@ -2,6 +2,7 @@ import warnings
 import numpy as np
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
+from .support.impulse import ImpulseDict
 from ..primitives import Block
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
@@ -103,7 +104,7 @@ class SimpleBlock(Block):
         return self._output_in_td_format(**input_args)
 
     def impulse_linear(self, ss, exogenous, T=None):
-        return self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous)
+        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous), ss)
 
     def jacobian(self, ss, exogenous=None, T=None):
         """Assemble nested dict of Jacobians

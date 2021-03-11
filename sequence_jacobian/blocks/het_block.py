@@ -2,6 +2,7 @@ import warnings
 import copy
 import numpy as np
 
+from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
@@ -366,7 +367,7 @@ class HetBlock(Block):
             raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
         T = shock_lengths[0]
 
-        return self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous)
+        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous), ss)
 
     def jacobian(self, ss, exogenous=None, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
