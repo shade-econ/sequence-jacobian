@@ -423,4 +423,3 @@ class JacobianDict(NestedDict):
             for iI, I in enumerate(inputs):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
         return JacobianDict(jacdict, outputs, inputs)
-

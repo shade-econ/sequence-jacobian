@@ -63,6 +63,9 @@ class SolvedBlock(Block):
         self.outputs = (set.union(*(b.outputs for b in blocks)) | set(list(self.unknowns.keys()))) - set(self.targets)
         self.inputs = set.union(*(b.inputs for b in blocks)) - self.outputs
 
+    def __repr__(self):
+        return f"<SolvedBlock '{self.name}'>"
+
     # TODO: Deprecated methods, to be removed!
     def ss(self, **kwargs):
         warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
