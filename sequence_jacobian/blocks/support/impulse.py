@@ -14,9 +14,6 @@ class ImpulseDict:
             self.impulse = impulse
             self.ss = ss
 
-    def __iter__(self):
-        return iter(self.impulse)
-
     def __mul__(self, x):
         return type(self)({k: x * v for k, v in self.impulse.items()}, self.ss)
 
@@ -36,10 +33,10 @@ class ImpulseDict:
     def __getitem__(self, x):
         # Behavior similar to pandas
         if isinstance(x, str):
-            # case 1: impulses['C'] returns array
+            # case 1: ImpulseDict['C'] returns array
             return self.impulse[x]
         if isinstance(x, list):
-            # case 2: impulses[['C']] or impulses[['C', 'Y']] return smaller ImpulseDicts
+            # case 2: ImpulseDict[['C']] or ImpulseDict[['C', 'Y']] return smaller ImpulseDicts
             return type(self)({k: self.impulse[k] for k in x}, self.ss)
 
     def normalize(self, x=None):
@@ -58,3 +55,6 @@ class ImpulseDict:
 
     def levels(self):
         return type(self)({k: v + self.ss[k] for k, v in self.impulse.items()}, self.ss)
+
+    def deviations(self):
+        return type(self)({k: v - self.ss[k] for k, v in self.impulse.items()}, self.ss)

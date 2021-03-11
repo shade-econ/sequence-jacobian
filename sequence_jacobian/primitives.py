@@ -11,6 +11,7 @@ from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
 from .jacobian.classes import JacobianDict
+from .blocks.support.impulse import ImpulseDict
 
 # Basic types
 Array = Any
@@ -100,7 +101,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],
                                 unknowns: List[str], targets: List[str],
-                                in_deviations: Optional[bool] = True, **kwargs) -> Dict[str, Array]:
+                                **kwargs) -> Dict[str, Array]:
         """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
@@ -108,31 +109,19 @@ class Block(abc.ABC, metaclass=ABCMeta):
         irf_nonlin_gen_eq = td_solve(blocks, ss,
                                      exogenous={k: ss[k] + v for k, v in exogenous.items()},
                                      unknowns=unknowns, targets=targets, **kwargs)
-
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] - 1 if not np.isclose(ss[k], 0) else v for k, v in irf_nonlin_gen_eq.items()}
-        else:
-            return irf_nonlin_gen_eq
+        return ImpulseDict(irf_nonlin_gen_eq, ss).deviations()
 
     def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
                              exogenous: Dict[str, Array],
                              unknowns: List[str], targets: List[str],
-                             T: Optional[int] = None, in_deviations: Optional[bool] = True,
-                             **kwargs) -> Dict[str, Array]:
+                             T: Optional[int] = None,
+                             **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
-
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] if not np.isclose(ss[k], 0) else v for k, v in irf_lin_gen_eq.items()}
-        else:
-            return irf_lin_gen_eq
+        return ImpulseDict(irf_lin_gen_eq, ss)
 
     def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
                        exogenous: List[str],
