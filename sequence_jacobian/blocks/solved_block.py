@@ -1,10 +1,8 @@
 import warnings
 
-from .. import nonlinear
-from ..steady_state.drivers import steady_state
-from ..jacobian.drivers import get_G
-from ..jacobian.classes import JacobianDict
+from ..primitives import Block
 from ..blocks.simple_block import simple
+from ..utilities import graph
 
 
 def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name=""):
@@ -25,7 +23,7 @@ def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name
         return singleton_solved_block
 
 
-class SolvedBlock:
+class SolvedBlock(Block):
     """SolvedBlocks are mini SHADE models embedded as blocks inside larger SHADE models.
 
     When creating them, we need to provide the basic ingredients of a SHADE model: the list of
@@ -38,8 +36,23 @@ class SolvedBlock:
     nonlinear transition path such that all internal targets of the mini SHADE model are zero.
     """
 
-    def __init__(self, block_list, name, unknowns, targets, solver=None, solver_kwargs={}):
-        self.block_list = block_list
+    def __init__(self, blocks, name, unknowns, targets, solver=None, solver_kwargs={}):
+        # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
+        self._blocks_unsorted = blocks
+
+        # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
+        # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
+        # Hence, we will cache that info upon first invocation of the steady_state
+        self._sorted_indices_w_o_helpers = graph.block_sort(blocks, ignore_helpers=True)
+        self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
+        self._required = graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
+
+        # User-facing attributes for accessing blocks
+        # .blocks_w_helpers meant to only interface with steady_state functionality
+        # .blocks meant to interface with dynamic functionality (impulses and jacobian calculations)
+        self.blocks_w_helpers = None
+        self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices_w_o_helpers]
+
         self.name = name
         self.unknowns = unknowns
         self.targets = targets
@@ -47,8 +60,8 @@ class SolvedBlock:
         self.solver_kwargs = solver_kwargs
 
         # need to have inputs and outputs!!!
-        self.outputs = (set.union(*(b.outputs for b in block_list)) | set(list(self.unknowns.keys()))) - set(self.targets)
-        self.inputs = set.union(*(b.inputs for b in block_list)) - self.outputs
+        self.outputs = (set.union(*(b.outputs for b in blocks)) | set(list(self.unknowns.keys()))) - set(self.targets)
+        self.inputs = set.union(*(b.inputs for b in blocks)) - self.outputs
 
     # TODO: Deprecated methods, to be removed!
     def ss(self, **kwargs):
@@ -69,38 +82,36 @@ class SolvedBlock:
         return self.jacobian(ss, shock_list, T, **kwargs)
 
     def steady_state(self, calibration, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False):
-        if self.solver is None:
-            raise RuntimeError("Cannot call the ss method on this SolvedBlock without specifying a solver.")
-        else:
-            return steady_state(self.block_list, calibration, self.unknowns, self.targets,
-                                consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose,
-                                solver=self.solver, **self.solver_kwargs)
+        # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
+        # accounting for HelperBlocks
+        if self._sorted_indices_w_helpers is None:
+            self._sorted_indices_w_helpers = graph.block_sort(self._blocks_unsorted, ignore_helpers=False,
+                                                              calibration=calibration)
+            self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
 
-    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False,
+        return super().solve_steady_state(calibration, self.unknowns, self.targets, solver=self.solver,
+                                          consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
+
+    def impulse_nonlinear(self, ss, exogenous=None, in_deviations=True, monotonic=False,
                           returnindividual=False, verbose=False):
-        # TODO: add H_U_factored caching of some kind
-        #   also, inefficient since we are repeatedly starting from the steady state, need option
-        #   to provide a guess (not a big deal with just SimpleBlocks, of course)
-        return nonlinear.td_solve(self.block_list, ss, exogenous=exogenous,
-                                  unknowns=list(self.unknowns.keys()), targets=self.targets,
-                                  monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
+        return super().solve_impulse_nonlinear(ss, exogenous=exogenous,
+                                               unknowns=list(self.unknowns.keys()),
+                                               targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
+                                               in_deviations=in_deviations, monotonic=monotonic,
+                                               returnindividual=returnindividual, verbose=verbose)
 
-    def impulse_linear(self, ss, exogenous, T=None):
-        if T is None:
-            # infer T from exogenous, check that all shocks have same length
-            shock_lengths = [x.shape[0] for x in exogenous.values()]
-            if shock_lengths[1:] != shock_lengths[:-1]:
-                raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-            T = shock_lengths[0]
+    def impulse_linear(self, ss, exogenous, T=None, in_deviations=True):
+        return super().solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
+                                            targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
+                                            T=T, in_deviations=in_deviations)
 
-        return self.jacobian(ss, list(exogenous.keys()), T=T).apply(exogenous)
-
-    def jacobian(self, ss, exogenous, T=300, output_list=None, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None, save=False, use_saved=False):
+        if exogenous is None:
+            exogenous = list(self.inputs)
+        if outputs is None:
+            outputs = list(self.outputs)
         relevant_shocks = [i for i in self.inputs if i in exogenous]
 
-        if not relevant_shocks:
-            return JacobianDict({})
-        else:
-            # H_U_factored caching could be helpful here too
-            return get_G(self.block_list, relevant_shocks, list(self.unknowns.keys()), self.targets,
-                         T, ss, output_list, save=save, use_saved=use_saved)
+        return super().solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
+                                      targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
+                                      T=T, outputs=outputs, save=save, use_saved=use_saved)

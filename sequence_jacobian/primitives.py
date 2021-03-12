@@ -7,6 +7,7 @@ from typing import Any, Dict, Union, Tuple, Optional, List
 import numpy as np
 
 from .steady_state.drivers import steady_state
+from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
 from .jacobian.classes import JacobianDict
@@ -93,6 +94,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
         blocks = self.blocks_w_helpers if hasattr(self, "blocks_w_helpers") else [self]
+        solver = solver if solver else provide_solver_default(unknowns)
         return steady_state(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
