@@ -95,18 +95,17 @@ class SolvedBlock(Block):
         return super().solve_steady_state(calibration, self.unknowns, self.targets, solver=self.solver,
                                           consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
 
-    def impulse_nonlinear(self, ss, exogenous=None, in_deviations=True, monotonic=False,
+    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False,
                           returnindividual=False, verbose=False):
         return super().solve_impulse_nonlinear(ss, exogenous=exogenous,
                                                unknowns=list(self.unknowns.keys()),
                                                targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                               in_deviations=in_deviations, monotonic=monotonic,
-                                               returnindividual=returnindividual, verbose=verbose)
+                                               monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
-    def impulse_linear(self, ss, exogenous, T=None, in_deviations=True):
+    def impulse_linear(self, ss, exogenous, T=None):
         return super().solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
                                             targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                            T=T, in_deviations=in_deviations)
+                                            T=T)
 
     def jacobian(self, ss, exogenous=None, T=300, outputs=None, save=False, use_saved=False):
         if exogenous is None:
