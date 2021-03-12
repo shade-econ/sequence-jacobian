@@ -139,12 +139,12 @@ def test_fake_news_v_direct_method(one_asset_hank_model):
     # (better than subtracting by ss since ss not exact)
     # monotonic=True lets us know there is monotonicity of policy rule, makes TD run faster
     # .td requires at least one input 'shock', so we put in steady-state w
-    td_noshock = household.td(ss, exogenous={"w": np.full(T, ss['w'])}, monotonic=True)
+    td_noshock = household.td(ss, exogenous={"w": np.zeros(T)}, monotonic=True)
 
     for i in shock_list:
         # simulate with respect to a shock at each date up to T
         for t in range(T):
-            td_out = household.td(ss, exogenous={i: ss[i] + h * (np.arange(T) == t)})
+            td_out = household.td(ss, exogenous={i: h * (np.arange(T) == t)})
 
             # store results as column t of J[o][i] for each outcome o
             for o in output_list:
