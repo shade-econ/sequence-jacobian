@@ -14,6 +14,9 @@ class ImpulseDict:
             self.impulse = impulse
             self.ss = ss
 
+    def __repr__(self):
+        return f'<ImpulseDict: {list(self.impulse.keys())}>'
+
     def __iter__(self):
         return iter(self.impulse.items())
 

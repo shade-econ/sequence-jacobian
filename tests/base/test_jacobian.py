@@ -101,7 +101,6 @@ def test_fake_news_v_actual(one_asset_hank_model):
             F[1:, ...] = curlyPs[o].reshape(T-1, -1) @ curlyDs[i].reshape(T, -1).T
             Fs[o.capitalize()][i] = F
 
-
     impulse = Fs['C']['w'][:10, 1].copy()  # start with fake news impulse
     impulse[1:10] += Js['C']['w'][:9, 0]   # add unanticipated impulse, shifted by 1
 
@@ -128,7 +127,7 @@ def test_fake_news_v_direct_method(one_asset_hank_model):
 
     household = blocks[0]
     T = 40
-    shock_list = ('r')
+    shock_list = 'r'
     output_list = household.non_back_iter_outputs
     h = 1E-4
 

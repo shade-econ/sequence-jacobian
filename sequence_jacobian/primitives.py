@@ -101,7 +101,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],
                                 unknowns: List[str], targets: List[str],
-                                **kwargs) -> Dict[str, Array]:
+                                **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
