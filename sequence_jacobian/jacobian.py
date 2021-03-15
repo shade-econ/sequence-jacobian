@@ -517,6 +517,10 @@ class SimpleSparse:
         if self.indices is not None:
             return self.indices, self.xs
         else:
+            if not self.elements:
+                # empty SimpleSparse
+                return np.empty((0, 2), dtype=int), np.empty(0)
+
             indices, xs = zip(*self.elements.items())
             self.indices, self.xs = np.array(indices), np.array(xs)
             return self.indices, self.xs
@@ -559,8 +563,6 @@ class SimpleSparse:
             return multiply_rs_rs(self, A)
         elif isinstance(A, np.ndarray):
             # multiply SimpleSparse by matrix or vector, multiply_rs_matrix uses slicing
-            if not self.elements:
-                return np.zeros_like(A)
             indices, xs = self.array()
             if A.ndim == 2:
                 return multiply_rs_matrix(indices, xs, A)
