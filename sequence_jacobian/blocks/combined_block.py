@@ -3,6 +3,7 @@
 from copy import deepcopy
 import numpy as np
 
+from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
 from ..steady_state.drivers import eval_block_ss
@@ -75,24 +76,19 @@ class CombinedBlock(Block):
             ss_partial_eq.update(eval_block_ss(block, ss_partial_eq))
         return ss_partial_eq
 
-    def impulse_nonlinear(self, ss, exogenous, in_deviations=True, **kwargs):
+    def impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
         a steady state, `ss`"""
-        irf_nonlin_partial_eq = {k: ss[k] + v for k, v in exogenous.items()}
+        irf_nonlin_partial_eq = deepcopy(exogenous)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs).items()})
+                irf_nonlin_partial_eq.update({k: v - ss[k] for k, v in block.impulse_nonlinear(ss, input_args, **kwargs)})
 
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] - 1 if not np.isclose(ss[k], 0) else v for k, v in irf_nonlin_partial_eq.items()}
-        else:
-            return irf_nonlin_partial_eq
+        return ImpulseDict(irf_nonlin_partial_eq, ss).levels()
 
-    def impulse_linear(self, ss, exogenous, T=None, in_deviations=True):
+    def impulse_linear(self, ss, exogenous, T=None):
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
         a steady_state, `ss`"""
         irf_lin_partial_eq = deepcopy(exogenous)
@@ -100,14 +96,9 @@ class CombinedBlock(Block):
             input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_lin_partial_eq.update({k: v for k, v in block.impulse_linear(ss, input_args, T=T).items()})
+                irf_lin_partial_eq.update({k: v for k, v in block.impulse_linear(ss, input_args, T=T)})
 
-        # Default to percentage deviations from steady state. If the steady state value is zero, then just return
-        # the level deviations from zero.
-        if in_deviations:
-            return {k: v/ss[k] if not np.isclose(ss[k], 0) else v for k, v in irf_lin_partial_eq.items()}
-        else:
-            return irf_lin_partial_eq
+        return ImpulseDict(irf_lin_partial_eq, ss)
 
     def jacobian(self, ss, exogenous=None, T=None, outputs=None, save=False, use_saved=False):
         """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at

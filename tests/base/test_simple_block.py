@@ -38,8 +38,8 @@ def test_block_consistency(block, ss):
     ss_results = block.ss(**ss)
 
     # now if we put in constant inputs, td should give us the same!
-    td_results = block.td(ss, **{k: np.full(20, v) for k, v in ss.items()})
-    for k, v in td_results.items():
+    td_results = block.td(ss, **{k: np.zeros(20) for k in ss.keys()})
+    for k, v in td_results.impulse.items():
         assert np.all(v == ss_results[k])
 
     # now get the Jacobian
@@ -51,11 +51,11 @@ def test_block_consistency(block, ss):
 
     h = 1E-5
     all_shocks = {i: np.random.rand(10) for i in block.input_list}
-    td_up = block.td(ss, **{i: ss[i] + h*shock for i, shock in all_shocks.items()})
-    td_dn = block.td(ss, **{i: ss[i] - h*shock for i, shock in all_shocks.items()})
+    td_up = block.td(ss, **{i: h*shock for i, shock in all_shocks.items()})
+    td_dn = block.td(ss, **{i: -h*shock for i, shock in all_shocks.items()})
     
-    linear_impulses = {o: (td_up[o] - td_dn[o])/(2*h) for o in td_up}
-    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in td_up}
+    linear_impulses = {o: (td_up.impulse[o] - td_dn.impulse[o])/(2*h) for o in td_up.impulse}
+    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in td_up.impulse}
 
     for o in linear_impulses:
         assert np.all(np.abs(linear_impulses[o] - linear_impulses_from_jac[o]) < 1E-5)

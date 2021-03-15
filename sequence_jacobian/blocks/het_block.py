@@ -2,6 +2,7 @@ import warnings
 import copy
 import numpy as np
 
+from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
@@ -262,7 +263,7 @@ class HetBlock(Block):
         ss : dict
             all steady-state info, intended to be from .ss()
         exogenous : dict of {str : array(T, ...)}
-            all time-varying inputs here, with first dimension being time
+            all time-varying inputs here (in deviations), with first dimension being time
             this must have same length T for all entries (all outputs will be calculated up to T)
         monotonic : [optional] bool
             flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
@@ -310,7 +311,7 @@ class HetBlock(Block):
         backdict = ss.copy()
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
-            backdict.update({k: v[t,...] for k, v in exogenous.items()})
+            backdict.update({k: ss[k] + v[t,...] for k, v in exogenous.items()})
             individual = {k: v for k, v in zip(self.back_step_output_list,
                                                self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
@@ -355,9 +356,10 @@ class HetBlock(Block):
 
         # return either this, or also include distributional information
         if returnindividual:
-            return {**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths, 'D': D_path}
+            return ImpulseDict({**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths,
+                                'D': D_path}, ss)
         else:
-            return {**aggregates, **aggregate_hetoutputs}
+            return ImpulseDict({**aggregates, **aggregate_hetoutputs}, ss)
 
     def impulse_linear(self, ss, exogenous, T=None, **kwargs):
         # infer T from exogenous, check that all shocks have same length
@@ -366,7 +368,7 @@ class HetBlock(Block):
             raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
         T = shock_lengths[0]
 
-        return self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous)
+        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous), ss)
 
     def jacobian(self, ss, exogenous=None, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.

@@ -2,6 +2,7 @@ import warnings
 import numpy as np
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
+from .support.impulse import ImpulseDict
 from ..primitives import Block
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
@@ -94,16 +95,16 @@ class SimpleBlock(Block):
         for k, v in exogenous.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
-            input_args[k] = Displace(v, ss=ss.get(k, None), name=k)
+            input_args[k] = Displace(v + ss[k], ss=ss.get(k, None), name=k)
 
         for k in self.input_list:
             if k not in input_args:
                 input_args[k] = ignore(ss[k])
 
-        return self._output_in_td_format(**input_args)
+        return ImpulseDict(self._output_in_td_format(**input_args), ss)
 
     def impulse_linear(self, ss, exogenous, T=None):
-        return self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous)
+        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous), ss)
 
     def jacobian(self, ss, exogenous=None, T=None):
         """Assemble nested dict of Jacobians

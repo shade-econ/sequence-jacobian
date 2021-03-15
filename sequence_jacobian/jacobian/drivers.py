@@ -114,7 +114,7 @@ def get_impulse(block_list, dZ, unknowns, targets, T=None, ss=None, outputs=None
     J_curlyU_dU = forward_accumulate(curlyJs, dU, outputs, required)
     if outputs is None:
         outputs = J_curlyZ_dZ.keys() | J_curlyU_dU.keys()
-    return {o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}
+    return {**dZ, **{o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}}
 
 
 def get_G(block_list, exogenous, unknowns, targets, T=300, ss=None, outputs=None,
