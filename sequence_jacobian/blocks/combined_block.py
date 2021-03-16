@@ -108,13 +108,15 @@ class CombinedBlock(Block):
             outputs = self.outputs
         kwargs = {"exogenous": exogenous, "T": T, "outputs": outputs, "save": save, "use_saved": use_saved}
 
-        J_partial_eq = JacobianDict.identity(exogenous)
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
             curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block.jacobian) if k in kwargs}).complete()
 
             # If we want specific list of outputs, restrict curlyJ to that before continuing
             curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]
-            J_partial_eq.update(curlyJ.compose(J_partial_eq))
+            if i == 0:
+                J_partial_eq = curlyJ.compose(JacobianDict.identity(exogenous))
+            else:
+                J_partial_eq.update(curlyJ.compose(J_partial_eq))
 
         return J_partial_eq
 
