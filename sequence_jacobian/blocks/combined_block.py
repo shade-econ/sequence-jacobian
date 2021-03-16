@@ -9,7 +9,6 @@ from .. import utilities as utils
 from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
-from ..blocks.het_block import HetBlock
 
 
 def combine(*args, name="", model_alias=False):
@@ -107,13 +106,11 @@ class CombinedBlock(Block):
             exogenous = list(self.inputs)
         if outputs is None:
             outputs = self.outputs
+        kwargs = {"exogenous": exogenous, "T": T, "outputs": outputs, "save": save, "use_saved": use_saved}
 
         J_partial_eq = JacobianDict.identity(exogenous)
         for block in self.blocks:
-            if isinstance(block, HetBlock):
-                curlyJ = block.jacobian(ss, exogenous, T, save=save, use_saved=use_saved).complete()
-            else:
-                curlyJ = block.jacobian(ss, exogenous, T).complete()
+            curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block.jacobian) if k in kwargs}).complete()
 
             # If we want specific list of outputs, restrict curlyJ to that before continuing
             curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]
