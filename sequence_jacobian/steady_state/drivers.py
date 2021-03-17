@@ -7,11 +7,10 @@ from copy import deepcopy
 from .support import compute_target_values, extract_multivariate_initial_values_and_bounds,\
     extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check
 from ..utilities import solvers, graph, misc
-from ..blocks.helper_block import HelperBlock
 
 
 # Find the steady state solution
-def steady_state(blocks, calibration, unknowns, targets,
+def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, sort_blocks=True,
                  consistency_check=True, ttol=2e-12, ctol=1e-9,
                  block_kwargs=None, verbose=False, fragile=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
@@ -19,21 +18,27 @@ def steady_state(blocks, calibration, unknowns, targets,
     For a given model (blocks), calibration, unknowns, and targets, solve for the steady state values.
 
     blocks: `list`
-        A list of blocks, which include the types: SimpleBlock, HetBlock, HelperBlock, SolvedBlock, CombinedBlock
+        A list of blocks, which include the types: SimpleBlock, HetBlock, SolvedBlock, CombinedBlock
     calibration: `dict`
         The pre-specified values of variables/parameters provided to the steady state computation
     unknowns: `dict`
         A dictionary mapping unknown variables to either initial values or bounds to be provided to the numerical solver
     targets: `dict`
         A dictionary mapping target variables to desired numerical values, other variables solved for along the DAG
+    helper_indices: `list`
+        A list of indices (int) indicating which blocks in `blocks` are "helper blocks", i.e. SimpleBlocks that replace
+        some of the equations in the DAG for the purposes of aiding steady state calculation
+    sort_blocks: `bool`
+        Whether the blocks need to be topologically sorted (only False when this function is called from within a
+        Block object, like CombinedBlock, that has already pre-sorted the blocks)
     consistency_check: `bool`
-        If HelperBlocks are a portion of the argument blocks, re-run the DAG with the computed steady state values
-        without the assistance of HelperBlocks and see if the targets are still hit
+        If helper blocks are a portion of the argument blocks, re-run the DAG with the computed steady state values
+        without the assistance of helper blocks and see if the targets are still hit
     ttol: `float`
         The tolerance for the targets---how close the user wants the computed target values to equal the desired values
     ctol: `float`
         The tolerance for the consistency check---how close the user wants the computed target values, without the
-        use of HelperBlocks, to equal the desired values
+        use of helper blocks, to equal the desired values
     block_kwargs: `dict`
         A dict of any kwargs that specify additional settings in order to evaluate block.steady_state for any
         potential Block object, e.g. HetBlocks have backward_tol and forward_tol settings that are specific to that
@@ -59,6 +64,8 @@ def steady_state(blocks, calibration, unknowns, targets,
     """
 
     # Populate otherwise mutable default arguments
+    if helper_indices is None:
+        helper_indices = []
     if block_kwargs is None:
         block_kwargs = {}
     if solver_kwargs is None:
@@ -67,7 +74,11 @@ def steady_state(blocks, calibration, unknowns, targets,
         constrained_kwargs = {}
 
     ss_values = deepcopy(calibration)
-    topsorted = graph.block_sort(blocks, calibration=calibration)
+    if sort_blocks:
+        topsorted = graph.block_sort(blocks, ignore_helpers=False,
+                                     helper_indices=helper_indices, calibration=calibration)
+    else:
+        topsorted = range(len(blocks))
 
     def residual(unknown_values, include_helpers=True, update_unknowns_inplace=False):
         ss_values.update(misc.smart_zip(unknowns.keys(), unknown_values))
@@ -77,7 +88,7 @@ def steady_state(blocks, calibration, unknowns, targets,
         # Progress through the DAG computing the resulting steady state values based on the unknown_values
         # provided to the residual function
         for i in topsorted:
-            if not include_helpers and isinstance(blocks[i], HelperBlock):
+            if not include_helpers and i in helper_indices:
                 continue
             # Want to see hetoutputs
             elif hasattr(blocks[i], 'hetoutput') and blocks[i].hetoutput is not None:
@@ -86,7 +97,7 @@ def steady_state(blocks, calibration, unknowns, targets,
             else:
                 outputs = eval_block_ss(blocks[i], ss_values, consistency_check=consistency_check,
                                         ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
-                if include_helpers and isinstance(blocks[i], HelperBlock):
+                if include_helpers and i in helper_indices:
                     helper_outputs.update(outputs)
                     ss_values.update(outputs)
                 else:

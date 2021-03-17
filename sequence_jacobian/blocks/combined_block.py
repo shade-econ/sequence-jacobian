@@ -10,9 +10,9 @@ from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
 
 
-def combine(*args, name="", model_alias=False):
+def combine(*args, name="", helper_indices=None, model_alias=False):
     # TODO: Implement a check that all args are child types of AbstractBlock, when that is properly implemented
-    return CombinedBlock(*args, name=name, model_alias=model_alias)
+    return CombinedBlock(*args, name=name, helper_indices=helper_indices, model_alias=model_alias)
 
 
 class CombinedBlock(Block):
@@ -22,16 +22,18 @@ class CombinedBlock(Block):
     # To users: Do *not* manually change the attributes via assignment. Instantiating a
     #   CombinedBlock has some automated features that are inferred from initial instantiation but not from
     #   re-assignment of attributes post-instantiation.
-    def __init__(self, *blocks, name="", model_alias=False):
+    def __init__(self, *blocks, name="", helper_indices=None, model_alias=False):
+
         # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
         self._blocks_unsorted = blocks
 
-        # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
-        # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
+        # Upon instantiation, we only have enough information to conduct a sort ignoring helper blocks
+        # since we need a `calibration` to resolve cyclic dependencies when including helper blocks in a topological sort
         # Hence, we will cache that info upon first invocation of the steady_state
-        self._sorted_indices_w_o_helpers = utils.graph.block_sort(blocks, ignore_helpers=True)
+        self.helper_indices = helper_indices if helper_indices is not None else []
+        self._sorted_indices_w_o_helpers = utils.graph.block_sort([b for i, b in enumerate(blocks) if i not in self.helper_indices])
         self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
-        self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
+        self._required = utils.graph.find_outputs_that_are_intermediate_inputs([b for i, b in enumerate(blocks) if i not in self.helper_indices])
 
         # User-facing attributes for accessing blocks
         # .blocks_w_helpers meant to only interface with steady_state functionality
@@ -63,9 +65,10 @@ class CombinedBlock(Block):
     def steady_state(self, calibration, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
-        # accounting for HelperBlocks
+        # accounting for helper blocks
         if self._sorted_indices_w_helpers is None:
             self._sorted_indices_w_helpers = utils.graph.block_sort(self._blocks_unsorted, ignore_helpers=False,
+                                                                    helper_indices=self.helper_indices,
                                                                     calibration=calibration)
             self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
 
@@ -124,13 +127,14 @@ class CombinedBlock(Block):
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
-        # accounting for HelperBlocks
+        # accounting for helper blocks
         if self._sorted_indices_w_helpers is None:
             self._sorted_indices_w_helpers = utils.graph.block_sort(self._blocks_unsorted, ignore_helpers=False,
+                                                                    helper_indices=self.helper_indices,
                                                                     calibration=calibration)
             self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
 
         if solver is None:
             solver = provide_solver_default(unknowns)
 
-        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, **kwargs)
+        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, sort_blocks=False, **kwargs)

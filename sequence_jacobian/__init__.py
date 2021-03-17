@@ -8,7 +8,6 @@ from .aliases import create_model
 
 from .blocks.simple_block import simple
 from .blocks.het_block import het, hetoutput
-from .blocks.helper_block import helper
 from .blocks.solved_block import solved
 from .blocks.combined_block import combine
 from .blocks.support.simple_displacement import apply_function

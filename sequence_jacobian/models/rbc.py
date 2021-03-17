@@ -1,7 +1,6 @@
 import numpy as np
 
 from ..blocks.simple_block import simple
-from ..blocks.helper_block import helper
 
 '''Part 1: Simple blocks'''
 
@@ -29,7 +28,7 @@ def mkt_clearing(r, C, Y, I, K, L, w, eis, beta):
     return goods_mkt, euler, walras
 
 
-@helper
+@simple
 def steady_state_solution(r, eis, delta, alpha):
     rk = r + delta
     Z = (rk / alpha) ** alpha  # normalize so that Y=1
