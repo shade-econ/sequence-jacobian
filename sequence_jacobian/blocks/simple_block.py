@@ -118,8 +118,6 @@ class SimpleBlock(Block):
             if omitted, more efficient SimpleSparse objects returned
         exogenous : list of str, optional
             names of input variables to differentiate wrt; if omitted, assume all inputs
-        h : float, optional
-            radius for symmetric numerical differentiation
 
         Returns
         -------
