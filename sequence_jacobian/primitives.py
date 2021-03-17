@@ -4,7 +4,6 @@ import abc
 from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
-import numpy as np
 
 from .steady_state.drivers import steady_state
 from .steady_state.support import provide_solver_default
@@ -42,10 +41,11 @@ class ABCMeta(NativeABCMeta):
         }
         if abstract_attributes:
             raise NotImplementedError(
-                "Can't instantiate abstract class {} with"
-                " abstract attributes: {}".format(
+                "Cannot instantiate abstract class `{}` with"
+                " abstract attributes: `{}`.\n"
+                "Define concrete implementations of these attributes in the child class prior to preceding.".format(
                     cls.__name__,
-                    ', '.join(abstract_attributes)
+                    '`, `'.join(abstract_attributes)
                 )
             )
         return instance
@@ -69,23 +69,21 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
     # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
     # input and output argument structure
-    @abc.abstractmethod
-    def steady_state(self, *ss_args, **ss_kwargs) -> Dict[str, Union[Real, Array]]:
-        pass
+    def steady_state(self, calibration: Dict[str, Union[Real, Array]],
+                     **kwargs) -> Dict[str, Union[Real, Array]]:
+        raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
 
-    @abc.abstractmethod
     def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                           exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
-        pass
+        raise NotImplementedError(f'{type(self)} does not implement .impulse_nonlinear()')
 
-    @abc.abstractmethod
     def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
                        exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
-        pass
+        raise NotImplementedError(f'{type(self)} does not implement .impulse_linear()')
 
-    @abc.abstractmethod
-    def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous=None, T=None, **kwargs) -> JacobianDict:
-        pass
+    def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous: List[str] = None,
+                 T: int = None, **kwargs) -> JacobianDict:
+        raise NotImplementedError(f'{type(self)} does not implement .jacobian()')
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
