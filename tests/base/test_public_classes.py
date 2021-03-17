@@ -5,15 +5,13 @@ from sequence_jacobian import create_model
 from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
-def test_impulsedict(krusell_smith_model):
-    blocks, exogenous, unknowns, targets, ss = krusell_smith_model
-    household, firm, mkt_clearing, _, _, _ = blocks
+def test_impulsedict(krusell_smith_dag):
+    ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
     T = 200
 
     # Linearized impulse responses as deviations, nonlinear as levels
-    ks = create_model(*blocks, name='KS')
-    ir_lin = ks.solve_impulse_linear(ss, {'Z': 0.01 * 0.5**np.arange(T)}, unknowns, targets)
-    ir_nonlin = ks.solve_impulse_nonlinear(ss, {'Z': 0.01 * 0.5 ** np.arange(T)}, unknowns, targets)
+    ir_lin = ks_model.solve_impulse_linear(ss, {'Z': 0.01 * 0.5**np.arange(T)}, unknowns, targets)
+    ir_nonlin = ks_model.solve_impulse_nonlinear(ss, {'Z': 0.01 * 0.5 ** np.arange(T)}, unknowns, targets)
 
     # Get method
     assert isinstance(ir_lin, ImpulseDict)

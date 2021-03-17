@@ -5,9 +5,8 @@ from numba import guvectorize
 from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.het_block import het, hetoutput
-from ..blocks.helper_block import helper
 from ..blocks.solved_block import solved
-from ..blocks.support.simple_displacement import apply_function, Displace
+from ..blocks.support.simple_displacement import apply_function
 
 '''Part 1: HA block'''
 
@@ -303,7 +302,7 @@ def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
     return b_grid, a_grid, k_grid, e_grid, Pi
 
 
-@helper
+@simple
 def partial_steady_state_solution(delta, K, r, tot_wealth, Bh, Bg, G, omega):
     I = delta * K
     mc = 1 - r * (tot_wealth - Bg - K)
