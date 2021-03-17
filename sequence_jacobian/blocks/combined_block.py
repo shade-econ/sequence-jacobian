@@ -1,7 +1,6 @@
 """CombinedBlock class and the combine function to generate it"""
 
 from copy import deepcopy
-import numpy as np
 
 from .support.impulse import ImpulseDict
 from ..primitives import Block
@@ -61,7 +60,7 @@ class CombinedBlock(Block):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def steady_state(self, calibration):
+    def steady_state(self, calibration, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
@@ -72,7 +71,7 @@ class CombinedBlock(Block):
 
         ss_partial_eq = deepcopy(calibration)
         for block in self.blocks_w_helpers:
-            ss_partial_eq.update(eval_block_ss(block, ss_partial_eq))
+            ss_partial_eq.update(eval_block_ss(block, ss_partial_eq, **kwargs))
         return ss_partial_eq
 
     def impulse_nonlinear(self, ss, exogenous, **kwargs):
