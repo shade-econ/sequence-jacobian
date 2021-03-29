@@ -236,9 +236,10 @@ def investment(Q, K, r, N, mc, Z, delta, epsI, alpha):
 
 
 @simple
-def dividend(Y, w, N, K, pi, mup, kappap, delta):
+def dividend(Y, w, N, K, pi, mup, kappap, delta, epsI):
     psip = mup / (mup - 1) / 2 / kappap * (1 + pi).apply(np.log) ** 2 * Y
-    I = K - (1 - delta) * K(-1)
+    k_adjust = K(-1) * (K / K(-1) - 1) ** 2 / (2 * delta * epsI)
+    I = K - (1 - delta) * K(-1) + k_adjust
     div = Y - w * N - I - psip
     return psip, I, div
 
@@ -266,13 +267,12 @@ def finance(i, p, pi, r, div, omega, pshare):
 @simple
 def wage(pi, w, N, muw, kappaw):
     piw = (1 + pi) * w / w(-1) - 1
-    psiw = muw / (1 - muw) / 2 / kappaw * (1 + piw).apply(np.log) ** 2 * N
-    return piw, psiw
+    return piw
 
 
 @simple
 def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
-    wnkpc = kappaw * (vphi * N**(1+1/frisch) - muw*(1-tax)*w*N*U) + beta *\
+    wnkpc = kappaw * (vphi * N**(1+1/frisch) - (1-tax)*w*N*U/muw) + beta *\
             (1 + piw(+1)).apply(np.log) - (1 + piw).apply(np.log)
     return wnkpc
 
@@ -281,16 +281,16 @@ def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
 def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U):
     wealth = A + B
     asset_mkt = p + Bg - wealth
-    labor_mkt = vphi - muw * (1 - tax) * w * U
+    labor_mkt = vphi - (1 - tax) * w * U / muw
     return asset_mkt, labor_mkt, wealth
 
 
 @simple
-def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
+def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega, psip):
     wealth = A + B
-    asset_mkt = p + Bg - wealth
-    labor_mkt = vphi - muw * (1 - tax) * w * U
-    goods_mkt = C + I + G + Chi + omega * B - 1
+    asset_mkt = p + Bg - B - A
+    labor_mkt = vphi - (1 - tax) * w * U / muw
+    goods_mkt = C + I + G + Chi + psip + omega * B - 1
     return asset_mkt, labor_mkt, goods_mkt, wealth
 
 
@@ -375,7 +375,7 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
         out = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
                            k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
         asset_mkt = out['A'] + out['B'] - p - Bg
-        labor_mkt = vphi_loc - muw * (1 - tax) * w * out['U']
+        labor_mkt = vphi_loc - (1 - tax) * w * out['U'] / muw
         return np.array([asset_mkt, labor_mkt, out['B'] - Bh])
 
     # solve for beta, vphi, omega
@@ -400,11 +400,11 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
                'beta': beta, 'vphi': vphi, 'omega': omega, 'alpha': alpha, 'delta': delta, 'mup': mup, 'muw': muw,
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'z_grid': z_grid, 'e_grid': e_grid,
                'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r,
-               'tot_wealth': tot_wealth, 'fisher': 0, 'nZ': nZ, 'Bh': Bh, 'psiw': 0, 'psip': 0, 'inv': 0,
-               'labor_mkt': vphi - muw * (1 - tax) * w * ss["U"],
+               'tot_wealth': tot_wealth, 'fisher': 0, 'nZ': nZ, 'Bh': Bh, 'psip': 0, 'inv': 0,
+               'labor_mkt': vphi - (1 - tax) * w * ss["U"] / muw,
                'equity': div + p - p * (1 + r), 'bmax': bmax, 'rho_z': rho_z, 'asset_mkt': p + Bg - ss["B"] - ss["A"],
                'nA': nA, 'nB': nB, 'amax': amax, 'kmax': kmax, 'nK': nK, 'nkpc': kappap * (mc - 1/mup),
-               'wnkpc': kappaw * (vphi * ss["N"]**(1+1/frisch) - muw*(1-tax)*w*ss["N"]*ss["U"]),
+               'wnkpc': kappaw * (vphi * ss["N"]**(1+1/frisch) - (1-tax)*w*ss["N"]*ss["U"]/muw),
                'sigma_z': sigma_z, 'val': alpha * Z * (ss["N"] / K) ** (1-alpha) * mc - delta - r})
     return ss
 
