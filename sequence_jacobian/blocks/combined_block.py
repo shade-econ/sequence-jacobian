@@ -5,6 +5,7 @@ from copy import deepcopy
 from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
+from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
@@ -13,6 +14,11 @@ from ..jacobian.classes import JacobianDict
 def combine(*args, name="", helper_indices=None, model_alias=False):
     # TODO: Implement a check that all args are child types of AbstractBlock, when that is properly implemented
     return CombinedBlock(*args, name=name, helper_indices=helper_indices, model_alias=model_alias)
+
+
+# Useful functional alias
+def create_model(*args, **kwargs):
+    return combine(*args, model_alias=True, **kwargs)
 
 
 class CombinedBlock(Block):
@@ -25,7 +31,7 @@ class CombinedBlock(Block):
     def __init__(self, *blocks, name="", helper_indices=None, model_alias=False):
 
         # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
-        self._blocks_unsorted = blocks
+        self._blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
 
         # Upon instantiation, we only have enough information to conduct a sort ignoring helper blocks
         # since we need a `calibration` to resolve cyclic dependencies when including helper blocks in a topological sort
@@ -138,3 +144,7 @@ class CombinedBlock(Block):
             solver = provide_solver_default(unknowns)
 
         return super().solve_steady_state(calibration, unknowns, targets, solver=solver, sort_blocks=False, **kwargs)
+
+
+# Useful type aliases
+Model = CombinedBlock
