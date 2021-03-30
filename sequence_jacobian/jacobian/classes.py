@@ -1,12 +1,22 @@
 """Various classes to support the computation of Jacobians"""
 
+from abc import ABCMeta
 import copy
 import numpy as np
 
 from . import support
 
 
-class IdentityMatrix:
+class LinearOperator(metaclass=ABCMeta):
+    """An abstract base class encompassing all valid types representing Jacobians, which include
+    np.ndarray, IdentityMatrix, ZeroMatrix, and SimpleSparse."""
+    pass
+
+# Make np.ndarray a child class of LinearOperator
+LinearOperator.register(np.ndarray)
+
+
+class IdentityMatrix(LinearOperator):
     """Simple identity matrix class, cheaper than using actual np.eye(T) matrix,
     use to initialize Jacobian of a variable wrt itself"""
     __array_priority__ = 10_000
@@ -53,7 +63,7 @@ class IdentityMatrix:
         return 'IdentityMatrix'
 
 
-class ZeroMatrix:
+class ZeroMatrix(LinearOperator):
     """Simple zero matrix class, cheaper than using actual np.zeros((T,T)) matrix,
     use in common case where some outputs don't depend on inputs"""
     __array_priority__ = 10_000
@@ -102,7 +112,7 @@ class ZeroMatrix:
         return 'ZeroMatrix'
 
 
-class SimpleSparse:
+class SimpleSparse(LinearOperator):
     """Efficient representation of sparse linear operators, which are linear combinations of basis
     operators represented by pairs (i, m), where i is the index of diagonal on which there are 1s
     (measured by # above main diagonal) and m is number of initial entries missing.
@@ -262,12 +272,14 @@ class SimpleSparse:
 
 
 class NestedDict:
-    def __init__(self, nesteddict, outputs=None, inputs=None):
+    def __init__(self, nesteddict, outputs=None, inputs=None, name=None):
         if isinstance(nesteddict, NestedDict):
             self.nesteddict = nesteddict.nesteddict
             self.outputs = nesteddict.outputs
             self.inputs = nesteddict.inputs
+            self.name = nesteddict.name
         else:
+            ensure_valid_nesteddict(nesteddict)
             self.nesteddict = nesteddict
             if outputs is None:
                 outputs = list(nesteddict.keys())
@@ -279,6 +291,11 @@ class NestedDict:
 
             self.outputs = list(outputs)
             self.inputs = list(inputs)
+            if name is None:
+                # TODO: Figure out better default naming scheme for NestedDicts
+                self.name = "NestedDict"
+            else:
+                self.name = name
 
     def __repr__(self):
         return f'<{type(self).__name__} outputs={self.outputs}, inputs={self.inputs}>'
@@ -347,6 +364,30 @@ class NestedDict:
 def deduplicate(mylist):
     """Remove duplicates while otherwise maintaining order"""
     return list(dict.fromkeys(mylist))
+
+
+def ensure_valid_nesteddict(d):
+    """The valid structure of `d` is a Dict[str, Dict[str, LinearOperator]], where calling `d[o][i]` yields a
+    Jacobian of type LinearOperator mapping sequences of `i` to sequences of `o`."""
+    # Assuming it's sufficient to just check one of the keys and that someone won't be using multiple different types
+    if not isinstance(next(iter(d.keys())), str):
+        raise ValueError(f"The dict argument {d} must have keys with type `str` to indicate `output` names.")
+
+    jac_o_dict = next(iter(d.values()))
+    if isinstance(jac_o_dict, dict):
+        if not isinstance(next(iter(jac_o_dict.keys())), str):
+            raise ValueError(f"The values of the dict argument {d} must be dicts with keys of type `str` to indicate"
+                             f" `input` names.")
+        jac_o_i = next(iter(jac_o_dict.values()))
+        if not isinstance(jac_o_i, LinearOperator):
+            raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `LinearOperator`.")
+        else:
+            if isinstance(jac_o_i, np.ndarray) and np.shape(jac_o_i)[0] != np.shape(jac_o_i)[1]:
+                raise ValueError(f"The Jacobians in {d} must be square matrices of type `LinearOperator`.")
+    else:
+        raise ValueError(f"The argument {d} must be of type `dict`, with keys of type `str` and"
+                         f" values of type `LinearOperator`.")
+
 
 
 class JacobianDict(NestedDict):

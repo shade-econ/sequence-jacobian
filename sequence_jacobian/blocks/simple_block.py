@@ -163,7 +163,7 @@ class SimpleBlock(Block):
                 if not J[o]:
                     del J[o]
 
-            return JacobianDict(J)
+            return JacobianDict(J, name=self.name)
 
 
 def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):

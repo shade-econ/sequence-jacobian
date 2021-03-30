@@ -9,8 +9,8 @@ from ...jacobian.classes import JacobianDict
 
 class JacobianDictBlock(JacobianDict, Block):
     """A wrapper for nested dicts/JacobianDicts passed directly into DAGs to ensure method compatibility"""
-    def __init__(self, nesteddict, outputs=None, inputs=None):
-        super().__init__(nesteddict, outputs=outputs, inputs=inputs)
+    def __init__(self, nesteddict, outputs=None, inputs=None, name=None):
+        super().__init__(nesteddict, outputs=outputs, inputs=inputs, name=name)
 
     def __repr__(self):
         return f"<JacobianDictBlock outputs={self.outputs}, inputs={self.inputs}>"

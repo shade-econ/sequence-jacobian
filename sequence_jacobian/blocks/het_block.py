@@ -449,7 +449,7 @@ class HetBlock(Block):
             self.saved_shock_list, self.saved_output_list = relevant_shocks, outputs
             self.saved = {'curlyYs': curlyYs, 'curlyDs': curlyDs, 'curlyPs': curlyPs, 'F': F, 'J': J}
 
-        return JacobianDict(J)
+        return JacobianDict(J, name=self.name)
 
     def add_hetinput(self, hetinput, overwrite=False, verbose=True):
         """Add a hetinput to this HetBlock. Any call to self.back_step_fun will first process
