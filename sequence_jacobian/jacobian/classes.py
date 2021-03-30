@@ -368,25 +368,28 @@ def deduplicate(mylist):
 
 def ensure_valid_nesteddict(d):
     """The valid structure of `d` is a Dict[str, Dict[str, LinearOperator]], where calling `d[o][i]` yields a
-    Jacobian of type LinearOperator mapping sequences of `i` to sequences of `o`."""
-    # Assuming it's sufficient to just check one of the keys and that someone won't be using multiple different types
-    if not isinstance(next(iter(d.keys())), str):
-        raise ValueError(f"The dict argument {d} must have keys with type `str` to indicate `output` names.")
+    Jacobian of type LinearOperator mapping sequences of `i` to sequences of `o`. The null type for `d` is assumed
+    to be {}, which is permitted the empty version of a valid nested dict."""
 
-    jac_o_dict = next(iter(d.values()))
-    if isinstance(jac_o_dict, dict):
-        if not isinstance(next(iter(jac_o_dict.keys())), str):
-            raise ValueError(f"The values of the dict argument {d} must be dicts with keys of type `str` to indicate"
-                             f" `input` names.")
-        jac_o_i = next(iter(jac_o_dict.values()))
-        if not isinstance(jac_o_i, LinearOperator):
-            raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `LinearOperator`.")
+    if d != {}:
+        # Assume it's sufficient to just check one of the keys
+        if not isinstance(next(iter(d.keys())), str):
+            raise ValueError(f"The dict argument {d} must have keys with type `str` to indicate `output` names.")
+
+        jac_o_dict = next(iter(d.values()))
+        if isinstance(jac_o_dict, dict):
+            if not isinstance(next(iter(jac_o_dict.keys())), str):
+                raise ValueError(f"The values of the dict argument {d} must be dicts with keys of type `str` to indicate"
+                                 f" `input` names.")
+            jac_o_i = next(iter(jac_o_dict.values()))
+            if not isinstance(jac_o_i, LinearOperator):
+                raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `LinearOperator`.")
+            else:
+                if isinstance(jac_o_i, np.ndarray) and np.shape(jac_o_i)[0] != np.shape(jac_o_i)[1]:
+                    raise ValueError(f"The Jacobians in {d} must be square matrices of type `LinearOperator`.")
         else:
-            if isinstance(jac_o_i, np.ndarray) and np.shape(jac_o_i)[0] != np.shape(jac_o_i)[1]:
-                raise ValueError(f"The Jacobians in {d} must be square matrices of type `LinearOperator`.")
-    else:
-        raise ValueError(f"The argument {d} must be of type `dict`, with keys of type `str` and"
-                         f" values of type `LinearOperator`.")
+            raise ValueError(f"The argument {d} must be of type `dict`, with keys of type `str` and"
+                             f" values of type `LinearOperator`.")
 
 
 
