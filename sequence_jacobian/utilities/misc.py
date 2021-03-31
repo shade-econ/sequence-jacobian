@@ -145,7 +145,3 @@ def smart_zeros(n):
         return np.zeros(n)
     else:
         return 0.
-
-
-def find_blocks_with_hetoutputs(blocks):
-    return [i for i, block in enumerate(blocks) if hasattr(block, "hetoutput") and block.hetoutput is not None]

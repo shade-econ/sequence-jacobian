@@ -1,7 +1,7 @@
 """Topological sort and related code"""
 
 
-def block_sort(blocks, ignore_helpers=False, helper_indices=None, calibration=None, return_io=False):
+def block_sort(blocks, helper_blocks=None, calibration=None, return_io=False):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort.
 
     Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
@@ -32,38 +32,27 @@ def block_sort(blocks, ignore_helpers=False, helper_indices=None, calibration=No
     return_io: `bool`
         A boolean indicating whether to return the full set of input and output arguments from `blocks`
     """
-    if helper_indices is None:
-        helper_indices = []
-
     # TODO: Decide whether we want to break out the input and output argument tracking and return to
     #   a different function... currently it's very convenient to slot it into block_sort directly, but it
     #   does clutter up the function body
     if return_io:
         # step 1: map outputs to blocks for topological sort
-        outmap, outargs = construct_output_map(blocks, ignore_helpers=ignore_helpers,
-                                               helper_indices=helper_indices, return_output_args=True)
+        outmap, outargs = construct_output_map(blocks, helper_blocks=helper_blocks,
+                                               return_output_args=True)
 
         # step 2: dependency graph for topological sort and input list
         dep, inargs = construct_dependency_graph(blocks, outmap, return_input_args=True,
-                                                 ignore_helpers=ignore_helpers,
-                                                 helper_indices=helper_indices, calibration=calibration)
+                                                 helper_blocks=helper_blocks, calibration=calibration)
 
-        if ignore_helpers:
-            return [i for i in topological_sort(dep) if i not in helper_indices], inargs, outargs
-        else:
-            return topological_sort(dep), inargs, outargs
+        return topological_sort(dep), inargs, outargs
     else:
         # step 1: map outputs to blocks for topological sort
-        outmap = construct_output_map(blocks, ignore_helpers=ignore_helpers, helper_indices=helper_indices)
+        outmap = construct_output_map(blocks, helper_blocks=helper_blocks)
 
         # step 2: dependency graph for topological sort and input list
-        dep = construct_dependency_graph(blocks, outmap, calibration=calibration,
-                                         ignore_helpers=ignore_helpers, helper_indices=helper_indices)
+        dep = construct_dependency_graph(blocks, outmap, calibration=calibration, helper_blocks=helper_blocks)
 
-        if ignore_helpers:
-            return [i for i in topological_sort(dep) if i not in helper_indices]
-        else:
-            return topological_sort(dep)
+        return topological_sort(dep)
 
 
 def topological_sort(dep, names=None):
@@ -93,27 +82,23 @@ def topological_sort(dep, names=None):
     return topsorted
 
 
-def construct_output_map(blocks, ignore_helpers=False, helper_indices=None, return_output_args=False):
+def construct_output_map(blocks, helper_blocks=None, return_output_args=False):
     """Construct a map of outputs to the indices of the blocks that produce them.
 
     blocks: `list`
-        A list of the blocks (SimpleBlock, HetBlock, helper block, etc.) to sort
-    ignore_helpers: `bool`
-        A boolean indicating whether to account for/return the indices of helper blocks contained in blocks
-        Set to true when sorting for td and jac calculations
+        A list of the blocks (SimpleBlock, HetBlock, etc.) to sort
+    helper_blocks: `list`
+        A list of helper blocks, designed to aid steady state computation, to include in the sort
     return_output_args: `bool`
         A boolean indicating whether to track and return the full set of output arguments of all of the blocks
         in `blocks`
     """
-    if helper_indices is None:
-        helper_indices = []
+    if helper_blocks is None:
+        helper_blocks = []
 
     outmap = dict()
     outargs = set()
-    for num, block in enumerate(blocks):
-        if ignore_helpers and num in helper_indices:
-            continue
-
+    for num, block in enumerate(blocks + helper_blocks):
         # Find the relevant set of outputs corresponding to a block
         if hasattr(block, "outputs"):
             outputs = block.outputs
@@ -126,12 +111,13 @@ def construct_output_map(blocks, ignore_helpers=False, helper_indices=None, retu
             # Because some of the outputs of a helper block are, by construction, outputs that also appear in the
             # standard blocks that comprise a DAG, ignore the fact that an output is repeated when considering
             # throwing this ValueError
-            if o in outmap and not (num in helper_indices or outmap[o] in helper_indices):
+            if o in outmap and block not in helper_blocks:
                 raise ValueError(f'{o} is output twice')
 
+            # Priority sorting for standard blocks:
             # Ensure that the block "outmap" maps "o" to is the actual block and not a helper block if both share
             # a given output, such that the dependency graph is constructed on the standard blocks, where possible
-            if o not in outmap or (o in outmap and num not in helper_indices):
+            if o not in outmap:
                 outmap[o] = num
                 if return_output_args:
                     outargs.add(o)
@@ -143,7 +129,7 @@ def construct_output_map(blocks, ignore_helpers=False, helper_indices=None, retu
         return outmap
 
 
-def construct_dependency_graph(blocks, outmap, ignore_helpers=False, helper_indices=None,
+def construct_dependency_graph(blocks, outmap, helper_blocks=None,
                                calibration=None, return_input_args=False):
     """Construct a dependency graph dictionary, with block indices as keys and a set of block indices as values, where
     this set is the set of blocks that the key block is dependent on.
@@ -154,14 +140,12 @@ def construct_dependency_graph(blocks, outmap, ignore_helpers=False, helper_indi
     """
     if calibration is None:
         calibration = {}
-    if helper_indices is None:
-        helper_indices = []
+    if helper_blocks is None:
+        helper_blocks = []
 
-    dep = {num: set() for num in range(len(blocks))}
+    dep = {num: set() for num in range(len(blocks + helper_blocks))}
     inargs = set()
-    for num, block in enumerate(blocks):
-        if ignore_helpers and num in helper_indices:
-            continue
+    for num, block in enumerate(blocks + helper_blocks):
         if hasattr(block, 'inputs'):
             inputs = block.inputs
         else:
@@ -177,7 +161,7 @@ def construct_dependency_graph(blocks, outmap, ignore_helpers=False, helper_indi
             # produces that input as an output as a dependency.
             # e.g. Krusell Smith's firm_steady_state_solution helper block and firm block would create a cyclic
             # dependency, if it were not for this resolution.
-            if i in outmap and not (i in calibration and num in helper_indices):
+            if i in outmap and not (i in calibration and block in helper_blocks):
                 dep[num].add(outmap[i])
     if return_input_args:
         return dep, inargs
@@ -185,20 +169,18 @@ def construct_dependency_graph(blocks, outmap, ignore_helpers=False, helper_indi
         return dep
 
 
-def find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=False, helper_indices=None):
+def find_outputs_that_are_intermediate_inputs(blocks, helper_blocks=None):
     """Find outputs of the blocks in blocks that are inputs to other blocks in blocks.
     This is useful to ensure that all of the relevant curlyJ Jacobians (of all inputs to all outputs) are computed.
 
     See the docstring of construct_output_map for more details about the arguments.
     """
-    if helper_indices is None:
-        helper_indices = []
+    if helper_blocks is None:
+        helper_blocks = []
 
     required = set()
-    outmap = construct_output_map(blocks, ignore_helpers=ignore_helpers, helper_indices=helper_indices)
+    outmap = construct_output_map(blocks, helper_blocks=helper_blocks)
     for num, block in enumerate(blocks):
-        if ignore_helpers and num in helper_indices:
-            continue
         if hasattr(block, 'inputs'):
             inputs = block.inputs
         else:

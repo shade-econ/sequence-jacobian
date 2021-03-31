@@ -93,9 +93,8 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
     blocks_simple = [household, two_asset.make_grids,
                      two_asset.pricing, two_asset.arbitrage, two_asset.labor, two_asset.investment,
                      two_asset.dividend, two_asset.taylor, two_asset.fiscal,
-                     two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing,
-                     two_asset.partial_steady_state_solution]
-    two_asset_model_simple = combine(*blocks_simple, name="Two-Asset HANK w/ SimpleBlocks", helper_indices=[13])
+                     two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing]
+    two_asset_model_simple = combine(blocks_simple, name="Two-Asset HANK w/ SimpleBlocks")
     unknowns_simple = ["r", "w", "Y", "pi", "p", "Q", "K"]
     targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
 

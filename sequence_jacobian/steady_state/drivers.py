@@ -10,7 +10,7 @@ from ..utilities import solvers, graph, misc
 
 
 # Find the steady state solution
-def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, sort_blocks=True,
+def steady_state(blocks, calibration, unknowns, targets, helper_blocks=None, sort_blocks=True,
                  consistency_check=True, ttol=2e-12, ctol=1e-9,
                  block_kwargs=None, verbose=False, fragile=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
@@ -25,9 +25,8 @@ def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, so
         A dictionary mapping unknown variables to either initial values or bounds to be provided to the numerical solver
     targets: `dict`
         A dictionary mapping target variables to desired numerical values, other variables solved for along the DAG
-    helper_indices: `list`
-        A list of indices (int) indicating which blocks in `blocks` are "helper blocks", i.e. SimpleBlocks that replace
-        some of the equations in the DAG for the purposes of aiding steady state calculation
+    helper_blocks: `list`
+        A list of blocks that replace some of the equations in the DAG to aid steady state calculation
     sort_blocks: `bool`
         Whether the blocks need to be topologically sorted (only False when this function is called from within a
         Block object, like CombinedBlock, that has already pre-sorted the blocks)
@@ -64,8 +63,8 @@ def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, so
     """
 
     # Populate otherwise mutable default arguments
-    if helper_indices is None:
-        helper_indices = []
+    if helper_blocks is None:
+        helper_blocks = []
     if block_kwargs is None:
         block_kwargs = {}
     if solver_kwargs is None:
@@ -73,14 +72,15 @@ def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, so
     if constrained_kwargs is None:
         constrained_kwargs = {}
 
+    blocks_all = blocks + helper_blocks
+
     ss_values = deepcopy(calibration)
     if sort_blocks:
-        topsorted = graph.block_sort(blocks, ignore_helpers=False,
-                                     helper_indices=helper_indices, calibration=calibration)
+        topsorted = graph.block_sort(blocks, calibration=calibration, helper_blocks=helper_blocks)
     else:
-        topsorted = range(len(blocks))
+        topsorted = range(len(blocks + helper_blocks))
 
-    def residual(unknown_values, include_helpers=True, update_unknowns_inplace=False):
+    def residual(unknown_values, include_helpers=True, update_unknowns_in_place=False):
         ss_values.update(misc.smart_zip(unknowns.keys(), unknown_values))
 
         helper_outputs = {}
@@ -88,16 +88,16 @@ def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, so
         # Progress through the DAG computing the resulting steady state values based on the unknown_values
         # provided to the residual function
         for i in topsorted:
-            if not include_helpers and i in helper_indices:
+            if not include_helpers and blocks_all[i] in helper_blocks:
                 continue
             # Want to see hetoutputs
-            elif hasattr(blocks[i], 'hetoutput') and blocks[i].hetoutput is not None:
-                outputs = eval_block_ss(blocks[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
+            elif hasattr(blocks_all[i], 'hetoutput') and blocks_all[i].hetoutput is not None:
+                outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
                 ss_values.update(misc.dict_diff(outputs, helper_outputs))
             else:
-                outputs = eval_block_ss(blocks[i], ss_values, consistency_check=consistency_check,
+                outputs = eval_block_ss(blocks_all[i], ss_values, consistency_check=consistency_check,
                                         ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
-                if include_helpers and i in helper_indices:
+                if include_helpers and blocks_all[i] in helper_blocks:
                     helper_outputs.update(outputs)
                     ss_values.update(outputs)
                 else:
@@ -109,7 +109,7 @@ def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, so
         # i.e. the "unknowns" in the namespace in which this function is invoked will change!
         # Useful for a) if the unknown values are updated while iterating each blocks' ss computation within the DAG,
         # and/or b) if the user wants to update "unknowns" in place for use in other computations.
-        if update_unknowns_inplace:
+        if update_unknowns_in_place:
             unknowns.update(misc.smart_zip(unknowns.keys(), [ss_values[key] for key in unknowns.keys()]))
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
@@ -127,10 +127,6 @@ def steady_state(blocks, calibration, unknowns, targets, helper_indices=None, so
 
     # Update to set the solutions for the steady state values of the unknowns
     ss_values.update(zip(unknowns, misc.make_tuple(unknown_solutions)))
-
-    # Find the hetoutputs of the Hetblocks that have hetoutputs
-    for i in misc.find_blocks_with_hetoutputs(blocks):
-        ss_values.update(eval_block_ss(blocks[i], ss_values, hetoutput=True, **block_kwargs))
 
     return ss_values
 
@@ -224,7 +220,7 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         # Call residual() once to update ss_values and to check the targets match the provided solution.
         # The initial value passed into residual (np.zeros()) in this case is irrelevant, but something
         # must still be passed in since the residual function requires an argument.
-        assert abs(np.max(residual(misc.smart_zeros(len(unknowns)), update_unknowns_inplace=True))) < tol
+        assert abs(np.max(residual(misc.smart_zeros(len(unknowns)), update_unknowns_in_place=True))) < tol
         unknown_solutions = list(unknowns.values())
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")

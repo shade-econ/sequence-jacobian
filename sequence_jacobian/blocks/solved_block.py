@@ -43,9 +43,9 @@ class SolvedBlock(Block):
         # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
         # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
         # Hence, we will cache that info upon first invocation of the steady_state
-        self._sorted_indices_w_o_helpers = graph.block_sort(blocks, ignore_helpers=True)
+        self._sorted_indices_w_o_helpers = graph.block_sort(blocks)
         self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
-        self._required = graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
+        self._required = graph.find_outputs_that_are_intermediate_inputs(blocks)
 
         # User-facing attributes for accessing blocks
         # .blocks_w_helpers meant to only interface with steady_state functionality
@@ -84,11 +84,11 @@ class SolvedBlock(Block):
                       DeprecationWarning)
         return self.jacobian(ss, shock_list, T, **kwargs)
 
-    def steady_state(self, calibration, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False):
+    def steady_state(self, calibration, helper_blocks=None, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False):
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:
-            self._sorted_indices_w_helpers = graph.block_sort(self._blocks_unsorted, ignore_helpers=False,
+            self._sorted_indices_w_helpers = graph.block_sort(self._blocks_unsorted, helper_blocks=helper_blocks,
                                                               calibration=calibration)
             self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
 

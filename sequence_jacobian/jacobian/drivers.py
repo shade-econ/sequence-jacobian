@@ -194,8 +194,8 @@ def curlyJ_sorted(blocks, inputs, ss=None, T=None, save=False, use_saved=False):
     """
 
     # step 1: get topological sort and required
-    topsorted = graph.block_sort(blocks, ignore_helpers=True)
-    required = graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
+    topsorted = graph.block_sort(blocks)
+    required = graph.find_outputs_that_are_intermediate_inputs(blocks)
 
     # Remove any vector-valued outputs that are intermediate inputs, since we don't want
     # to compute Jacobians with respect to vector-valued variables
