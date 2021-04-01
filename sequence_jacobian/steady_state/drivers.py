@@ -3,16 +3,18 @@
 import numpy as np
 import scipy.optimize as opt
 from copy import deepcopy
+from functools import partial
 
 from .support import compute_target_values, extract_multivariate_initial_values_and_bounds,\
-    extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check
+    extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check,\
+    subset_helper_block_unknowns_and_targets
 from ..utilities import solvers, graph, misc
 
 
 # Find the steady state solution
 def steady_state(blocks, calibration, unknowns, targets, helper_blocks=None, sort_blocks=True,
-                 consistency_check=True, ttol=2e-12, ctol=1e-9,
-                 block_kwargs=None, verbose=False, fragile=False, solver=None, solver_kwargs=None,
+                 consistency_check=True, ttol=2e-12, ctol=1e-9, fragile=False,
+                 block_kwargs=None, verbose=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
     """
     For a given model (blocks), calibration, unknowns, and targets, solve for the steady state values.
@@ -38,14 +40,14 @@ def steady_state(blocks, calibration, unknowns, targets, helper_blocks=None, sor
     ctol: `float`
         The tolerance for the consistency check---how close the user wants the computed target values, without the
         use of helper blocks, to equal the desired values
+    fragile: `bool`
+        Throw errors instead of warnings when certain criteria are not met, i.e if the consistency_check fails
     block_kwargs: `dict`
         A dict of any kwargs that specify additional settings in order to evaluate block.steady_state for any
         potential Block object, e.g. HetBlocks have backward_tol and forward_tol settings that are specific to that
         Block sub-class.
     verbose: `bool`
         Display the content of optional print statements within the solver for more responsive feedback
-    fragile: `bool`
-        Throw errors instead of warnings when certain criteria are not met, i.e if the consistency_check fails
     solver: `string`
         The name of the numerical solver that the user would like to user. Can either be a custom solver the user
         implemented, or one of the standard root-finding methods in scipy.optim.root_scalar or scipy.optim.root
@@ -72,19 +74,28 @@ def steady_state(blocks, calibration, unknowns, targets, helper_blocks=None, sor
     if constrained_kwargs is None:
         constrained_kwargs = {}
 
+    # Initial setup of blocks, targets, and dictionary of steady state values to be returned
     blocks_all = blocks + helper_blocks
+    targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
+
+    helper_unknowns, helper_targets = subset_helper_block_unknowns_and_targets(helper_blocks, unknowns, targets)
 
     ss_values = deepcopy(calibration)
+    ss_values.update(helper_targets)
+
     if sort_blocks:
-        topsorted = graph.block_sort(blocks, calibration=calibration, helper_blocks=helper_blocks)
+        topsorted = graph.block_sort(blocks, calibration=helper_targets, helper_blocks=helper_blocks)
     else:
         topsorted = range(len(blocks + helper_blocks))
 
-    def residual(unknown_values, include_helpers=True, update_unknowns_in_place=False):
-        ss_values.update(misc.smart_zip(unknowns.keys(), unknown_values))
+    def residual(targets_dict, unknown_keys, *unknown_values,
+                 include_helpers=True, update_unknowns_in_place=False):
+        ss_values.update(misc.smart_zip(unknown_keys, unknown_values))
 
         helper_outputs = {}
 
+        # TODO: Later on optimize to not evaluating blocks in residual that are no longer needed due to helper
+        #   block subsetting
         # Progress through the DAG computing the resulting steady state values based on the unknown_values
         # provided to the residual function
         for i in topsorted:
@@ -110,23 +121,54 @@ def steady_state(blocks, calibration, unknowns, targets, helper_blocks=None, sor
         # Useful for a) if the unknown values are updated while iterating each blocks' ss computation within the DAG,
         # and/or b) if the user wants to update "unknowns" in place for use in other computations.
         if update_unknowns_in_place:
-            unknowns.update(misc.smart_zip(unknowns.keys(), [ss_values[key] for key in unknowns.keys()]))
+            unknowns.update(misc.smart_zip(unknown_keys, [ss_values[key] for key in unknown_keys]))
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
         # dict of ss_values to compute the "unknown_solutions"
-        return compute_target_values(targets, ss_values)
+        return compute_target_values(targets_dict, ss_values)
 
-    unknown_solutions = _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
-                                            constrained_method, constrained_kwargs,
-                                            tol=ttol, verbose=verbose)
+    if helper_blocks:
+        # Initial verification that helper block targets are satisfied by the helper blocks
+        unknowns_init_vals = [v if not isinstance(v, tuple) else (v[0] + v[1])/2 for v in unknowns.values()]
+        targets_init_vals = dict(misc.smart_zip(targets.keys(), residual(targets, unknowns.keys(), *unknowns_init_vals)))
+
+        # Subset out the unknowns and targets that are not handled by helper blocks
+        unknowns_w_o_helpers = {k: unknowns[k] for k in misc.list_diff(list(unknowns.keys()), helper_unknowns)}
+        targets_w_o_helpers = misc.dict_diff(targets, helper_targets)
+
+        # Assumption: If the targets handled by helpers are satisfied under the provided
+        # set of unknown variables' initial values, then it is assumed they will be under other unknown variables'
+        # initial values and hence the unknowns/targets handled by helpers and the helper blocks themselves
+        # can be omitted from the DAG when solving.
+        if np.all(np.isclose([targets_init_vals[t] for t in helper_targets.keys()], 0.)):
+            unknown_solutions = _solve_for_unknowns(partial(residual, targets_w_o_helpers, unknowns_w_o_helpers.keys(),
+                                                            include_helpers=False),
+                                                    unknowns_w_o_helpers, solver, solver_kwargs,
+                                                    constrained_method, constrained_kwargs,
+                                                    tol=ttol, verbose=verbose)
+        # If targets handled by helpers are not satisfied then it is assumed that helper blocks merely aid in providing
+        # more accurate guesses for the DAG solution and they remain a part of the DAG when solving.
+        else:
+            unknown_solutions = _solve_for_unknowns(partial(residual, targets, unknowns.keys()),
+                                                    unknowns, solver, solver_kwargs,
+                                                    constrained_method, constrained_kwargs,
+                                                    tol=ttol, verbose=verbose)
+    else:
+        unknown_solutions = _solve_for_unknowns(partial(residual, targets, unknowns.keys()),
+                                                unknowns, solver, solver_kwargs,
+                                                constrained_method, constrained_kwargs,
+                                                tol=ttol, verbose=verbose)
 
     # Check that the solution is consistent with what would come out of the DAG without the helper blocks
     if consistency_check:
-        cresid = abs(np.max(residual(unknown_solutions, include_helpers=False)))
+        unknown_solutions = misc.make_tuple(unknown_solutions)
+        unknowns_solved = {k: unknown_solutions[ik] for ik, k in enumerate(unknowns_w_o_helpers)}
+        unknowns_solved.update({k: ss_values[k] for k in unknowns if k not in unknowns_solved})
+        cresid = abs(np.max(residual(targets, unknowns_solved.keys(), *unknowns_solved.values(), include_helpers=False)))
         run_consistency_check(cresid, ctol=ctol, fragile=fragile)
 
     # Update to set the solutions for the steady state values of the unknowns
-    ss_values.update(zip(unknowns, misc.make_tuple(unknown_solutions)))
+    ss_values.update(misc.smart_zip(unknowns, unknown_solutions))
 
     return ss_values
 
@@ -152,6 +194,8 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         and returns computed targets.
     unknowns: `dict`
         Refer to the `steady_state` function docstring for the "unknowns" variable
+    targets: `dict`
+        Refer to the `steady_state` function docstring for the "targets" variable
     tol: `float`
         The absolute convergence tolerance of the computed target to the desired target value in the numerical solver
     solver: `str`
@@ -169,7 +213,8 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
     elif solver in scipy_optimize_uni_solvers:
         initial_values_or_bounds = extract_univariate_initial_values_or_bounds(unknowns)
-        result = opt.root_scalar(residual, method=solver, xtol=tol, **initial_values_or_bounds, **solver_kwargs)
+        result = opt.root_scalar(residual, method=solver, xtol=tol,
+                                 **initial_values_or_bounds, **solver_kwargs)
         if not result.converged:
             raise ValueError(f"Steady-state solver, {solver}, did not converge.")
         unknown_solutions = result.root
@@ -177,12 +222,14 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
         # If no bounds were provided
         if not bounds:
-            result = opt.root(residual, initial_values, method=solver, tol=tol, **solver_kwargs)
+            result = opt.root(residual, initial_values,
+                              method=solver, tol=tol, **solver_kwargs)
         else:
             constrained_residual = constrained_multivariate_residual(residual, bounds, verbose=verbose,
                                                                      method=constrained_method,
                                                                      **constrained_kwargs)
-            result = opt.root(constrained_residual, initial_values, method=solver, tol=tol, **solver_kwargs)
+            result = opt.root(constrained_residual, initial_values,
+                              method=solver, tol=tol, **solver_kwargs)
         if not result.success:
             raise ValueError(f"Steady-state solver, {solver}, did not converge."
                              f" The termination status is {result.status}.")
@@ -193,8 +240,8 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
         # If no bounds were provided
         if not bounds:
-            unknown_solutions, _ = solvers.broyden_solver(residual, initial_values, tol=tol,
-                                                          verbose=verbose, **solver_kwargs)
+            unknown_solutions, _ = solvers.broyden_solver(residual, initial_values,
+                                                          tol=tol, verbose=verbose, **solver_kwargs)
         else:
             constrained_residual = constrained_multivariate_residual(residual, bounds, verbose=verbose,
                                                                      method=constrained_method,
@@ -206,14 +253,14 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
         initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
         # If no bounds were provided
         if not bounds:
-            unknown_solutions, _ = solvers.newton_solver(residual, initial_values, tol=tol,
-                                                         verbose=verbose, **solver_kwargs)
+            unknown_solutions, _ = solvers.newton_solver(residual, initial_values,
+                                                         tol=tol, verbose=verbose, **solver_kwargs)
         else:
             constrained_residual = constrained_multivariate_residual(residual, bounds, verbose=verbose,
                                                                      method=constrained_method,
                                                                      **constrained_kwargs)
             unknown_solutions, _ = solvers.newton_solver(constrained_residual, initial_values,
-                                                         verbose=verbose, tol=tol, **solver_kwargs)
+                                                         tol=tol, verbose=verbose, **solver_kwargs)
         unknown_solutions = list(unknown_solutions)
     elif solver == "solved":
         # If the entire solution is provided by the helper blocks

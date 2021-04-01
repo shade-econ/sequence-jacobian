@@ -71,6 +71,25 @@ def compute_target_values(targets, potential_args):
         return target_values
 
 
+def subset_helper_block_unknowns_and_targets(helper_blocks, unknowns, targets):
+    """Find the set of unknowns and targets that the `helper_blocks` solve out"""
+    unknowns_handled_by_helpers = set()
+    targets_handled_by_helpers = set()
+    for block in helper_blocks:
+        unknowns_handled_by_helpers |= (block.inputs | block.outputs) & set(unknowns.keys())
+        targets_handled_by_helpers |= (block.inputs | block.outputs) & set(targets.keys())
+    unknowns_handled_by_helpers = list(unknowns_handled_by_helpers)
+    targets_handled_by_helpers = list(targets_handled_by_helpers)
+
+    n_unknowns = len(unknowns_handled_by_helpers)
+    n_targets = len(targets_handled_by_helpers)
+    if n_unknowns != n_targets:
+        raise ValueError(f"The provided helper_blocks handle {n_unknowns} unknowns != {n_targets} targets."
+                         f" User must specify an equal number of unknowns/targets solved for by helper blocks.")
+
+    return unknowns_handled_by_helpers, dict(zip(targets_handled_by_helpers, [targets[t] for t in targets_handled_by_helpers]))
+
+
 def extract_univariate_initial_values_or_bounds(unknowns):
     val = next(iter(unknowns.values()))
     if np.isscalar(val):
