@@ -120,14 +120,21 @@ def unprime(s):
         return s
 
 
+def list_diff(l1, l2):
+    """Returns the list that is the "set difference" between l1 and l2 (based on element values)"""
+    o_dict = {}
+    for ik, k in enumerate(set(l1) - set(l2)):
+        o_dict[k] = l1[ik]
+    return o_dict
+
+
 def dict_diff(d1, d2):
     """Returns the dictionary that is the "set difference" between d1 and d2 (based on keys, not key-value pairs)
     E.g. d1 = {"a": 1, "b": 2}, d2 = {"b": 5}, then dict_diff(d1, d2) = {"a": 1}
     """
     o_dict = {}
-    for k in set(d1.keys()).difference(set(d2.keys())):
+    for k in set(d1.keys()) - set(d2.keys()):
         o_dict[k] = d1[k]
-
     return o_dict
 
 
