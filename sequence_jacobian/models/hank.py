@@ -161,13 +161,15 @@ def asset_state_vars(amax, nA):
 
 
 @simple
-def partial_steady_state_solution(B_Y, mu, r):
+def partial_steady_state_solution(B_Y, Y, mu, r, kappa, Z, pi):
     B = B_Y
     w = 1 / mu
     Div = (1 - w)
     Tax = r * B
 
-    return B, w, Div, Tax
+    nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / (1 + r(+1)) - (1 + pi).apply(np.log)
+
+    return B, w, Div, Tax, nkpc_res
 
 
 '''Part 3: Steady state'''

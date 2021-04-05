@@ -201,7 +201,7 @@ def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
             iout[j] = i-1
             err_upper = rhs[i, j] - lhs[i]
             err_lower = rhs[i-1, j] - lhs[i-1]
-            piout[j] =  err_upper / (err_upper - err_lower)
+            piout[j] = err_upper / (err_upper - err_lower)
 
 
 '''Part 2: Simple blocks'''
@@ -279,17 +279,19 @@ def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
 
 @simple
 def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U):
-    asset_mkt = p + Bg - B - A
+    wealth = A + B
+    asset_mkt = p + Bg - wealth
     labor_mkt = vphi - muw * (1 - tax) * w * U
-    return asset_mkt, labor_mkt
+    return asset_mkt, labor_mkt, wealth
 
 
 @simple
 def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega):
-    asset_mkt = p + Bg - B - A
+    wealth = A + B
+    asset_mkt = p + Bg - wealth
     labor_mkt = vphi - muw * (1 - tax) * w * U
     goods_mkt = C + I + G + Chi + omega * B - 1
-    return asset_mkt, labor_mkt, goods_mkt
+    return asset_mkt, labor_mkt, goods_mkt, wealth
 
 
 @simple
@@ -300,6 +302,12 @@ def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
     e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     return b_grid, a_grid, k_grid, e_grid, Pi
+
+
+@simple
+def share_value(p, tot_wealth, Bh):
+    pshare = p / (tot_wealth - Bh)
+    return pshare
 
 
 @simple
@@ -317,7 +325,12 @@ def partial_steady_state_solution(delta, K, r, tot_wealth, Bh, Bg, G, omega):
     rb = r - omega
     pshare = p / (tot_wealth - Bh)
 
-    return I, mc, alpha, mup, Z, w, tax, div, p, ra, rb, pshare
+    # TODO: These are completely wrong...but left as is. Change these please!
+    N = (1. / Z / K(-1) ** alpha) ** (1 / (1 - alpha))
+    wnkpc = 0.
+    wealth = tot_wealth
+
+    return I, mc, alpha, mup, Z, w, tax, div, p, ra, rb, pshare, N, wnkpc, wealth
 
 
 '''Part 3: Steady state'''
@@ -404,11 +417,11 @@ def pricing_solved(pi, mc, r, Y, kappap, mup):
     return nkpc
 
 
-@solved(unknowns={'p': (10, 15)}, targets=['equity'], solver="brentq")
+@solved(unknowns={'p': (5, 15)}, targets=['equity'], solver="brentq")
 def arbitrage_solved(div, p, r):
     equity = div(+1) + p(+1) - p * (1 + r(+1))
     return equity
 
 
-production_solved = solved(block_list=[labor, investment], unknowns={'Q': 1, 'K': 10},
+production_solved = solved(block_list=[labor, investment], unknowns={'Q': 1., 'K': 10.},
                            targets=['inv', 'val'], solver="broyden_custom")

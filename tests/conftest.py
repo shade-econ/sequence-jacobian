@@ -14,9 +14,9 @@ def rbc_dag():
     rbc_model = create_model(blocks, name="RBC")
 
     # Steady State
-    calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "frisch": 1., "L": 1.0, "r": 0.01}
-    unknowns_ss = {"beta": None, "vphi": None}
-    targets_ss = {"goods_mkt": 0, "euler": 0}
+    calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "frisch": 1., "L": 1.0}
+    unknowns_ss = {"beta": 0.98, "vphi": 0.95, "Z": 1., "K": 3.}
+    targets_ss = {"goods_mkt": 0, "euler": 0, "Y": 1., "r": 0.01}
     ss = rbc_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
                                       helper_blocks=helper_blocks, solver="solved")
 
@@ -38,8 +38,8 @@ def krusell_smith_dag():
     # Steady State
     calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "rho": 0.966, "sigma": 0.5, "L": 1.0,
                    "nS": 2, "nA": 10, "amax": 200, "r": 0.01}
-    unknowns_ss = {"beta": (0.98/1.01, 0.999/1.01)}
-    targets_ss = {"K": "A"}
+    unknowns_ss = {"beta": (0.98 / 1.01, 0.999 / 1.01), "Z": 0.85, "K": 3.}
+    targets_ss = {"asset_mkt": 0., "Y": 1., "r": 0.01}
     ss = ks_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
                                      helper_blocks=helper_blocks, solver="brentq")
 
@@ -59,11 +59,11 @@ def one_asset_hank_dag():
     hank_model = create_model(blocks, name="One-Asset HANK")
 
     # Steady State
-    calibration = {"r": 0.005, "rstar": 0.005, "eis": 0.5, "frisch": 0.5, "mu": 1.2, "B_Y": 5.6,
+    calibration = {"r": 0.005, "rstar": 0.005, "eis": 0.5, "frisch": 0.5, "B_Y": 5.6, "mu": 1.2,
                    "rho_s": 0.966, "sigma_s": 0.5, "kappa": 0.1, "phi": 1.5, "Y": 1, "Z": 1, "L": 1,
                    "pi": 0, "nS": 2, "amax": 150, "nA": 10}
-    unknowns_ss = {"beta": 0.986, "vphi": 0.8}
-    targets_ss = {"asset_mkt": 0, "labor_mkt": 0}
+    unknowns_ss = {"beta": 0.986, "vphi": 0.8, "w": 0.8}
+    targets_ss = {"asset_mkt": 0, "labor_mkt": 0, "nkpc_res": 0.}
     ss = hank_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
                                        helper_blocks=helper_blocks, solver="broyden_custom")
 

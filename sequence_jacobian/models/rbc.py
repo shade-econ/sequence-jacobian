@@ -40,7 +40,10 @@ def steady_state_solution(r, eis, delta, alpha):
     beta = 1 / (1 + r)
     vphi = w * C ** (-1 / eis)
 
-    return Z, K, Y, w, I, C, beta, vphi
+    goods_mkt = Y - C - I
+    euler = C ** (-1 / eis) - beta * (1 + r(+1)) * C(+1) ** (-1 / eis)
+
+    return Z, K, Y, w, I, C, beta, vphi, goods_mkt, euler
 
 
 '''Part 2: Steady state'''
