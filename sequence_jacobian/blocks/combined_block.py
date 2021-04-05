@@ -60,7 +60,7 @@ class CombinedBlock(Block):
         if helper_blocks is None:
             helper_blocks = []
 
-        topsorted = utils.graph.block_sort(self._blocks_unsorted, calibration=calibration, helper_blocks=helper_blocks)
+        topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
         blocks_all = self.blocks + helper_blocks
 
         ss_partial_eq = deepcopy(calibration)
