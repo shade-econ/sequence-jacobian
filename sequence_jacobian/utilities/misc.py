@@ -122,10 +122,10 @@ def unprime(s):
 
 def list_diff(l1, l2):
     """Returns the list that is the "set difference" between l1 and l2 (based on element values)"""
-    o_dict = {}
-    for ik, k in enumerate(set(l1) - set(l2)):
-        o_dict[k] = l1[ik]
-    return o_dict
+    o_list = []
+    for k in set(l1) - set(l2):
+        o_list.append(k)
+    return o_list
 
 
 def dict_diff(d1, d2):
