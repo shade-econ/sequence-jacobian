@@ -23,15 +23,4 @@ class JacobianDictBlock(JacobianDict, Block):
         if exogenous is None:
             return JacobianDict(self.nesteddict)
         else:
-            if self.inputs == exogenous:
-                return JacobianDict(self.nesteddict)
-            else:
-                nesteddict_subset = {}
-                for o in self.nesteddict.keys():
-                    for i in self.nesteddict[o].keys():
-                        if i in exogenous:
-                            if o in nesteddict_subset:
-                                nesteddict_subset[o][i] = self.nesteddict[o][i]
-                            else:
-                                nesteddict_subset[o] = {i: self.nesteddict[o][i]}
-                return JacobianDict(nesteddict_subset)
+            return self[:, exogenous]
