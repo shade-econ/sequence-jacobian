@@ -4,7 +4,6 @@ import scipy.optimize as opt
 from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.het_block import het
-from ..blocks.helper_block import helper
 
 
 '''Part 1: HA block'''
@@ -77,7 +76,7 @@ def asset_state_vars(amax, nA):
     return a_grid
 
 
-@helper
+@simple
 def firm_steady_state_solution(r, delta, alpha):
     rk = r + delta
     Z = (rk / alpha) ** alpha  # normalize so that Y=1

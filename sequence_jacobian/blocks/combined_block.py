@@ -1,20 +1,23 @@
 """CombinedBlock class and the combine function to generate it"""
 
 from copy import deepcopy
-import numpy as np
 
 from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
+from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
-from ..blocks.het_block import HetBlock
 
 
-def combine(*args, name="", model_alias=False):
-    # TODO: Implement a check that all args are child types of AbstractBlock, when that is properly implemented
-    return CombinedBlock(*args, name=name, model_alias=model_alias)
+def combine(blocks, name="", model_alias=False):
+    return CombinedBlock(blocks, name=name, model_alias=model_alias)
+
+
+# Useful functional alias
+def create_model(blocks, **kwargs):
+    return combine(blocks, model_alias=True, **kwargs)
 
 
 class CombinedBlock(Block):
@@ -24,22 +27,12 @@ class CombinedBlock(Block):
     # To users: Do *not* manually change the attributes via assignment. Instantiating a
     #   CombinedBlock has some automated features that are inferred from initial instantiation but not from
     #   re-assignment of attributes post-instantiation.
-    def __init__(self, *blocks, name="", model_alias=False):
-        # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
-        self._blocks_unsorted = blocks
+    def __init__(self, blocks, name="", model_alias=False):
 
-        # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
-        # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
-        # Hence, we will cache that info upon first invocation of the steady_state
-        self._sorted_indices_w_o_helpers = utils.graph.block_sort(blocks, ignore_helpers=True)
-        self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
-        self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks, ignore_helpers=True)
-
-        # User-facing attributes for accessing blocks
-        # .blocks_w_helpers meant to only interface with steady_state functionality
-        # .blocks meant to interface with dynamic functionality (impulses and jacobian calculations)
-        self.blocks_w_helpers = None
-        self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices_w_o_helpers]
+        self._blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
+        self._sorted_indices = utils.graph.block_sort(blocks)
+        self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks)
+        self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices]
 
         if not name:
             self.name = f"{self.blocks[0].name}_to_{self.blocks[-1].name}_combined"
@@ -62,18 +55,17 @@ class CombinedBlock(Block):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def steady_state(self, calibration):
+    def steady_state(self, calibration, helper_blocks=None, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
-        # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
-        # accounting for HelperBlocks
-        if self._sorted_indices_w_helpers is None:
-            self._sorted_indices_w_helpers = utils.graph.block_sort(self._blocks_unsorted, ignore_helpers=False,
-                                                                    calibration=calibration)
-            self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
+        if helper_blocks is None:
+            helper_blocks = []
+
+        topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
+        blocks_all = self.blocks + helper_blocks
 
         ss_partial_eq = deepcopy(calibration)
-        for block in self.blocks_w_helpers:
-            ss_partial_eq.update(eval_block_ss(block, ss_partial_eq))
+        for i in topsorted:
+            ss_partial_eq.update(eval_block_ss(blocks_all[i], ss_partial_eq, **kwargs))
         return ss_partial_eq
 
     def impulse_nonlinear(self, ss, exogenous, **kwargs):
@@ -107,32 +99,33 @@ class CombinedBlock(Block):
             exogenous = list(self.inputs)
         if outputs is None:
             outputs = self.outputs
+        kwargs = {"exogenous": exogenous, "T": T, "outputs": outputs, "save": save, "use_saved": use_saved}
 
-        J_partial_eq = JacobianDict.identity(exogenous)
-        for block in self.blocks:
-            if isinstance(block, HetBlock):
-                curlyJ = block.jacobian(ss, exogenous, T, save=save, use_saved=use_saved).complete()
-            else:
-                curlyJ = block.jacobian(ss, exogenous, T).complete()
+        for i, block in enumerate(self.blocks):
+            curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block.jacobian) if k in kwargs}).complete()
 
             # If we want specific list of outputs, restrict curlyJ to that before continuing
             curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]
-            J_partial_eq.update(curlyJ.compose(J_partial_eq))
+            if i == 0:
+                J_partial_eq = curlyJ.compose(JacobianDict.identity(exogenous))
+            else:
+                J_partial_eq.update(curlyJ.compose(J_partial_eq))
 
         return J_partial_eq
 
-    def solve_steady_state(self, calibration, unknowns, targets, solver=None, **kwargs):
+    def solve_steady_state(self, calibration, unknowns, targets, solver=None, helper_blocks=None,
+                           sort_blocks=False, **kwargs):
         """Evaluate a general equilibrium steady state of the CombinedBlock given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
-        # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
-        # accounting for HelperBlocks
-        if self._sorted_indices_w_helpers is None:
-            self._sorted_indices_w_helpers = utils.graph.block_sort(self._blocks_unsorted, ignore_helpers=False,
-                                                                    calibration=calibration)
-            self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
-
         if solver is None:
             solver = provide_solver_default(unknowns)
+        if helper_blocks and sort_blocks is False:
+            sort_blocks = True
 
-        return super().solve_steady_state(calibration, unknowns, targets, solver=solver, **kwargs)
+        return super().solve_steady_state(calibration, unknowns, targets, solver=solver,
+                                          helper_blocks=helper_blocks, sort_blocks=sort_blocks, **kwargs)
+
+
+# Useful type aliases
+Model = CombinedBlock

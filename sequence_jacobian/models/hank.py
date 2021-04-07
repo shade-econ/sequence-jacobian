@@ -4,7 +4,6 @@ from numba import vectorize, njit
 from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.het_block import het
-from ..blocks.helper_block import helper
 
 
 '''Part 1: HA block'''
@@ -161,14 +160,16 @@ def asset_state_vars(amax, nA):
     return a_grid
 
 
-@helper
-def partial_steady_state_solution(B_Y, mu, r):
+@simple
+def partial_steady_state_solution(B_Y, Y, mu, r, kappa, Z, pi):
     B = B_Y
     w = 1 / mu
     Div = (1 - w)
     Tax = r * B
 
-    return B, w, Div, Tax
+    nkpc_res = kappa * (w / Z - 1 / mu) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / (1 + r(+1)) - (1 + pi).apply(np.log)
+
+    return B, w, Div, Tax, nkpc_res
 
 
 '''Part 3: Steady state'''

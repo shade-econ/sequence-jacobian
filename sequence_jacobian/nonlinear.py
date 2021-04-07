@@ -59,7 +59,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factore
         H_U_factored = misc.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
-    sort = graph.block_sort(block_list, ignore_helpers=True)
+    sort = graph.block_sort(block_list)
 
     # iterate until convergence
     for it in range(maxit):
@@ -98,7 +98,7 @@ def td_map(block_list, ss, exogenous, unknowns=None, sort=None,
 
     # first get topological sort if none already provided
     if sort is None:
-        sort = graph.block_sort(block_list, ignore_helpers=True)
+        sort = graph.block_sort(block_list)
 
     # initialize results
     results = {**exogenous, **unknowns}

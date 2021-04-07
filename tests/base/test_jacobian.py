@@ -6,14 +6,13 @@ from sequence_jacobian.jacobian.drivers import get_G, forward_accumulate, curlyJ
 from sequence_jacobian.jacobian.classes import JacobianDict
 
 
-def test_ks_jac(krusell_smith_model):
-    blocks, exogenous, unknowns, targets, ss = krusell_smith_model
-    household, firm, mkt_clearing, _, _, _ = blocks
+def test_ks_jac(krusell_smith_dag):
+    ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
+    household, firm, mkt_clearing, _, _ = ks_model._blocks_unsorted
     T = 10
 
     # Automatically calculate the general equilibrium Jacobian
-    G2 = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-               targets=targets, T=T, ss=ss)
+    G2 = ks_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
 
     # Manually calculate the general equilibrium Jacobian
     J_firm = firm.jac(ss, shock_list=['K', 'Z'])
@@ -35,16 +34,15 @@ def test_ks_jac(krusell_smith_model):
         assert np.allclose(G2[o]['Z'], G[o])
 
 
-def test_hank_jac(one_asset_hank_model):
-    blocks, exogenous, unknowns, targets, ss = one_asset_hank_model
+def test_hank_jac(one_asset_hank_dag):
+    hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
     T = 10
 
     # Automatically calculate the general equilibrium Jacobian
-    G2 = get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-               targets=targets, T=T, ss=ss)
+    G2 = hank_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
 
     # Manually calculate the general equilibrium Jacobian
-    curlyJs, required = curlyJ_sorted(blocks, unknowns+exogenous, ss, T)
+    curlyJs, required = curlyJ_sorted(hank_model.blocks, unknowns + exogenous, ss, T)
     J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)
     J_curlyH_Z = forward_accumulate(curlyJs, exogenous, targets, required)
     H_U = J_curlyH_U[targets, unknowns].pack(T)
@@ -59,12 +57,12 @@ def test_hank_jac(one_asset_hank_model):
             assert np.allclose(G[o][i], G2[o][i])
 
 
-def test_fake_news_v_actual(one_asset_hank_model):
-    blocks, exogenous, unknowns, targets, ss = one_asset_hank_model
+def test_fake_news_v_actual(one_asset_hank_dag):
+    hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
 
-    household = blocks[0]
+    household = hank_model._blocks_unsorted[0]
     T = 40
-    shock_list=['w', 'r', 'Div', 'Tax']
+    shock_list = ['w', 'r', 'Div', 'Tax']
     Js = household.jac(ss, shock_list, T)
     output_list = household.non_back_iter_outputs
 
@@ -80,7 +78,7 @@ def test_fake_news_v_actual(one_asset_hank_model):
                                                                        sspol_pi, sspol_space, T, h, ss_for_hetinput)
 
     asset_effects = np.sum(curlyDs['r'] * ss['a_grid'], axis=(1, 2))
-    assert np.linalg.norm(asset_effects - curlyYs["r"]["a"], np.inf) < 1e-15
+    assert np.linalg.norm(asset_effects - curlyYs["r"]["a"], np.inf) < 2e-15
 
     # Step 2 of fake news algorithm: (transpose) forward iteration
     curlyPs = {}
@@ -122,10 +120,10 @@ def test_fake_news_v_actual(one_asset_hank_model):
             assert np.array_equal(Js[o.capitalize()][i], Js_original[o.capitalize()][i])
 
 
-def test_fake_news_v_direct_method(one_asset_hank_model):
-    blocks, exogenous, unknowns, targets, ss = one_asset_hank_model
+def test_fake_news_v_direct_method(one_asset_hank_dag):
+    hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
 
-    household = blocks[0]
+    household = hank_model._blocks_unsorted[0]
     T = 40
     shock_list = 'r'
     output_list = household.non_back_iter_outputs

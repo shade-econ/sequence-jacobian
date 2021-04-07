@@ -71,6 +71,25 @@ def compute_target_values(targets, potential_args):
         return target_values
 
 
+def subset_helper_block_unknowns_and_targets(helper_blocks, unknowns, targets):
+    """Find the set of unknowns and targets that the `helper_blocks` solve out"""
+    unknowns_handled_by_helpers = set()
+    targets_handled_by_helpers = set()
+    for block in helper_blocks:
+        unknowns_handled_by_helpers |= (block.inputs | block.outputs) & set(unknowns.keys())
+        targets_handled_by_helpers |= (block.inputs | block.outputs) & set(targets.keys())
+    unknowns_handled_by_helpers = list(unknowns_handled_by_helpers)
+    targets_handled_by_helpers = list(targets_handled_by_helpers)
+
+    n_unknowns = len(unknowns_handled_by_helpers)
+    n_targets = len(targets_handled_by_helpers)
+    if n_unknowns != n_targets:
+        raise ValueError(f"The provided helper_blocks handle {n_unknowns} unknowns != {n_targets} targets."
+                         f" User must specify an equal number of unknowns/targets solved for by helper blocks.")
+
+    return unknowns_handled_by_helpers, dict(zip(targets_handled_by_helpers, [targets[t] for t in targets_handled_by_helpers]))
+
+
 def extract_univariate_initial_values_or_bounds(unknowns):
     val = next(iter(unknowns.values()))
     if np.isscalar(val):
@@ -79,7 +98,7 @@ def extract_univariate_initial_values_or_bounds(unknowns):
         return {"bracket": (val[0], val[1])}
 
 
-def extract_multivariate_initial_values_and_bounds(unknowns):
+def extract_multivariate_initial_values_and_bounds(unknowns, fragile=False):
     """Provided a dict mapping names of unknowns to initial values/bounds, return separate dicts of
     the initial values and bounds.
     Note: For one-sided bounds, simply put np.inf/-np.inf as the other side of the bounds, so there is
@@ -90,6 +109,17 @@ def extract_multivariate_initial_values_and_bounds(unknowns):
     for k, v in unknowns.items():
         if np.isscalar(v):
             initial_values.append(v)
+        elif len(v) == 2:
+            if fragile:
+                raise ValueError(f"{len(v)} is an invalid size for the value of an unknown."
+                                 f" the values of `unknowns` must either be a scalar, pertaining to a"
+                                 f" single initial value for the root solver to begin from,"
+                                 f" a length 2 tuple, pertaining to a lower bound and an upper bound,"
+                                 f" or a length 3 tuple, pertaining to a lower bound, initial value, and upper bound.")
+            else:
+                warnings.warn("Interpreting values of `unknowns` from length 2 tuple as lower and upper bounds"
+                              " and averaging them to get a scalar initial value to provide to the solver.")
+                initial_values.append((v[0] + v[1])/2)
         elif len(v) == 3:
             lb, iv, ub = v
             assert lb < iv < ub
@@ -99,6 +129,7 @@ def extract_multivariate_initial_values_and_bounds(unknowns):
             raise ValueError(f"{len(v)} is an invalid size for the value of an unknown."
                              f" the values of `unknowns` must either be a scalar, pertaining to a"
                              f" single initial value for the root solver to begin from,"
+                             f" a length 2 tuple, pertaining to a lower bound and an upper bound,"
                              f" or a length 3 tuple, pertaining to a lower bound, initial value, and upper bound.")
 
     return np.asarray(initial_values), multi_bounds

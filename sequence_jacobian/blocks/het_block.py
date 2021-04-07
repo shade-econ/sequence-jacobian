@@ -6,6 +6,7 @@ from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
+from ..devtools.deprecate import rename_output_list_to_outputs
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -370,7 +371,7 @@ class HetBlock(Block):
 
         return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous), ss)
 
-    def jacobian(self, ss, exogenous=None, T=300, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, h=1E-4, save=False, use_saved=False):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -381,7 +382,7 @@ class HetBlock(Block):
             number of time periods for T*T Jacobian
         exogenous : list of str
             names of input variables to differentiate wrt (main cost scales with # of inputs)
-        output_list : list of str
+        outputs : list of str
             names of output variables to get derivatives of, if not provided assume all outputs of
             self.back_step_fun except self.back_iter_vars
         h : [optional] float
@@ -401,15 +402,17 @@ class HetBlock(Block):
         # except for the backward iteration variables themselves
         if exogenous is None:
             exogenous = list(self.inputs)
-        if output_list is None:
-            output_list = self.non_back_iter_outputs
+        if outputs is None or output_list is None:
+            outputs = self.non_back_iter_outputs
+        else:
+            outputs = rename_output_list_to_outputs(outputs=outputs, output_list=output_list)
 
         relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
 
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
         if use_saved:
             return utils.misc.extract_nested_dict(savedA=self.saved['J'],
-                                                  keys1=[o.capitalize() for o in output_list],
+                                                  keys1=[o.capitalize() for o in outputs],
                                                   keys2=relevant_shocks, shape=(T, T))
 
         # step 0: preliminary processing of steady state
@@ -420,20 +423,20 @@ class HetBlock(Block):
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
         for i in relevant_shocks:
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, output_list, ssin_dict, ssout_list,
+            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, ssin_dict, ssout_list,
                                                 ss['D'], Pi.T.copy(), sspol_i, sspol_pi, sspol_space, T, h,
                                                 ss_for_hetinput)
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = {}
-        for o in output_list:
+        for o in outputs:
             curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
         F, J = {}, {}
-        for o in output_list:
+        for o in outputs:
             for i in relevant_shocks:
                 if o.capitalize() not in F:
                     F[o.capitalize()] = {}
@@ -443,10 +446,10 @@ class HetBlock(Block):
                 J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
 
         if save:
-            self.saved_shock_list, self.saved_output_list = relevant_shocks, output_list
+            self.saved_shock_list, self.saved_output_list = relevant_shocks, outputs
             self.saved = {'curlyYs': curlyYs, 'curlyDs': curlyDs, 'curlyPs': curlyPs, 'F': F, 'J': J}
 
-        return JacobianDict(J)
+        return JacobianDict(J, name=self.name)
 
     def add_hetinput(self, hetinput, overwrite=False, verbose=True):
         """Add a hetinput to this HetBlock. Any call to self.back_step_fun will first process

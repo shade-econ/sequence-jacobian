@@ -4,13 +4,10 @@ from . import estimation, jacobian, nonlinear, utilities, devtools
 
 from .models import rbc, krusell_smith, hank, two_asset
 
-from .aliases import create_model
-
 from .blocks.simple_block import simple
 from .blocks.het_block import het, hetoutput
-from .blocks.helper_block import helper
 from .blocks.solved_block import solved
-from .blocks.combined_block import combine
+from .blocks.combined_block import combine, create_model
 from .blocks.support.simple_displacement import apply_function
 
 from .visualization.draw_dag import draw_dag, draw_solved, inspect_solved
