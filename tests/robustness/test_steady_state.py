@@ -5,6 +5,7 @@ import numpy as np
 
 from sequence_jacobian.models import hank, two_asset
 
+
 # Filter out warnings when the solver is trying to search in bad regions
 @pytest.mark.filterwarnings("ignore:.*invalid value encountered in.*:RuntimeWarning")
 def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_dag):
@@ -15,7 +16,7 @@ def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_dag):
     calibration = {"r": 0.005, "rstar": 0.005, "eis": 0.5, "frisch": 0.5, "mu": 1.2, "B_Y": 5.6,
                    "rho_s": 0.966, "sigma_s": 0.5, "kappa": 0.1, "phi": 1.5, "Y": 1, "Z": 1, "L": 1,
                    "pi": 0, "nS": 2, "amax": 150, "nA": 10}
-    unknowns = {"beta": (0.95, 0.97, 0.999/(1 + 0.005)), "vphi": (0.001, 1.0, 10)}
+    unknowns = {"beta": (0.95, 0.97, 0.999 / (1 + 0.005)), "vphi": (0.001, 1.0, 10)}
     targets = {"asset_mkt": 0, "labor_mkt": 0}
     ss_ref = hank_model.solve_steady_state(calibration, unknowns, targets, helper_blocks=helper_blocks,
                                            solver="broyden1", solver_kwargs={"options": {"maxiter": 250}},

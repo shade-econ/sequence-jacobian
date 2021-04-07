@@ -88,11 +88,9 @@ def test_two_asset_td(two_asset_hank_dag):
 def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
     two_asset_model, exogenous, unknowns, targets, ss = two_asset_hank_dag
 
-    household = copy.deepcopy(two_asset.household)
-    household.add_hetoutput(two_asset.adjustment_costs, verbose=False)
-    blocks_simple = [household, two_asset.make_grids,
+    blocks_simple = [two_asset.household, two_asset.make_grids,
                      two_asset.pricing, two_asset.arbitrage, two_asset.labor, two_asset.investment,
-                     two_asset.dividend, two_asset.taylor, two_asset.fiscal,
+                     two_asset.dividend, two_asset.taylor, two_asset.fiscal, two_asset.share_value,
                      two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing]
     two_asset_model_simple = combine(blocks_simple, name="Two-Asset HANK w/ SimpleBlocks")
     unknowns_simple = ["r", "w", "Y", "pi", "p", "Q", "K"]

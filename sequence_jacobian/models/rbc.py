@@ -24,26 +24,32 @@ def household(K, L, w, eis, frisch, vphi, delta):
 def mkt_clearing(r, C, Y, I, K, L, w, eis, beta):
     goods_mkt = Y - C - I
     euler = C ** (-1 / eis) - beta * (1 + r(+1)) * C(+1) ** (-1 / eis)
-    walras = C + K - (1 + r) * K(-1) - w * L  # we can the check dynamic version too
+    walras = C + K - (1 + r) * K(-1) - w * L
     return goods_mkt, euler, walras
 
 
 @simple
-def steady_state_solution(r, eis, delta, alpha):
-    rk = r + delta
-    Z = (rk / alpha) ** alpha  # normalize so that Y=1
-    K = (alpha * Z / rk) ** (1 / (1 - alpha))
-    Y = Z * K ** alpha
-    w = (1 - alpha) * Z * K ** alpha
-    I = delta * K
-    C = Y - I
+def steady_state_solution(Y, L, r, eis, delta, alpha):
+    # 1. Solve for beta to hit r
     beta = 1 / (1 + r)
+
+    # 2. Solve for K to hit goods_mkt
+    K = alpha * Y / (r + delta)
+    w = (1 - alpha) * Y / L
+    C = w * L + (1 + r) * K(-1) - K
+    I = delta * K
+    goods_mkt = Y - C - I
+
+    # 3. Solve for Z to hit Y
+    Z = Y * K ** (-alpha) * L ** (alpha - 1)
+
+    # 4. Solve for vphi to hit L
     vphi = w * C ** (-1 / eis)
 
-    goods_mkt = Y - C - I
+    # 5. Have to return euler because it's a target
     euler = C ** (-1 / eis) - beta * (1 + r(+1)) * C(+1) ** (-1 / eis)
 
-    return Z, K, Y, w, I, C, beta, vphi, goods_mkt, euler
+    return beta, K, w, C, I, goods_mkt, Z, vphi, euler
 
 
 '''Part 2: Steady state'''

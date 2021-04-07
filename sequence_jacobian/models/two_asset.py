@@ -28,13 +28,11 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     Psi1 = get_Psi_and_deriv(a_grid[:, np.newaxis],
                              a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
 
-
     # === STEP 2: Wb(z, b', a') and Wa(z, b', a') ===
     # (take discounted expectation of tomorrow's value function)
-    Wb = matrix_times_first_dim(beta*Pi_p, Vb_p)
-    Wa = matrix_times_first_dim(beta*Pi_p, Va_p)
+    Wb = matrix_times_first_dim(beta * Pi_p, Vb_p)
+    Wa = matrix_times_first_dim(beta * Pi_p, Va_p)
     W_ratio = Wa / Wb
-
 
     # === STEP 3: a'(z, b', a) for UNCONSTRAINED ===
 
@@ -49,8 +47,8 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     # === STEP 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED ===
 
     # solve out budget constraint to get b(z, b', a)
-    b_endo = (c_endo_unc + a_endo_unc + addouter(-z_grid, b_grid, -(1+ra)*a_grid)
-                + get_Psi_and_deriv(a_endo_unc, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+    b_endo = (c_endo_unc + a_endo_unc + addouter(-z_grid, b_grid, -(1 + ra) * a_grid)
+              + get_Psi_and_deriv(a_endo_unc, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
 
     # interpolate this b' -> b mapping to get b -> b', so we have b'(z, b, a)
     # and also use interpolation to get a'(z, b, a)
@@ -59,7 +57,6 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     i, pi = utils.interpolate.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
     a_unc = utils.interpolate.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
     b_unc = utils.interpolate.apply_coord(i, pi, b_grid).swapaxes(1, 2)
-
 
     # === STEP 5: a'(z, kappa, a) for CONSTRAINED ===
 
@@ -70,16 +67,15 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
     # use same interpolation to get Wb and then c
     a_endo_con = utils.interpolate.apply_coord(i, pi, a_grid)
-    c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis])**(-eis)
-                    * utils.interpolate.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
-
+    c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis]) ** (-eis)
+                  * utils.interpolate.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
 
     # === STEP 6: a'(z, b, a) for CONSTRAINED ===
 
     # solve out budget constraint to get b(z, kappa, a), enforcing b'=0
     b_endo = (c_endo_con + a_endo_con
-                + addouter(-z_grid, np.full(len(k_grid), b_grid[0]), -(1+ra)*a_grid)
-                + get_Psi_and_deriv(a_endo_con, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+              + addouter(-z_grid, np.full(len(k_grid), b_grid[0]), -(1 + ra) * a_grid)
+              + get_Psi_and_deriv(a_endo_con, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
 
     # interpolate this kappa -> b mapping to get b -> kappa
     # then use the interpolated kappa to get a', so we have a'(z, b, a)
@@ -87,7 +83,6 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     #  axis, we need to swap kappa to last axis, and then b back to middle when done)
     a_con = utils.interpolate.interpolate_y(b_endo.swapaxes(1, 2), b_grid,
                                             a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
-
 
     # === STEP 7: obtain policy functions and update derivatives of value function ===
 
@@ -101,7 +96,7 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
     Psi, _, Psi2 = get_Psi_and_deriv(a, a_grid, ra, chi0, chi1, chi2)
 
     # solve out budget constraint to get consumption and marginal utility
-    c = addouter(z_grid, (1+rb)*b_grid, (1+ra)*a_grid) - Psi - a - b
+    c = addouter(z_grid, (1 + rb) * b_grid, (1 + ra) * a_grid) - Psi - a - b
     uc = c ** (-1 / eis)
 
     # for GE wage Phillips curve we'll need endowment-weighted utility too
@@ -119,9 +114,6 @@ def income(e_grid, tax, w, N):
     return z_grid
 
 
-household.add_hetinput(income, verbose=False)
-
-
 # A potential hetoutput to include with the above HetBlock
 @hetoutput()
 def adjustment_costs(a, a_grid, r, chi0, chi1, chi2):
@@ -129,7 +121,12 @@ def adjustment_costs(a, a_grid, r, chi0, chi1, chi2):
     return chi
 
 
+household.add_hetinput(income, verbose=False)
+household.add_hetoutput(adjustment_costs, verbose=False)
+
+
 """Supporting functions for HA block"""
+
 
 def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
     """Adjustment cost Psi(ap, a) and its derivatives with respect to
@@ -144,7 +141,7 @@ def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
 
     Psi = chi1 / chi2 * abs_a_change * core_factor
     Psi1 = chi1 * sign_change * core_factor
-    Psi2 = -(1 + ra)*(Psi1 + (chi2 - 1)*Psi/adj_denominator)
+    Psi2 = -(1 + ra) * (Psi1 + (chi2 - 1) * Psi / adj_denominator)
     return Psi, Psi1, Psi2
 
 
@@ -198,9 +195,9 @@ def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
             iout[j] = 0
             piout[j] = 1
         else:
-            iout[j] = i-1
+            iout[j] = i - 1
             err_upper = rhs[i, j] - lhs[i]
-            err_lower = rhs[i-1, j] - lhs[i-1]
+            err_lower = rhs[i - 1, j] - lhs[i - 1]
             piout[j] = err_upper / (err_upper - err_lower)
 
 
@@ -209,7 +206,7 @@ def lhs_equals_rhs_interpolate(lhs, rhs, iout, piout):
 
 @simple
 def pricing(pi, mc, r, Y, kappap, mup):
-    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log)\
+    nkpc = kappap * (mc - 1 / mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) \
            / (1 + r(+1)) - (1 + pi).apply(np.log)
     return nkpc
 
@@ -229,9 +226,9 @@ def labor(Y, w, K, Z, alpha):
 
 @simple
 def investment(Q, K, r, N, mc, Z, delta, epsI, alpha):
-    inv = (K/K(-1) - 1) / (delta * epsI) + 1 - Q
-    val = alpha * Z(+1) * (N(+1) / K) ** (1-alpha) * mc(+1) - (K(+1)/K -
-           (1-delta) + (K(+1)/K - 1)**2 / (2*delta*epsI)) + K(+1)/K*Q(+1) - (1 + r(+1))*Q
+    inv = (K / K(-1) - 1) / (delta * epsI) + 1 - Q
+    val = alpha * Z(+1) * (N(+1) / K) ** (1 - alpha) * mc(+1) - (K(+1) / K - (1 - delta) + (K(+1) / K - 1) ** 2 / (
+                                                                2 * delta * epsI)) + K(+1) / K * Q(+1) - (1 + r(+1)) * Q
     return inv, val
 
 
@@ -240,7 +237,7 @@ def dividend(Y, w, N, K, pi, mup, kappap, delta, epsI):
     psip = mup / (mup - 1) / 2 / kappap * (1 + pi).apply(np.log) ** 2 * Y
     k_adjust = K(-1) * (K / K(-1) - 1) ** 2 / (2 * delta * epsI)
     I = K - (1 - delta) * K(-1) + k_adjust
-    div = Y - w * N - I - psip
+    div = Y - w * N - I
     return psip, I, div
 
 
@@ -259,39 +256,30 @@ def fiscal(r, w, N, G, Bg):
 @simple
 def finance(i, p, pi, r, div, omega, pshare):
     rb = r - omega
-    ra = pshare * (div + p) / p(-1) + (1-pshare) * (1 + r) - 1
+    ra = pshare(-1) * (div + p) / p(-1) + (1 - pshare(-1)) * (1 + r) - 1
     fisher = 1 + i(-1) - (1 + r) * (1 + pi)
     return rb, ra, fisher
 
 
 @simple
-def wage(pi, w, N, muw, kappaw):
+def wage(pi, w):
     piw = (1 + pi) * w / w(-1) - 1
     return piw
 
 
 @simple
 def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
-    wnkpc = kappaw * (vphi * N**(1+1/frisch) - (1-tax)*w*N*U/muw) + beta *\
+    wnkpc = kappaw * (vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * N * U / muw) + beta * \
             (1 + piw(+1)).apply(np.log) - (1 + piw).apply(np.log)
     return wnkpc
 
 
 @simple
-def mkt_clearing(p, A, B, Bg, vphi, muw, tax, w, U):
+def mkt_clearing(p, A, B, Bg, C, I, G, Chi, psip, omega, Y):
     wealth = A + B
     asset_mkt = p + Bg - wealth
-    labor_mkt = vphi - (1 - tax) * w * U / muw
-    return asset_mkt, labor_mkt, wealth
-
-
-@simple
-def mkt_clearing_all(p, A, B, Bg, vphi, muw, tax, w, U, C, I, G, Chi, omega, psip):
-    wealth = A + B
-    asset_mkt = p + Bg - B - A
-    labor_mkt = vphi - (1 - tax) * w * U / muw
-    goods_mkt = C + I + G + Chi + psip + omega * B - 1
-    return asset_mkt, labor_mkt, goods_mkt, wealth
+    goods_mkt = C + I + G + Chi + psip + omega * B - Y
+    return asset_mkt, wealth, goods_mkt
 
 
 @simple
@@ -311,34 +299,45 @@ def share_value(p, tot_wealth, Bh):
 
 
 @simple
-def partial_steady_state_solution(delta, K, r, tot_wealth, Bh, Bg, G, omega):
-    I = delta * K
-    mc = 1 - r * (tot_wealth - Bg - K)
-    alpha = (r + delta) * K / mc
+def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
+    """Solves for (mup, alpha, Z) to hit (tot_wealth, Y, K)."""
+    # 1. Solve for markup to hit total wealth
+    p = tot_wealth - Bg
+    mc = 1 - r * (p - K) / Y
     mup = 1 / mc
-    Z = K ** (-alpha)
-    w = (1 - alpha) * mc
-    tax = (r * Bg + G) / w
-    div = 1 - w - I
-    p = div / r
-    ra = r
-    rb = r - omega
-    pshare = p / (tot_wealth - Bh)
-
-    # TODO: These are completely wrong...but left as is. Change these please!
-    N = (1. / Z / K(-1) ** alpha) ** (1 / (1 - alpha))
-    wnkpc = 0.
     wealth = tot_wealth
 
-    return I, mc, alpha, mup, Z, w, tax, div, p, ra, rb, pshare, N, wnkpc, wealth
+    # 2. Solve for capital share to hit K
+    alpha = (r + delta) * K / Y / mc
+
+    # 3. Solve for TFP to hit N (Y cannot be used, because it is an unknown of the DAG)
+    Z = Y * K ** (-alpha) * N ** (alpha - 1)
+
+    # 4. Solve for w such that piw = 0
+    w = mc * (1 - alpha) * Y / N
+    piw = 0
+
+    return p, mc, mup, wealth, alpha, Z, w, piw
+
+
+"""HA: solve for (beta, chi1) to hit (B, asset_mkt)."""
+
+
+@simple
+def partial_ss_step2(tax, w, U, N, muw, frisch):
+    """Solves for (vphi) to hit (wnkpc)."""
+    vphi = (1 - tax) * w * U / muw * N ** (-1 / frisch)
+    wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * N * U / muw
+    return vphi, wnkpc
 
 
 '''Part 3: Steady state'''
 
 
-def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
+def two_asset_ss(beta_guess=0.976, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
                  muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi2=2, epsI=4, omega=0.005, kappaw=0.1,
-                 phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, verbose=True):
+                 phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92,
+                 verbose=True):
     """Solve steady state of full GE model. Calibrate (beta, vphi, chi1, alpha, mup, Z) to hit targets for
        (r, tot_wealth, Bh, K, Y=N=1).
     """
@@ -369,50 +368,49 @@ def two_asset_ss(beta_guess=0.976, vphi_guess=2.07, chi1_guess=6.5, r=0.0125, to
 
     # residual function
     def res(x):
-        beta_loc, vphi_loc, chi1_loc = x
-        if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001 or chi1_loc < 0.5:
+        beta_loc, chi1_loc = x
+        if beta_loc > 0.999 / (1 + r) or chi1_loc < 0.5:
             raise ValueError('Clearly invalid inputs')
         out = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
                            k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
         asset_mkt = out['A'] + out['B'] - p - Bg
-        labor_mkt = vphi_loc - (1 - tax) * w * out['U'] / muw
-        return np.array([asset_mkt, labor_mkt, out['B'] - Bh])
+        return np.array([asset_mkt, out['B'] - Bh])
 
     # solve for beta, vphi, omega
-    (beta, vphi, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess, chi1_guess]),
-                                                         verbose=verbose)
+    (beta, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, chi1_guess]), verbose=verbose)
 
     # extra evaluation to report variables
     ss = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
                       k_grid=k_grid, beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
 
     # other things of interest
+    vphi = (1 - tax) * w * ss['U'] / muw
     pshare = p / (tot_wealth - Bh)
 
     # calculate aggregate adjustment cost and check Walras's law
     chi = get_Psi_and_deriv(ss['a'], a_grid, r, chi0, chi1, chi2)[0]
     Chi = np.vdot(ss['D'], chi)
     goods_mkt = ss['C'] + I + G + Chi + omega * ss['B'] - 1
-    assert np.abs(goods_mkt) < 1E-7
 
     ss.update({'pi': 0, 'piw': 0, 'Q': 1, 'Y': 1, 'N': 1, 'mc': mc, 'K': K, 'Z': Z, 'I': I, 'w': w, 'tax': tax,
-               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'chi': chi, 'Chi': Chi, 'phi': phi,
+               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'chi': chi, 'Chi': Chi, 'phi': phi, 'wealth': tot_wealth,
                'beta': beta, 'vphi': vphi, 'omega': omega, 'alpha': alpha, 'delta': delta, 'mup': mup, 'muw': muw,
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'z_grid': z_grid, 'e_grid': e_grid,
                'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r,
-               'tot_wealth': tot_wealth, 'fisher': 0, 'nZ': nZ, 'Bh': Bh, 'psip': 0, 'inv': 0,
-               'labor_mkt': vphi - (1 - tax) * w * ss["U"] / muw,
+               'tot_wealth': tot_wealth, 'fisher': 0, 'nZ': nZ, 'Bh': Bh, 'psip': 0, 'inv': 0, 'goods_mkt': goods_mkt,
                'equity': div + p - p * (1 + r), 'bmax': bmax, 'rho_z': rho_z, 'asset_mkt': p + Bg - ss["B"] - ss["A"],
-               'nA': nA, 'nB': nB, 'amax': amax, 'kmax': kmax, 'nK': nK, 'nkpc': kappap * (mc - 1/mup),
-               'wnkpc': kappaw * (vphi * ss["N"]**(1+1/frisch) - (1-tax)*w*ss["N"]*ss["U"]/muw),
-               'sigma_z': sigma_z, 'val': alpha * Z * (ss["N"] / K) ** (1-alpha) * mc - delta - r})
+               'nA': nA, 'nB': nB, 'amax': amax, 'kmax': kmax, 'nK': nK, 'nkpc': kappap * (mc - 1 / mup),
+               'wnkpc': kappaw * (vphi * ss["N"] ** (1 + 1 / frisch) - (1 - tax) * w * ss["N"] * ss["U"] / muw),
+               'sigma_z': sigma_z, 'val': alpha * Z * (ss["N"] / K) ** (1 - alpha) * mc - delta - r})
     return ss
 
 
 '''Part 4: Solved blocks for transition dynamics/Jacobian calculation'''
+
+
 @solved(unknowns={'pi': (-0.1, 0.1)}, targets=['nkpc'], solver="brentq")
 def pricing_solved(pi, mc, r, Y, kappap, mup):
-    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / \
+    nkpc = kappap * (mc - 1 / mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / \
            (1 + r(+1)) - (1 + pi).apply(np.log)
     return nkpc
 

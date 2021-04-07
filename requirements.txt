@@ -1,4 +1,7 @@
-numpy
-scipy
-numba
-xarray
+numpy~=1.18.5
+scipy~=1.5.0
+numba~=0.50.1
+xarray~=0.17.0
+
+pytest~=5.4.3
+setuptools~=49.2.0
