@@ -300,7 +300,7 @@ def share_value(p, tot_wealth, Bh):
 
 @simple
 def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
-    """Solves for (mup, alpha, Z) to hit (tot_wealth, Y, K)."""
+    """Solves for (mup, alpha, Z, w) to hit (tot_wealth, N, K, pi)."""
     # 1. Solve for markup to hit total wealth
     p = tot_wealth - Bg
     mc = 1 - r * (p - K) / Y
@@ -315,20 +315,20 @@ def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
 
     # 4. Solve for w such that piw = 0
     w = mc * (1 - alpha) * Y / N
-    piw = 0
+    pi = 0
 
-    return p, mc, mup, wealth, alpha, Z, w, piw
+    return p, mc, mup, wealth, alpha, Z, w, pi
 
 
 """HA: solve for (beta, chi1) to hit (B, asset_mkt)."""
 
-
-@simple
-def partial_ss_step2(tax, w, U, N, muw, frisch):
-    """Solves for (vphi) to hit (wnkpc)."""
-    vphi = (1 - tax) * w * U / muw * N ** (-1 / frisch)
-    wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * N * U / muw
-    return vphi, wnkpc
+# TODO: this does not work, probably uses wrong U
+# @simple
+# def partial_ss_step2(tax, w, U, N, muw, frisch):
+#     """Solves for (vphi) to hit (wnkpc)."""
+#     vphi = (1 - tax) * w * U / muw * N ** (-1 / frisch)
+#     wnkpc = vphi * N ** (1 / frisch) - (1 - tax) * w * U / muw
+#     return vphi, wnkpc
 
 
 '''Part 3: Steady state'''

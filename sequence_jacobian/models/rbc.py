@@ -29,7 +29,7 @@ def mkt_clearing(r, C, Y, I, K, L, w, eis, beta):
 
 
 @simple
-def steady_state_solution(Y, L, r, eis, delta, alpha):
+def steady_state_solution(Y, L, r, eis, delta, alpha, frisch):
     # 1. Solve for beta to hit r
     beta = 1 / (1 + r)
 
@@ -44,7 +44,7 @@ def steady_state_solution(Y, L, r, eis, delta, alpha):
     Z = Y * K ** (-alpha) * L ** (alpha - 1)
 
     # 4. Solve for vphi to hit L
-    vphi = w * C ** (-1 / eis)
+    vphi = w * C ** (-1 / eis) * L ** (-1 / frisch)
 
     # 5. Have to return euler because it's a target
     euler = C ** (-1 / eis) - beta * (1 + r(+1)) * C(+1) ** (-1 / eis)
