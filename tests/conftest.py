@@ -13,12 +13,12 @@ def rbc_dag():
     rbc_model = create_model(blocks, name="RBC")
 
     # Steady State
-    calibration = {"eis": 1., "frisch": 1., "delta": 0.025, "alpha": 0.11}
+    calibration = {"eis": 1., "frisch": 1., "delta": 0.025, "alpha": 0.11, "L": 1.}
     unknowns_ss = {"vphi": 0.92, "beta": 1 / (1 + 0.01), "K": 2., "Z": 1.}
-    targets_ss = {"L": 1., "r": 0.01, "euler": 0., "Y": 1.}
+    targets_ss = {"goods_mkt": 0., "r": 0.01, "euler": 0., "Y": 1.}
     ss = rbc_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="solved",
                                       helper_blocks=helper_blocks,
-                                      helper_targets=["L", "r", "euler", "Y"])
+                                      helper_targets=["goods_mkt", "r", "euler", "Y"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["Z"]
