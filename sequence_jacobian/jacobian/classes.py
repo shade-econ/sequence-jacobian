@@ -7,16 +7,16 @@ import numpy as np
 from . import support
 
 
-class LinearOperator(metaclass=ABCMeta):
+class Jacobian(metaclass=ABCMeta):
     """An abstract base class encompassing all valid types representing Jacobians, which include
     np.ndarray, IdentityMatrix, ZeroMatrix, and SimpleSparse."""
     pass
 
-# Make np.ndarray a child class of LinearOperator
-LinearOperator.register(np.ndarray)
+# Make np.ndarray a child class of Jacobian
+Jacobian.register(np.ndarray)
 
 
-class IdentityMatrix(LinearOperator):
+class IdentityMatrix(Jacobian):
     """Simple identity matrix class, cheaper than using actual np.eye(T) matrix,
     use to initialize Jacobian of a variable wrt itself"""
     __array_priority__ = 10_000
@@ -63,7 +63,7 @@ class IdentityMatrix(LinearOperator):
         return 'IdentityMatrix'
 
 
-class ZeroMatrix(LinearOperator):
+class ZeroMatrix(Jacobian):
     """Simple zero matrix class, cheaper than using actual np.zeros((T,T)) matrix,
     use in common case where some outputs don't depend on inputs"""
     __array_priority__ = 10_000
@@ -112,7 +112,7 @@ class ZeroMatrix(LinearOperator):
         return 'ZeroMatrix'
 
 
-class SimpleSparse(LinearOperator):
+class SimpleSparse(Jacobian):
     """Efficient representation of sparse linear operators, which are linear combinations of basis
     operators represented by pairs (i, m), where i is the index of diagonal on which there are 1s
     (measured by # above main diagonal) and m is number of initial entries missing.
@@ -367,8 +367,8 @@ def deduplicate(mylist):
 
 
 def ensure_valid_nesteddict(d):
-    """The valid structure of `d` is a Dict[str, Dict[str, LinearOperator]], where calling `d[o][i]` yields a
-    Jacobian of type LinearOperator mapping sequences of `i` to sequences of `o`. The null type for `d` is assumed
+    """The valid structure of `d` is a Dict[str, Dict[str, Jacobian]], where calling `d[o][i]` yields a
+    Jacobian of type Jacobian mapping sequences of `i` to sequences of `o`. The null type for `d` is assumed
     to be {}, which is permitted the empty version of a valid nested dict."""
 
     if d != {}:
@@ -382,14 +382,14 @@ def ensure_valid_nesteddict(d):
                 raise ValueError(f"The values of the dict argument {d} must be dicts with keys of type `str` to indicate"
                                  f" `input` names.")
             jac_o_i = next(iter(jac_o_dict.values()))
-            if not isinstance(jac_o_i, LinearOperator):
-                raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `LinearOperator`.")
+            if not isinstance(jac_o_i, Jacobian):
+                raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `Jacobian`.")
             else:
                 if isinstance(jac_o_i, np.ndarray) and np.shape(jac_o_i)[0] != np.shape(jac_o_i)[1]:
-                    raise ValueError(f"The Jacobians in {d} must be square matrices of type `LinearOperator`.")
+                    raise ValueError(f"The Jacobians in {d} must be square matrices of type `Jacobian`.")
         else:
             raise ValueError(f"The argument {d} must be of type `dict`, with keys of type `str` and"
-                             f" values of type `LinearOperator`.")
+                             f" values of type `Jacobian`.")
 
 
 
