@@ -315,20 +315,17 @@ def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
 
     # 4. Solve for w such that piw = 0
     w = mc * (1 - alpha) * Y / N
-    pi = 0
+    piw = 0
 
-    return p, mc, mup, wealth, alpha, Z, w, pi
+    return p, mc, mup, wealth, alpha, Z, w, piw
 
 
-"""HA: solve for (beta, chi1) to hit (B, asset_mkt)."""
-
-# TODO: this does not work, probably uses wrong U
-# @simple
-# def partial_ss_step2(tax, w, U, N, muw, frisch):
-#     """Solves for (vphi) to hit (wnkpc)."""
-#     vphi = (1 - tax) * w * U / muw * N ** (-1 / frisch)
-#     wnkpc = vphi * N ** (1 / frisch) - (1 - tax) * w * U / muw
-#     return vphi, wnkpc
+@simple
+def partial_ss_step2(tax, w, U, N, muw, frisch):
+    """Solves for (vphi) to hit (wnkpc)."""
+    vphi = (1 - tax) * w * U / muw / N ** (1 + 1 / frisch)
+    wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * U / muw
+    return vphi, wnkpc
 
 
 '''Part 3: Steady state'''
