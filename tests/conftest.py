@@ -93,8 +93,7 @@ def two_asset_hank_dag():
     targets_ss = {"asset_mkt": 0., "B": "Bh", 'wnkpc': 0., 'pi': 0.0, "K": 10., "wealth": "tot_wealth", "N": 1.0}
     ss = two_asset_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="broyden_custom",
                                             helper_blocks=helper_blocks,
-                                            helper_targets={'wnkpc': 0., 'pi': 0.0, "K": 10.,
-                                                            "wealth": "tot_wealth", "N": 1.0})
+                                            helper_targets=["wnkpc", "pi", "K", "wealth", "N"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["rstar", "Z", "G"]

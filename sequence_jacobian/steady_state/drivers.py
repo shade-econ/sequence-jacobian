@@ -33,8 +33,8 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
         Block object, like CombinedBlock, that has already pre-sorted the blocks)
     helper_blocks: `list`
         A list of blocks that replace some of the equations in the DAG to aid steady state calculation
-    helper_targets: `list/dict`
-        A list/dict of target names (and optionally their values) that are handled by the helper blocks
+    helper_targets: `list`
+        A list of target names that are handled by the helper blocks
     consistency_check: `bool`
         If helper blocks are a portion of the argument blocks, re-run the DAG with the computed steady state values
         without the assistance of helper blocks and see if the targets are still hit
@@ -74,7 +74,7 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
     # Initial setup of blocks, targets, and dictionary of steady state values to be returned
     blocks_all = blocks + helper_blocks
     targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
-    helper_targets = {t: targets[t] for t in targets if t in helper_targets} if isinstance(helper_targets, list) else helper_targets
+    helper_targets = {t: targets[t] for t in targets if t in helper_targets}
 
     ss_values = deepcopy(calibration)
     ss_values.update(helper_targets)
