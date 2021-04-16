@@ -8,8 +8,7 @@ from .jacobian.support import pack_vectors, unpack_vectors
 
 
 def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
-             returnindividual=False, tol=1E-8, maxit=30, verbose=True, save=False, use_saved=False,
-             grid_paths=None):
+             returnindividual=False, tol=1E-8, maxit=30, verbose=True, grid_paths=None):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
     Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
@@ -28,9 +27,8 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factore
     returnindividual: [optional] bool, flag to return individual outcomes from HetBlock.td
     tol             : [optional] scalar, for convergence of Newton's method we require |H|<tol
     maxit           : [optional] int, maximum number of iterations of Newton's method
-    verbose           : [optional] bool, flag to print largest absolute error for each target
-    save            : [optional] bool, flag for saving Jacobians inside HetBlocks during calc of H_U
-    use_saved       : [optional] bool, flag for using saved Jacobians inside HetBlocks during calc of H_U
+    verbose         : [optional] bool, flag to print largest absolute error for each target
+    grid_paths      : [optional] dict of {str: array(T, Number of grid points)}, time-varying grids for policies
 
     Returns
     ----------
@@ -55,7 +53,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factore
     if H_U_factored is None:
         if H_U is None:
             # not even H_U is supplied, get it (costly if there are HetBlocks)
-            H_U = get_H_U(block_list, unknowns, targets, T, ss, save=save, use_saved=use_saved)
+            H_U = get_H_U(block_list, unknowns, targets, T, ss)
         H_U_factored = misc.factor(H_U)
 
     # do a topological sort once to avoid some redundancy

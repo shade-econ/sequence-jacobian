@@ -1,7 +1,6 @@
 """Test all models' non-linear transitional dynamics computations"""
 
 import numpy as np
-import copy
 
 from sequence_jacobian import two_asset, combine, get_H_U
 from sequence_jacobian import utilities as utils
@@ -50,13 +49,14 @@ def test_ks_td(krusell_smith_dag):
 def test_hank_td(one_asset_hank_dag):
     hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
 
+    # TODO: precompute Jacobian and use later
     T = 30
-    G = hank_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T, save=True)
+    G = hank_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
 
     rho_r, sig_r = 0.61, -0.01/4
     drstar = sig_r * rho_r ** (np.arange(T))
 
-    H_U = get_H_U(hank_model.blocks, unknowns, targets, T, ss, use_saved=True)
+    H_U = get_H_U(hank_model.blocks, unknowns, targets, T, ss)
     H_U_factored = utils.misc.factor(H_U)
 
     td_nonlin = hank_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets,
@@ -72,12 +72,13 @@ def test_two_asset_td(two_asset_hank_dag):
     two_asset_model, exogenous, unknowns, targets, ss = two_asset_hank_dag
 
     T = 30
-    G = two_asset_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T, save=True)
+    # TODO: precompute Jacobian and use later
+    G = two_asset_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
 
     for shock_size, tol in [(0.1, 3e-4), (1, 2e-2)]:
         drstar = shock_size * -0.0025 * 0.6 ** np.arange(T)
 
-        td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets, use_saved=True)
+        td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets)
 
         dY_nonlin = 100 * (td_nonlin['Y'] - 1)
         dY_lin = 100 * G['Y']['rstar'] @ drstar
@@ -97,18 +98,19 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
     targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
 
     T = 30
-    G = two_asset_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T, save=True)
-    G_simple = two_asset_model_simple.solve_jacobian(ss, exogenous, unknowns_simple, targets_simple, T=T, save=True)
+    # TODO: precompute Jacobian and use later
+    G = two_asset_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
+    G_simple = two_asset_model_simple.solve_jacobian(ss, exogenous, unknowns_simple, targets_simple, T=T)
 
     drstar = -0.0025 * 0.6 ** np.arange(T)
 
     dY = 100 * G['Y']['rstar'] @ drstar
-    td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets, use_saved=True)
+    td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets)
     dY_nonlin = 100 * (td_nonlin['Y'] - 1)
 
     dY_simple = 100 * G_simple['Y']['rstar'] @ drstar
-    td_nonlin_simple = two_asset_model_simple.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns_simple,
-                                                                      targets_simple, use_saved=True)
+    td_nonlin_simple = two_asset_model_simple.solve_impulse_nonlinear(ss, {"rstar": drstar},
+                                                                      unknowns_simple, targets_simple)
 
     dY_nonlin_simple = 100 * (td_nonlin_simple['Y'] - 1)
 

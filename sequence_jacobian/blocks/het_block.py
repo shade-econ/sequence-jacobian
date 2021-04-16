@@ -133,12 +133,6 @@ class HetBlock(Block):
         else:
             self.backward_init = backward_init
 
-        # 'saved' arguments start empty
-        self.saved = {}
-        self.prelim_saved = {}
-        self.saved_shock_list = []
-        self.saved_output_list = []
-
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
     def __repr__(self):
@@ -247,9 +241,6 @@ class HetBlock(Block):
             aggregate_hetoutputs = {}
         ss.update({**hetoutputs, **aggregate_hetoutputs})
 
-        # clear any previously saved Jacobian info for safety, since we're computing new SS
-        self.clear_saved()
-
         return ss
 
     def impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
@@ -312,7 +303,7 @@ class HetBlock(Block):
         backdict = ss.copy()
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
-            backdict.update({k: ss[k] + v[t,...] for k, v in exogenous.items()})
+            backdict.update({k: ss[k] + v[t, ...] for k, v in exogenous.items()})
             individual = {k: v for k, v in zip(self.back_step_output_list,
                                                self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
@@ -371,7 +362,7 @@ class HetBlock(Block):
 
         return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous), ss)
 
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, h=1E-4, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, h=1E-4):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -387,11 +378,6 @@ class HetBlock(Block):
             self.back_step_fun except self.back_iter_vars
         h : [optional] float
             h for numerical differentiation of backward iteration
-        save : [optional] bool
-            store curlyYs, curlyDs, curlyPs, F, and J from calculation inside HetBlock itself
-            useful to avoid redundant work when evaluating .jac or .ajac again
-        use_saved : [optional] bool
-            use J stored inside HetBlock to calculate the Jacobian, raises error if not available
 
         Returns
         -------
@@ -409,15 +395,15 @@ class HetBlock(Block):
 
         relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
 
+        # TODO: get rid of this
         # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
-        if use_saved:
-            return utils.misc.extract_nested_dict(savedA=self.saved['J'],
-                                                  keys1=[o.capitalize() for o in outputs],
-                                                  keys2=relevant_shocks, shape=(T, T))
+        # if use_saved:
+        #     return utils.misc.extract_nested_dict(savedA=self.saved['J'],
+        #                                           keys1=[o.capitalize() for o in outputs],
+        #                                           keys2=relevant_shocks, shape=(T, T))
 
         # step 0: preliminary processing of steady state
-        (ssin_dict, Pi, ssout_list, ss_for_hetinput, 
-                                    sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss, save)
+        (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
@@ -444,10 +430,6 @@ class HetBlock(Block):
                     J[o.capitalize()] = {}
                 F[o.capitalize()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
-
-        if save:
-            self.saved_shock_list, self.saved_output_list = relevant_shocks, outputs
-            self.saved = {'curlyYs': curlyYs, 'curlyDs': curlyDs, 'curlyPs': curlyPs, 'F': F, 'J': J}
 
         return JacobianDict(J, name=self.name)
 
@@ -734,17 +716,15 @@ class HetBlock(Block):
             J[1:, t] += J[:-1, t - 1]
         return J
 
-    '''Part 5: helpers for .jac and .ajac: preliminary processing and clearing saved info'''
+    '''Part 5: helpers for .jac and .ajac: preliminary processing'''
 
-    def jac_prelim(self, ss, save=False, use_saved=False):
+    def jac_prelim(self, ss):
         """Helper that does preliminary processing of steady state for fake news algorithm.
 
         Parameters
         ----------
         ss : dict, all steady-state info, intended to be from .ss()
-        save : [optional] bool, whether to store results in .prelim_saved attribute
-        use_saved : [optional] bool, whether to use already-stored results in .prelim_saved
-        
+
         Returns
         ----------
         ssin_dict       : dict, ss vals of exactly the inputs needed by self.back_step_fun for backward step
@@ -756,14 +736,6 @@ class HetBlock(Block):
         sspol_pi        : dict, weights on lower bracketing gridpoint for all in self.policy
         sspol_space     : dict, space between lower and upper bracketing gridpoints for all in self.policy
         """
-        output_names = ('ssin_dict', 'Pi', 'ssout_list', 'ss_for_hetinput', 'sspol_i', 'sspol_pi', 'sspol_space')
-
-        if use_saved:
-            if self.prelim_saved:
-                return tuple(self.prelim_saved[k] for k in output_names)
-            else:
-                raise ValueError('Nothing saved to be used by jac_prelim!')
-        
         # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_inputs(ss)
         Pi = ss[self.exogenous]
@@ -784,17 +756,8 @@ class HetBlock(Block):
             sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
 
         toreturn = (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
-        if save:
-            self.prelim_saved = {k: v for (k, v) in zip(output_names, toreturn)}
 
         return toreturn
-
-    def clear_saved(self):
-        """Erase any saved Jacobian information from .jac or .ajac (e.g. if steady state changes)"""
-        self.saved = {}
-        self.prelim_saved = {}
-        self.saved_shock_list = []
-        self.saved_output_list = []
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 

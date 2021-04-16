@@ -107,7 +107,7 @@ class SolvedBlock(Block):
                                             targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                             T=T)
 
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None):
         if exogenous is None:
             exogenous = list(self.inputs)
         if outputs is None:
@@ -116,4 +116,4 @@ class SolvedBlock(Block):
 
         return super().solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
                                       targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                      T=T, outputs=outputs, save=save, use_saved=use_saved)
+                                      T=T, outputs=outputs)

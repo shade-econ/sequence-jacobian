@@ -86,6 +86,7 @@ def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)
 
 
+# TODO: are these still necessary?
 # functions for handling saved Jacobians: extract keys from dicts or key pairs
 # from nested dicts, and take subarrays with 'shape' of the values
 def extract_dict(savedA, keys, shape):
