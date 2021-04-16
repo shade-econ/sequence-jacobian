@@ -5,6 +5,28 @@ from numbers import Real
 import numpy as np
 
 
+def instantiate_steady_state_mutable_kwargs(helper_blocks, helper_targets, block_kwargs, solver_kwargs,
+                                            constrained_kwargs):
+    """Instantiate mutable types from `None` default values in the steady_state function"""
+    if helper_blocks is None and helper_targets is None:
+        helper_blocks = []
+        helper_targets = []
+    elif helper_blocks is not None and helper_targets is None:
+        raise ValueError("If the user has provided `helper_blocks`, the kwarg `helper_targets` must be specified"
+                         " indicating which target variables are handled by the `helper_blocks`.")
+    elif helper_blocks is None and helper_targets is not None:
+        raise ValueError("If the user has provided `helper_targets`, the kwarg `helper_blocks` must be specified"
+                         " indicating which helper blocks handle the `helper_targets`")
+    if block_kwargs is None:
+        block_kwargs = {}
+    if solver_kwargs is None:
+        solver_kwargs = {}
+    if constrained_kwargs is None:
+        constrained_kwargs = {}
+
+    return helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
+
+
 def provide_solver_default(unknowns):
     if len(unknowns) == 1:
         bounds = list(unknowns.values())[0]
@@ -71,23 +93,32 @@ def compute_target_values(targets, potential_args):
         return target_values
 
 
-def subset_helper_block_unknowns_and_targets(helper_blocks, unknowns, targets):
-    """Find the set of unknowns and targets that the `helper_blocks` solve out"""
-    unknowns_handled_by_helpers = set()
-    targets_handled_by_helpers = set()
+def subset_helper_block_unknowns(unknowns_all, helper_blocks, helper_targets):
+    """Find the set of unknowns that the `helper_blocks` solve for"""
+    unknowns_handled_by_helpers = {}
     for block in helper_blocks:
-        unknowns_handled_by_helpers |= (block.inputs | block.outputs) & set(unknowns.keys())
-        targets_handled_by_helpers |= (block.inputs | block.outputs) & set(targets.keys())
-    unknowns_handled_by_helpers = list(unknowns_handled_by_helpers)
-    targets_handled_by_helpers = list(targets_handled_by_helpers)
+        unknowns_handled_by_helpers.update({u: unknowns_all[u] for u in block.outputs if u in unknowns_all})
 
     n_unknowns = len(unknowns_handled_by_helpers)
-    n_targets = len(targets_handled_by_helpers)
+    n_targets = len(helper_targets)
     if n_unknowns != n_targets:
         raise ValueError(f"The provided helper_blocks handle {n_unknowns} unknowns != {n_targets} targets."
                          f" User must specify an equal number of unknowns/targets solved for by helper blocks.")
 
-    return unknowns_handled_by_helpers, dict(zip(targets_handled_by_helpers, [targets[t] for t in targets_handled_by_helpers]))
+    return unknowns_handled_by_helpers
+
+
+def find_excludable_helper_blocks(blocks_all, block_dependencies, helper_indices, helper_unknowns, helper_targets):
+    """Of the set of helper_unknowns and helper_targets, find the ones that can be excluded from the main DAG
+    for the purposes of numerically solving unknowns."""
+    excludable_helper_unknowns = {}
+    excludable_helper_targets = {}
+    for i in helper_indices:
+        # If the helper block has no dependencies on other blocks in the DAG
+        if not block_dependencies[i]:
+            excludable_helper_unknowns.update({h: helper_unknowns[h] for h in blocks_all[i].outputs if h in helper_unknowns})
+            excludable_helper_targets.update({h: helper_targets[h] for h in blocks_all[i].outputs | blocks_all[i].inputs if h in helper_targets})
+    return excludable_helper_unknowns, excludable_helper_targets
 
 
 def extract_univariate_initial_values_or_bounds(unknowns):

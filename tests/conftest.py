@@ -13,11 +13,12 @@ def rbc_dag():
     rbc_model = create_model(blocks, name="RBC")
 
     # Steady State
-    calibration = {'L': 1.0, "eis": 1., "frisch": 1., "delta": 0.025, "alpha": 0.11}
-    unknowns_ss = {'K': 3., "Z": 1., "beta": 0.99, 'vphi': 0.92}
-    targets_ss = {'goods_mkt': 0., 'Y': 1., 'euler': 0., 'r': 0.01}
-    ss = rbc_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
-                                      helper_blocks=helper_blocks, solver="solved")
+    calibration = {"eis": 1., "frisch": 1., "delta": 0.025, "alpha": 0.11, "L": 1.}
+    unknowns_ss = {"vphi": 0.92, "beta": 1 / (1 + 0.01), "K": 2., "Z": 1.}
+    targets_ss = {"goods_mkt": 0., "r": 0.01, "euler": 0., "Y": 1.}
+    ss = rbc_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="solved",
+                                      helper_blocks=helper_blocks,
+                                      helper_targets=["goods_mkt", "r", "euler", "Y"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["Z"]
@@ -39,8 +40,8 @@ def krusell_smith_dag():
                    "nS": 2, "nA": 10, "amax": 200, "r": 0.01}
     unknowns_ss = {"beta": (0.98 / 1.01, 0.999 / 1.01), "Z": 0.85, "K": 3.}
     targets_ss = {"asset_mkt": 0., "Y": 1., "r": 0.01}
-    ss = ks_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
-                                     helper_blocks=helper_blocks, solver="brentq")
+    ss = ks_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="brentq",
+                                     helper_blocks=helper_blocks, helper_targets=["Y", "r"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["Z"]
@@ -63,8 +64,8 @@ def one_asset_hank_dag():
                    "pi": 0, "nS": 2, "amax": 150, "nA": 10}
     unknowns_ss = {"beta": 0.986, "vphi": 0.8, "w": 0.8}
     targets_ss = {"asset_mkt": 0, "labor_mkt": 0, "nkpc_res": 0.}
-    ss = hank_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
-                                       helper_blocks=helper_blocks, solver="broyden_custom")
+    ss = hank_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="broyden_custom",
+                                       helper_blocks=helper_blocks, helper_targets=["nkpc_res"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["rstar", "Z"]
@@ -80,7 +81,7 @@ def two_asset_hank_dag():
               two_asset.pricing_solved, two_asset.arbitrage_solved, two_asset.production_solved,
               two_asset.dividend, two_asset.taylor, two_asset.fiscal, two_asset.share_value,
               two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing]
-    helper_blocks = [two_asset.partial_ss_step1]
+    helper_blocks = [two_asset.partial_ss_step1, two_asset.partial_ss_step2]
     two_asset_model = create_model(blocks, name="Two-Asset HANK")
 
     # Steady State
@@ -88,10 +89,11 @@ def two_asset_hank_dag():
                    "Bh": 1.04, "Bg": 2.8, "G": 0.2, "eis": 0.5, "frisch": 1, "chi0": 0.25, "chi2": 2,
                    "epsI": 4, "omega": 0.005, "kappaw": 0.1, "phi": 1.5, "nZ": 3, "nB": 10, "nA": 16,
                    "nK": 4, "bmax": 50, "amax": 4000, "kmax": 1, "rho_z": 0.966, "sigma_z": 0.92}
-    unknowns_ss = {"beta": 0.976, "vphi": 1.71, "chi1": 6.5, "Z": 0.4678, "alpha": 0.3299, "mup": 1.015, 'w': 0.66}
+    unknowns_ss = {"beta": 0.976, "chi1": 6.5, "vphi": 1.71, "Z": 0.4678, "alpha": 0.3299, "mup": 1.015, 'w': 0.66}
     targets_ss = {"asset_mkt": 0., "B": "Bh", 'wnkpc': 0., 'pi': 0.0, "K": 10., "wealth": "tot_wealth", "N": 1.0}
-    ss = two_asset_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
-                                            helper_blocks=helper_blocks, solver="broyden_custom")
+    ss = two_asset_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="broyden_custom",
+                                            helper_blocks=helper_blocks,
+                                            helper_targets=["wnkpc", "pi", "K", "wealth", "N"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["rstar", "Z", "G"]

@@ -93,8 +93,6 @@ class Block(abc.ABC, metaclass=ABCMeta):
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
-        if "helper_blocks" in kwargs and kwargs["helper_blocks"] is not None:
-            blocks = blocks + kwargs["helper_blocks"]
         solver = solver if solver else provide_solver_default(unknowns)
         return steady_state(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
