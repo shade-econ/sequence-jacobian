@@ -103,10 +103,10 @@ class SimpleBlock(Block):
 
         return ImpulseDict(self._output_in_td_format(**input_args), ss)
 
-    def impulse_linear(self, ss, exogenous, T=None):
-        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous), ss)
+    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous), ss)
 
-    def jacobian(self, ss, exogenous=None, T=None):
+    def jacobian(self, ss, exogenous=None, T=None, Js=None):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -118,6 +118,8 @@ class SimpleBlock(Block):
             if omitted, more efficient SimpleSparse objects returned
         exogenous : list of str, optional
             names of input variables to differentiate wrt; if omitted, assume all inputs
+        Js : [optional] dict of {str: JacobianDict}}
+            supply saved Jacobians
 
         Returns
         -------
@@ -131,6 +133,15 @@ class SimpleBlock(Block):
             exogenous = list(self.inputs)
 
         relevant_shocks = [i for i in self.inputs if i in exogenous]
+
+        # if we supply Jacobians, use them if possible
+        if Js is not None:
+            # are these the Jacobians you're looking for?
+            if self.name in Js.keys() and isinstance(Js[self.name], JacobianDict):
+                J = Js[self.name]
+                # do they have all the inputs you need?
+                if set(relevant_shocks).issubset(set(J.inputs)):
+                    return J
 
         # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
         # are an input into the block), then return an empty dict

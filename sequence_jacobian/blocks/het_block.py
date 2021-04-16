@@ -353,16 +353,16 @@ class HetBlock(Block):
         else:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs}, ss)
 
-    def impulse_linear(self, ss, exogenous, T=None, **kwargs):
+    def impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
         # infer T from exogenous, check that all shocks have same length
         shock_lengths = [x.shape[0] for x in exogenous.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
             raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
         T = shock_lengths[0]
 
-        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, **kwargs).apply(exogenous), ss)
+        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous), ss)
 
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, h=1E-4):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, Js=None, h=1E-4):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -378,6 +378,8 @@ class HetBlock(Block):
             self.back_step_fun except self.back_iter_vars
         h : [optional] float
             h for numerical differentiation of backward iteration
+        Js : [optional] dict of {str: JacobianDict}}
+            supply saved Jacobians
 
         Returns
         -------
@@ -395,12 +397,17 @@ class HetBlock(Block):
 
         relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
 
-        # TODO: get rid of this
-        # if we're supposed to use saved Jacobian, extract T-by-T submatrices for each (o,i)
-        # if use_saved:
-        #     return utils.misc.extract_nested_dict(savedA=self.saved['J'],
-        #                                           keys1=[o.capitalize() for o in outputs],
-        #                                           keys2=relevant_shocks, shape=(T, T))
+        # if we supply Jacobians, use them if possible
+        if Js is not None:
+            # are these the Jacobians you're looking for?
+            if self.name in Js.keys() and isinstance(Js[self.name], JacobianDict):
+                J = Js[self.name]
+                # do they have all the inputs and outputs you need?
+                outputs_cap = [o.capitalize() for o in outputs]
+                if set(outputs_cap).issubset(set(J.outputs)) and set(relevant_shocks).issubset(set(J.inputs)):
+                    # do they have the right length?
+                    if T == J[J.outputs[0]][J.inputs[0]].shape[-1]:
+                        return J
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)

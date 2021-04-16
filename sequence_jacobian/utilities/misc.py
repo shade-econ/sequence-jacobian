@@ -86,31 +86,6 @@ def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)
 
 
-# TODO: are these still necessary?
-# functions for handling saved Jacobians: extract keys from dicts or key pairs
-# from nested dicts, and take subarrays with 'shape' of the values
-def extract_dict(savedA, keys, shape):
-    return {k: take_subarray(savedA[k], shape) for k in keys}
-
-
-def extract_nested_dict(savedA, keys1, keys2, shape):
-    return {k1: {k2: take_subarray(savedA[k1][k2], shape) for k2 in keys2} for k1 in keys1}
-
-
-def take_subarray(A, shape):
-    # verify leading dimensions of A are >= shape
-    if not all(m <= n for m, n in zip(shape, A.shape)):
-        raise ValueError(f'Saved has dimensions {A.shape}, want larger {shape} subarray')
-
-    # take subarray along those dimensions: A[:shape, ...]
-    return A[tuple(slice(None, x, None) for x in shape) + (Ellipsis,)]
-
-
-def uncapitalize(s):
-    # Similar to s.lower() but only makes the first character lower-case
-    return s[0].lower() + s[1:]
-
-
 # The below functions are used in steady_state
 def unprime(s):
     """Given a variable's name as a `str`, check if the variable is a prime, i.e. has "_p" at the end.

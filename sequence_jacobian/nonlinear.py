@@ -7,7 +7,7 @@ from .jacobian.drivers import get_H_U
 from .jacobian.support import pack_vectors, unpack_vectors
 
 
-def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factored=None, monotonic=False,
+def td_solve(block_list, ss, exogenous, unknowns, targets, Js=None, H_U=None, H_U_factored=None, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, verbose=True, grid_paths=None):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
@@ -20,6 +20,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factore
     exogenous       : dict, all shocked Z go here, must all have same length T
     unknowns        : list, unknowns of SHADE DAG, the 'U' in H(U, Z)
     targets         : list, targets of SHADE DAG, the 'H' in H(U, Z)
+    Js              : [optional] dict of {str: JacobianDict}}, supply saved Jacobians
     H_U             : [optional] array (nU*nU), Jacobian of targets with respect to unknowns
     H_U_factored    : [optional] tuple, LU decomposition of H_U, save time by supplying this from utils.misc.factor()
     monotonic       : [optional] bool, flag indicating HetBlock policy for some k' is monotonic in state k
@@ -53,7 +54,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, H_U=None, H_U_factore
     if H_U_factored is None:
         if H_U is None:
             # not even H_U is supplied, get it (costly if there are HetBlocks)
-            H_U = get_H_U(block_list, unknowns, targets, T, ss)
+            H_U = get_H_U(block_list, unknowns, targets, T, ss, Js)
         H_U_factored = misc.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
