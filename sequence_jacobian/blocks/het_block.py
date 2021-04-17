@@ -7,6 +7,7 @@ from ..primitives import Block
 from .. import utilities as utils
 from ..jacobian.classes import JacobianDict
 from ..devtools.deprecate import rename_output_list_to_outputs
+from ..utilities.misc import verify_saved_jacobian
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -397,17 +398,10 @@ class HetBlock(Block):
 
         relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
 
-        # if we supply Jacobians, use them if possible
+        # if we supply Jacobians, use them if possible, warn if they cannot be used
         if Js is not None:
-            # are these the Jacobians you're looking for?
-            if self.name in Js.keys() and isinstance(Js[self.name], JacobianDict):
-                J = Js[self.name]
-                # do they have all the inputs and outputs you need?
-                outputs_cap = [o.capitalize() for o in outputs]
-                if set(outputs_cap).issubset(set(J.outputs)) and set(relevant_shocks).issubset(set(J.inputs)):
-                    # do they have the right length?
-                    if T == J[J.outputs[0]][J.inputs[0]].shape[-1]:
-                        return J
+            if verify_saved_jacobian(self.name, Js, outputs, relevant_shocks, T):
+                return Js[self.name]
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)
