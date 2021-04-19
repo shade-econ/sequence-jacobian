@@ -103,10 +103,10 @@ class SimpleBlock(Block):
 
         return ImpulseDict(self._output_in_td_format(**input_args), ss)
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None):
-        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous), ss)
+    def impulse_linear(self, ss, exogenous, T=None):
+        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous), ss)
 
-    def jacobian(self, ss, exogenous=None, T=None, Js=None):
+    def jacobian(self, ss, exogenous=None, T=None):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -118,8 +118,6 @@ class SimpleBlock(Block):
             if omitted, more efficient SimpleSparse objects returned
         exogenous : list of str, optional
             names of input variables to differentiate wrt; if omitted, assume all inputs
-        Js : [optional] dict of {str: JacobianDict}}
-            supply saved Jacobians, unnecessary for simple blocks
 
         Returns
         -------

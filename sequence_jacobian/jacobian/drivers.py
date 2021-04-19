@@ -200,8 +200,8 @@ def curlyJ_sorted(blocks, inputs, ss=None, T=None, Js=None):
     shocks = set(inputs) | required
     for num in topsorted:
         block = blocks[num]
-        jac = block.jacobian(ss, exogenous=list(shocks), Js=Js, **{k: v for k, v in {"T": T}.items()
-                                                                   if k in misc.input_kwarg_list(block.jacobian)})
+        jac = block.jacobian(ss, exogenous=list(shocks), **{k: v for k, v in {"T": T, "Js": Js}.items()
+                                                            if k in misc.input_kwarg_list(block.jacobian)})
 
         # If the returned Jacobian is empty (i.e. the shocks do not affect any outputs from the block)
         # then don't add it to the list of curlyJs to be returned
