@@ -143,9 +143,8 @@ def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
         warnings.warn(f'Js[{block_name}] is not a JacobianDict.')
         return False
 
-    outputs_cap = [o.capitalize() for o in outputs]
-    if not set(outputs_cap).issubset(set(J.outputs)):
-        missing = set(outputs_cap).difference(set(J.outputs))
+    if not set(outputs).issubset(set(J.outputs)):
+        missing = set(outputs).difference(set(J.outputs))
         warnings.warn(f'Js[{block_name}] misses required outputs {missing}.')
         return False
 
@@ -154,9 +153,11 @@ def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
         warnings.warn(f'Js[{block_name}] misses required inputs {missing}.')
         return False
 
-    Tsaved = J[J.outputs[0]][J.inputs[0]].shape[-1]
-    if T != Tsaved:
-        warnings.warn(f'Js[{block_name} has length {Tsaved}, but you asked for {T}')
-        return False
+    # Jacobian of simple blocks may have a sparse representation
+    if T is not None:
+        Tsaved = J[J.outputs[0]][J.inputs[0]].shape[-1]
+        if T != Tsaved:
+            warnings.warn(f'Js[{block_name} has length {Tsaved}, but you asked for {T}')
+            return False
 
     return True

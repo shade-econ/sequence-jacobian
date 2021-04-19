@@ -400,7 +400,8 @@ class HetBlock(Block):
 
         # if we supply Jacobians, use them if possible, warn if they cannot be used
         if Js is not None:
-            if verify_saved_jacobian(self.name, Js, outputs, relevant_shocks, T):
+            outputs_cap = [o.capitalize() for o in outputs]
+            if verify_saved_jacobian(self.name, Js, outputs_cap, relevant_shocks, T):
                 return Js[self.name]
 
         # step 0: preliminary processing of steady state

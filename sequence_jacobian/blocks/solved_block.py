@@ -95,10 +95,9 @@ class SolvedBlock(Block):
         return super().solve_steady_state(calibration, self.unknowns, self.targets, solver=self.solver,
                                           consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
 
-    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False,
-                          returnindividual=False, verbose=False):
+    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
         return super().solve_impulse_nonlinear(ss, exogenous=exogenous,
-                                               unknowns=list(self.unknowns.keys()),
+                                               unknowns=list(self.unknowns.keys()), Js=Js,
                                                targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                                monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 

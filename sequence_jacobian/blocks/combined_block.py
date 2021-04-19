@@ -80,7 +80,7 @@ class CombinedBlock(Block):
 
         return ImpulseDict(irf_nonlin_partial_eq, ss).levels()
 
-    def impulse_linear(self, ss, exogenous, T=None):
+    def impulse_linear(self, ss, exogenous, T=None, Js=None):
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
         a steady_state, `ss`"""
         irf_lin_partial_eq = deepcopy(exogenous)
@@ -88,7 +88,7 @@ class CombinedBlock(Block):
             input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_lin_partial_eq.update({k: v for k, v in block.impulse_linear(ss, input_args, T=T)})
+                irf_lin_partial_eq.update({k: v for k, v in block.impulse_linear(ss, input_args, T=T, Js=Js)})
 
         return ImpulseDict(irf_lin_partial_eq, ss)
 
