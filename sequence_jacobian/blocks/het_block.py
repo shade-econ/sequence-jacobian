@@ -5,6 +5,7 @@ import numpy as np
 from .support.impulse import ImpulseDict
 from ..primitives import Block
 from .. import utilities as utils
+from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict
 from ..devtools.deprecate import rename_output_list_to_outputs
 
@@ -250,7 +251,7 @@ class HetBlock(Block):
         # clear any previously saved Jacobian info for safety, since we're computing new SS
         self.clear_saved()
 
-        return ss
+        return SteadyStateDict(ss, internal=self)
 
     def impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,

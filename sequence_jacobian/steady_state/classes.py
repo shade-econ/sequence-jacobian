@@ -1,25 +1,48 @@
 """Various classes to support the computation of steady states"""
 
 from copy import deepcopy
-import numpy as np
 
-from ..utilities.misc import dict_diff
+from ..utilities.misc import dict_diff, smart_set
+
+
+def construct_internal_namespace(data, block):
+    # Only supporting internal namespaces for HetBlocks currently
+    if hasattr(block, "back_step_fun"):
+        return {block.name: {k: v for k, v in deepcopy(data).items() if k in
+                             smart_set(block.back_step_outputs) | smart_set(block.exogenous) | {"D"} |
+                             smart_set(block.hetinput_outputs) | smart_set(block.hetoutput_outputs)}}
+    else:
+        return {}
 
 
 class SteadyStateDict:
     def __init__(self, data, internal=None):
         if isinstance(data, SteadyStateDict):
-            self.toplevel = deepcopy(data.toplevel)
             self.internal = deepcopy(data.internal)
+            self.toplevel = deepcopy(data.toplevel)
         else:
-            self.toplevel = data
-            self.internal = internal if internal is not None else {}
+            if internal is not None:
+                # Either we can construct the internal namespace for you (if it's a Block) otherwise,
+                # you can provide the nested dict representing the internal namespace directly
+                if hasattr(internal, "inputs") and hasattr(internal, "outputs"):
+                    self.internal = construct_internal_namespace(data, internal)
+                else:
+                    self.internal = internal
+            else:
+                self.internal = {}
+            if self.internal:
+                toplevel = deepcopy(data)
+                for internal_dict in self.internal.values():
+                    toplevel = dict_diff(toplevel, internal_dict)
+                self.toplevel = toplevel
+            else:
+                self.toplevel = deepcopy(data)
 
     def __repr__(self):
         if self.internal:
-            return f"{type(self).__name__}: {list(self.toplevel.keys())}, internal={list(self.internal.keys())}"
+            return f"<{type(self).__name__}: {list(self.toplevel.keys())}, internal={list(self.internal.keys())}>"
         else:
-            return f"{type(self).__name__}: {list(self.toplevel.keys())}"
+            return f"<{type(self).__name__}: {list(self.toplevel.keys())}>"
 
     def __iter__(self):
         return iter(self.toplevel)
