@@ -8,6 +8,7 @@ from functools import partial
 from .support import compute_target_values, extract_multivariate_initial_values_and_bounds,\
     extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check,\
     subset_helper_block_unknowns, instantiate_steady_state_mutable_kwargs, find_excludable_helper_blocks
+from .classes import SteadyStateDict
 from ..utilities import solvers, graph, misc
 
 
@@ -76,7 +77,7 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
     targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
     helper_targets = {t: targets[t] for t in targets if t in helper_targets}
 
-    ss_values = deepcopy(calibration)
+    ss_values = SteadyStateDict(calibration)
     ss_values.update(helper_targets)
 
     helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
@@ -104,17 +105,17 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
             # Want to see hetoutputs
             elif hasattr(blocks_all[i], 'hetoutput') and blocks_all[i].hetoutput is not None:
                 outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
-                ss_values.update(misc.dict_diff(outputs, helper_outputs))
+                ss_values.update(outputs.difference(helper_outputs))
             else:
                 outputs = eval_block_ss(blocks_all[i], ss_values, consistency_check=consistency_check,
                                         ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
                 if include_helpers and blocks_all[i] in helper_blocks:
-                    helper_outputs.update(outputs)
+                    helper_outputs.update(outputs.toplevel)
                     ss_values.update(outputs)
                 else:
                     # Don't overwrite entries in ss_values corresponding to what has already
                     # been solved for in helper_blocks so we can check for consistency after-the-fact
-                    ss_values.update(misc.dict_diff(outputs, helper_outputs))
+                    ss_values.update(outputs.difference(helper_outputs))
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
         # dict of ss_values to compute the "unknown_solutions"
@@ -150,7 +151,8 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
 
 def eval_block_ss(block, calibration, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
-    return block.steady_state({k: v for k, v in calibration.items() if k in block.inputs},
+    input_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
+    return block.steady_state({k: v for k, v in input_dict.items() if k in block.inputs},
                               **{k: v for k, v in kwargs.items() if k in misc.input_kwarg_list(block.steady_state)})
 
 

@@ -1,9 +1,13 @@
+"""Class definition of a simple block"""
+
 import warnings
 import numpy as np
+from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .support.impulse import ImpulseDict
 from ..primitives import Block
+from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict, SimpleSparse
 from ..utilities import misc
 
@@ -58,18 +62,12 @@ class SimpleBlock(Block):
                       DeprecationWarning)
         return self.jacobian(ss, exogenous=shock_list, T=T)
 
-    def _output_in_ss_format(self, **kwargs):
-        """Returns output of the method ss as either a tuple of numeric primitives (scalars/vectors) or a single
-        numeric primitive, as opposed to Ignore/IgnoreVector objects"""
-        if len(self.output_list) > 1:
-            return dict(zip(self.output_list, [misc.numeric_primitive(o) for o in self.f(**kwargs)]))
-        else:
-            return dict(zip(self.output_list, [misc.numeric_primitive(self.f(**kwargs))]))
-
     def steady_state(self, calibration):
-        input_args = {k: ignore(v) for k, v in calibration.items()}
-        return self._output_in_ss_format(**input_args)
+        input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}
+        output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [misc.numeric_primitive(self.f(**input_args))]
+        return SteadyStateDict({**calibration, **dict(zip(self.output_list, output_vars))})
 
+    # TODO: Remove this so everything is just done within impulse_nonlinear
     def _output_in_td_format(self, **kwargs_new):
         """Returns output of the method td as a dict mapping output names to numeric primitives (scalars/vectors)
         or a single numeric primitive of output values, as opposed to Ignore/IgnoreVector/Displace objects.
