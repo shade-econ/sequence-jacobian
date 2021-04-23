@@ -16,7 +16,7 @@ from ..utilities import misc, graph
 '''
 
 
-def get_H_U(blocks, unknowns, targets, T, ss=None, save=False, use_saved=False):
+def get_H_U(blocks, unknowns, targets, T, ss=None, Js=None):
     """Get T*n_u by T*n_u matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
@@ -27,8 +27,7 @@ def get_H_U(blocks, unknowns, targets, T, ss=None, save=False, use_saved=False):
     T          : int, truncation horizon
                     (if asymptotic, truncation horizon for backward iteration in HetBlocks)
     ss         : [optional] dict, steady state required if blocks contains any non-jacdicts
-    save       : [optional] bool, flag for saving Jacobians inside HetBlocks
-    use_saved  : [optional] bool, flag for using saved Jacobians inside HetBlocks
+    Js         : [optional] dict of {str: JacobianDict}}, supply saved Jacobians
 
     Returns
     -------
@@ -40,7 +39,7 @@ def get_H_U(blocks, unknowns, targets, T, ss=None, save=False, use_saved=False):
     """
 
     # do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(blocks, unknowns, ss, T, save, use_saved)
+    curlyJs, required = curlyJ_sorted(blocks, unknowns, ss, T, Js)
 
     # do matrix forward accumulation to get H_U = J^(curlyH, curlyU)
     H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
@@ -49,8 +48,7 @@ def get_H_U(blocks, unknowns, targets, T, ss=None, save=False, use_saved=False):
     return H_U_unpacked[targets, unknowns].pack(T)
 
 
-def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None,
-                H_U=None, H_U_factored=None, save=False, use_saved=False):
+def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None, Js=None):
     """Get a single general equilibrium impulse response.
 
     Extremely fast when H_U_factored = utils.misc.factor(get_HU(...)) has already been computed
@@ -65,10 +63,7 @@ def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None,
     T            : [optional] int, truncation horizon
     ss           : [optional] dict, steady state required if blocks contains non-jacdicts
     outputs      : [optional] list of str, variables we want impulse responses for
-    H_U          : [optional] array, precomputed Jacobian mapping unknowns to targets
-    H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.misc.factor(H_U)
-    save         : [optional] bool, flag for saving Jacobians inside HetBlocks
-    use_saved    : [optional] bool, flag for using saved Jacobians inside HetBlocks
+    Js           : [optional] dict of {str: JacobianDict}}, supply saved Jacobians
 
     Returns
     -------
@@ -80,12 +75,10 @@ def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None,
             T = len(x)
             break
 
-    curlyJs, required = curlyJ_sorted(blocks, unknowns + list(dZ.keys()), ss, T,
-                                      save=save, use_saved=use_saved)
+    curlyJs, required = curlyJ_sorted(blocks, unknowns + list(dZ.keys()), ss, T, Js)
 
-    # step 1: if not provided, do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
-    if H_U is None and H_U_factored is None:
-        H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
+    # step 1: do (matrix) forward accumulation to get H_U = J^(curlyH, curlyU)
+    H_U_unpacked = forward_accumulate(curlyJs, unknowns, targets, required)
 
     # step 2: do (vector) forward accumulation to get J^(o, curlyZ)dZ for all o in
     # 'alloutputs', the combination of outputs (if specified) and targets
@@ -96,16 +89,9 @@ def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None,
     J_curlyZ_dZ = forward_accumulate(curlyJs, dZ, alloutputs, required)
 
     # step 3: solve H_UdU = -H_ZdZ for dU
-    if H_U is None and H_U_factored is None:
-        H_U = H_U_unpacked[targets, unknowns].pack(T)
-
+    H_U = H_U_unpacked[targets, unknowns].pack(T)
     H_ZdZ_packed = pack_vectors(J_curlyZ_dZ, targets, T)
-
-    if H_U_factored is None:
-        dU_packed = -np.linalg.solve(H_U, H_ZdZ_packed)
-    else:
-        dU_packed = -misc.factored_solve(H_U_factored, H_ZdZ_packed)
-
+    dU_packed = -np.linalg.solve(H_U, H_ZdZ_packed)
     dU = unpack_vectors(dU_packed, unknowns, T)
 
     # step 4: do (vector) forward accumulation to get J^(o, curlyU)dU
@@ -116,8 +102,7 @@ def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None,
     return {**dZ, **{o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}}
 
 
-def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None,
-          H_U=None, H_U_factored=None, save=False, use_saved=False):
+def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None, Js=None):
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
 
@@ -135,10 +120,7 @@ def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None,
     T            : [optional] int, truncation horizon
     ss           : [optional] dict, steady state required if blocks contains non-jacdicts
     outputs      : [optional] list of str, variables we want impulse responses for
-    H_U          : [optional] array, precomputed Jacobian mapping unknowns to targets
-    H_U_factored : [optional] tuple of arrays, precomputed LU factorization utils.misc.factor(H_U)
-    save         : [optional] bool, flag for saving Jacobians inside HetBlocks
-    use_saved    : [optional] bool, flag for using saved Jacobians inside HetBlocks
+    Js           : [optional] dict of {str: JacobianDict}}, supply saved Jacobians
 
     Returns
     -------
@@ -146,24 +128,18 @@ def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None,
     """
 
     # step 1: do topological sort and get curlyJs
-    curlyJs, required = curlyJ_sorted(blocks, unknowns + exogenous, ss, T,
-                                      save=save, use_saved=use_saved)
+    curlyJs, required = curlyJ_sorted(blocks, unknowns + exogenous, ss, T, Js)
 
     # step 2: do (matrix) forward accumulation to get
     # H_U = J^(curlyH, curlyU) [if not provided], H_Z = J^(curlyH, curlyZ)
-    if H_U is None and H_U_factored is None:
-        J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)
+    J_curlyH_U = forward_accumulate(curlyJs, unknowns, targets, required)
     J_curlyH_Z = forward_accumulate(curlyJs, exogenous, targets, required)
 
     # step 3: solve for G^U, unpack
-    if H_U is None and H_U_factored is None:
-        H_U = J_curlyH_U[targets, unknowns].pack(T)
+    H_U = J_curlyH_U[targets, unknowns].pack(T)
     H_Z = J_curlyH_Z[targets, exogenous].pack(T)
 
-    if H_U_factored is None:
-        G_U = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, exogenous, T)
-    else:
-        G_U = JacobianDict.unpack(-misc.factored_solve(H_U_factored, H_Z), unknowns, exogenous, T)
+    G_U = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, exogenous, T)
 
     # step 4: forward accumulation to get all outputs starting with G_U
     # by default, don't calculate targets!
@@ -173,7 +149,7 @@ def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None,
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
-def curlyJ_sorted(blocks, inputs, ss=None, T=None, save=False, use_saved=False):
+def curlyJ_sorted(blocks, inputs, ss=None, T=None, Js=None):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -184,8 +160,7 @@ def curlyJ_sorted(blocks, inputs, ss=None, T=None, save=False, use_saved=False):
     inputs     : list, input names we need to differentiate with respect to
     ss         : [optional] dict, steady state, needed if blocks includes blocks themselves
     T          : [optional] int, horizon for differentiation, needed if blocks includes hetblock itself
-    save       : [optional] bool, flag for saving Jacobians inside HetBlocks
-    use_saved  : [optional] bool, flag for using saved Jacobians inside HetBlocks
+    Js         : [optional] dict of {str: JacobianDict}}, supply saved Jacobians
 
     Returns
     -------
@@ -208,13 +183,8 @@ def curlyJ_sorted(blocks, inputs, ss=None, T=None, save=False, use_saved=False):
     shocks = set(inputs) | required
     for num in topsorted:
         block = blocks[num]
-
-        if hasattr(block, 'jacobian'):
-            jac = block.jacobian(ss, exogenous=list(shocks), **{k: v for k, v in {"T": T, "save": save, "use_saved": use_saved}.items()
-                                                                if k in misc.input_kwarg_list(block.jacobian)})
-        else:
-            # doesn't have 'jac', must be nested dict that is jac directly
-            jac = block
+        jac = block.jacobian(ss, exogenous=list(shocks), Js=Js, **{k: v for k, v in {"T": T}.items()
+                                                                   if k in misc.input_kwarg_list(block.jacobian)})
 
         # If the returned Jacobian is empty (i.e. the shocks do not affect any outputs from the block)
         # then don't add it to the list of curlyJs to be returned

@@ -4,7 +4,7 @@ import numpy as np
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .support.impulse import ImpulseDict
 from ..primitives import Block
-from ..jacobian.classes import JacobianDict, SimpleSparse
+from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
 from ..utilities import misc
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
@@ -103,10 +103,10 @@ class SimpleBlock(Block):
 
         return ImpulseDict(self._output_in_td_format(**input_args), ss)
 
-    def impulse_linear(self, ss, exogenous, T=None):
-        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T).apply(exogenous), ss)
+    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous), ss)
 
-    def jacobian(self, ss, exogenous=None, T=None):
+    def jacobian(self, ss, exogenous=None, T=None, Js=None):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -118,6 +118,8 @@ class SimpleBlock(Block):
             if omitted, more efficient SimpleSparse objects returned
         exogenous : list of str, optional
             names of input variables to differentiate wrt; if omitted, assume all inputs
+        Js : [optional] dict of {str: JacobianDict}}
+            supply saved Jacobians, unnecessary for simple blocks
 
         Returns
         -------
@@ -131,6 +133,11 @@ class SimpleBlock(Block):
             exogenous = list(self.inputs)
 
         relevant_shocks = [i for i in self.inputs if i in exogenous]
+
+        # if we supply Jacobians, use them if possible, warn if they cannot be used
+        if Js is not None:
+            if misc.verify_saved_jacobian(self.name, Js, self.outputs, relevant_shocks, T):
+                return Js[self.name]
 
         # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
         # are an input into the block), then return an empty dict
@@ -149,19 +156,14 @@ class SimpleBlock(Block):
             J = {o: {} for o in self.output_list}
             for o in self.output_list:
                 for i in relevant_shocks:
-                    # Do not write an entry into J if shock `i` did not affect output `o`
+                    # Keep zeros, so we can inspect supplied Jacobians for completeness
                     if not invertedJ[i][o] or invertedJ[i][o].iszero:
-                        continue
+                        J[o][i] = ZeroMatrix()
                     else:
                         if T is not None:
-                            J[o][i] = invertedJ[i][o].nonzero().matrix(T)
+                            J[o][i] = invertedJ[i][o].matrix(T)
                         else:
-                            J[o][i] = invertedJ[i][o].nonzero()
-
-                # If output `o` is entirely unaffected by all of the shocks passed in, then
-                # remove the empty Jacobian corresponding to `o` from J
-                if not J[o]:
-                    del J[o]
+                            J[o][i] = invertedJ[i][o]
 
             return JacobianDict(J, name=self.name)
 

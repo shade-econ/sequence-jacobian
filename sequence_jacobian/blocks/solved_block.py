@@ -95,19 +95,18 @@ class SolvedBlock(Block):
         return super().solve_steady_state(calibration, self.unknowns, self.targets, solver=self.solver,
                                           consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
 
-    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False,
-                          returnindividual=False, verbose=False):
+    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
         return super().solve_impulse_nonlinear(ss, exogenous=exogenous,
-                                               unknowns=list(self.unknowns.keys()),
+                                               unknowns=list(self.unknowns.keys()), Js=Js,
                                                targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                                monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
-    def impulse_linear(self, ss, exogenous, T=None):
+    def impulse_linear(self, ss, exogenous, T=None, Js=None):
         return super().solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
                                             targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                            T=T)
+                                            T=T, Js=Js)
 
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, save=False, use_saved=False):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None, Js=None):
         if exogenous is None:
             exogenous = list(self.inputs)
         if outputs is None:
@@ -116,4 +115,4 @@ class SolvedBlock(Block):
 
         return super().solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
                                       targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                      T=T, outputs=outputs, save=save, use_saved=use_saved)
+                                      T=T, outputs=outputs, Js=Js)

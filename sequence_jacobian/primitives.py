@@ -99,6 +99,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],
                                 unknowns: List[str], targets: List[str],
+                                Js: Optional[Dict[str, JacobianDict]] = None,
                                 **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
@@ -106,27 +107,30 @@ class Block(abc.ABC, metaclass=ABCMeta):
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         irf_nonlin_gen_eq = td_solve(blocks, ss,
                                      exogenous={k: ss[k] + v for k, v in exogenous.items()},
-                                     unknowns=unknowns, targets=targets, **kwargs)
+                                     unknowns=unknowns, targets=targets, Js=Js, **kwargs)
         return ImpulseDict(irf_nonlin_gen_eq, ss)
 
     def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
                              exogenous: Dict[str, Array],
                              unknowns: List[str], targets: List[str],
                              T: Optional[int] = None,
+                             Js: Optional[Dict[str, JacobianDict]] = None,
                              **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
-        irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
+        irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
         return ImpulseDict(irf_lin_gen_eq, ss)
 
     def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
                        exogenous: List[str],
                        unknowns: List[str], targets: List[str],
-                       T: Optional[int] = None, **kwargs) -> JacobianDict:
+                       T: Optional[int] = None,
+                       Js: Optional[Dict[str, JacobianDict]] = None,
+                       **kwargs) -> JacobianDict:
         """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
         at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
-        return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, **kwargs)
+        return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
