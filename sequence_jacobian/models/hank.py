@@ -191,7 +191,6 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     T = transfers(pi_e, Div, Tax, e_grid)
 
     # initialize guess for policy function iteration
-    fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
     coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis] + T[:, np.newaxis]
     Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
 
@@ -199,21 +198,18 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     def res(x):
         beta_loc, vphi_loc = x
         # precompute constrained c and n which don't depend on Va
-        c_const_loc, n_const_loc = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi_loc, Va)
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
             raise ValueError('Clearly invalid inputs')
         out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
-                           eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc,
-                           c_const=c_const_loc, n_const=n_const_loc)
+                           eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc)
         return np.array([out['A'] - B, out['N_e'] - 1])
 
     # solve for beta, vphi
     (beta, vphi), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess]), verbose=False)
 
     # extra evaluation for reporting
-    c_const, n_const = solve_cn(w * e_grid[:, np.newaxis], fininc, eis, frisch, vphi, Va)
     ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
-                      Div=Div, Tax=Tax, frisch=frisch, vphi=vphi, c_const=c_const, n_const=n_const)
+                      Div=Div, Tax=Tax, frisch=frisch, vphi=vphi)
     
     # check Walras's law
     goods_mkt = 1 - ss['C']
@@ -223,11 +219,5 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     ss.update({'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
                'rho_s': rho_s, 'labor_mkt': ss["N_e"] - 1, 'nA': nA, 'nS': nS, 'B_Y': B_Y, 'sigma_s': sigma_s,
                'goods_mkt': 1 - ss["C"], 'amax': amax, 'asset_mkt': ss["A"] - B, 'nkpc_res': kappa * (w - 1 / mu)})
-
-    # since we don't use c_const, n_const (an optimization of pre-calculating the constrained consumption and labor
-    # supply) in the general steady_state function, delete it from the ss dict so the test won't
-    # check for those variables
-    del ss["c_const"]
-    del ss["n_const"]
 
     return ss
