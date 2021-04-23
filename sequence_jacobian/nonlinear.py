@@ -48,14 +48,9 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, Js=None, monotonic=Fa
     unknown_paths = {k: np.full(T, ss[k]) for k in unknowns}
     Uvec = pack_vectors(unknown_paths, unknowns, T)
 
-    # Obtain H_U_factored if we don't have it already
-    if isinstance(Js, np.ndarray):
-        # if Js is a matrix, assume it's a packed H_U
-        H_U_factored = misc.factor(Js)
-    else:
-        # not even H_U is supplied, get it (costly if there are HetBlocks)
-        H_U = get_H_U(block_list, unknowns, targets, T, ss, Js)
-        H_U_factored = misc.factor(H_U)
+    # obtain Jacobian of targets wrt to unknowns
+    H_U = get_H_U(block_list, unknowns, targets, T, ss, Js)
+    H_U_factored = misc.factor(H_U)
 
     # do a topological sort once to avoid some redundancy
     sort = graph.block_sort(block_list)
