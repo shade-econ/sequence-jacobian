@@ -4,6 +4,8 @@ import numpy as np
 import scipy.linalg
 import re
 import inspect
+import warnings
+from ..jacobian.classes import JacobianDict
 
 
 def make_tuple(x):
@@ -86,30 +88,6 @@ def factored_solve(Z, y):
     return scipy.linalg.lu_solve(Z, y)
 
 
-# functions for handling saved Jacobians: extract keys from dicts or key pairs
-# from nested dicts, and take subarrays with 'shape' of the values
-def extract_dict(savedA, keys, shape):
-    return {k: take_subarray(savedA[k], shape) for k in keys}
-
-
-def extract_nested_dict(savedA, keys1, keys2, shape):
-    return {k1: {k2: take_subarray(savedA[k1][k2], shape) for k2 in keys2} for k1 in keys1}
-
-
-def take_subarray(A, shape):
-    # verify leading dimensions of A are >= shape
-    if not all(m <= n for m, n in zip(shape, A.shape)):
-        raise ValueError(f'Saved has dimensions {A.shape}, want larger {shape} subarray')
-
-    # take subarray along those dimensions: A[:shape, ...]
-    return A[tuple(slice(None, x, None) for x in shape) + (Ellipsis,)]
-
-
-def uncapitalize(s):
-    # Similar to s.lower() but only makes the first character lower-case
-    return s[0].lower() + s[1:]
-
-
 # The below functions are used in steady_state
 def unprime(s):
     """Given a variable's name as a `str`, check if the variable is a prime, i.e. has "_p" at the end.
@@ -160,3 +138,34 @@ def smart_zeros(n):
         return np.zeros(n)
     else:
         return 0.
+
+
+def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
+    """Verify that pre-computed Jacobian has all the right outputs, inputs, and length."""
+    if block_name not in Js.keys():
+        # don't throw warning, this will happen often for simple blocks
+        return False
+    J = Js[block_name]
+
+    if not isinstance(J, JacobianDict):
+        warnings.warn(f'Js[{block_name}] is not a JacobianDict.')
+        return False
+
+    if not set(outputs).issubset(set(J.outputs)):
+        missing = set(outputs).difference(set(J.outputs))
+        warnings.warn(f'Js[{block_name}] misses required outputs {missing}.')
+        return False
+
+    if not set(inputs).issubset(set(J.inputs)):
+        missing = set(inputs).difference(set(J.inputs))
+        warnings.warn(f'Js[{block_name}] misses required inputs {missing}.')
+        return False
+
+    # Jacobian of simple blocks may have a sparse representation
+    if T is not None:
+        Tsaved = J[J.outputs[0]][J.inputs[0]].shape[-1]
+        if T != Tsaved:
+            warnings.warn(f'Js[{block_name} has length {Tsaved}, but you asked for {T}')
+            return False
+
+    return True
