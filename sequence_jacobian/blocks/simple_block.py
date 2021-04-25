@@ -67,27 +67,6 @@ class SimpleBlock(Block):
         output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [misc.numeric_primitive(self.f(**input_args))]
         return SteadyStateDict({**calibration, **dict(zip(self.output_list, output_vars))})
 
-    # TODO: Remove this so everything is just done within impulse_nonlinear
-    def _output_in_td_format(self, **kwargs_new):
-        """Returns output of the method td as a dict mapping output names to numeric primitives (scalars/vectors)
-        or a single numeric primitive of output values, as opposed to Ignore/IgnoreVector/Displace objects.
-
-        Also accounts for the fact that for outputs of block.td that were *not* affected by a Displace object, i.e.
-        variables that remained at their ss value in spite of other variables within that same block being
-        affected by the Displace object (e.g. I in the mkt_clearing block of the two_asset model
-        is unchanged by a shock to rstar, being only a function of K's ss value and delta),
-        we still want to return them as paths (i.e. vectors, if they were
-        previously scalars) to impose uniformity on the dimensionality of the td returned values.
-        """
-        out = self.f(**kwargs_new)
-        if len(self.output_list) > 1:
-            # Because we know at least one of the outputs in `out` must be of length T
-            T = np.max([np.size(o) for o in out])
-            out_unif_dim = [np.full(T, misc.numeric_primitive(o)) if np.isscalar(o) else misc.numeric_primitive(o) for o in out]
-            return dict(zip(self.output_list, misc.make_tuple(out_unif_dim)))
-        else:
-            return dict(zip(self.output_list, misc.make_tuple(misc.numeric_primitive(out))))
-
     def impulse_nonlinear(self, ss, exogenous):
         input_args = {}
         for k, v in exogenous.items():
@@ -99,7 +78,7 @@ class SimpleBlock(Block):
             if k not in input_args:
                 input_args[k] = ignore(ss[k])
 
-        return ImpulseDict(self._output_in_td_format(**input_args), ss)
+        return ImpulseDict(make_impulse_uniform_length(self.f(**input_args), self.output_list), ss)
 
     def impulse_linear(self, ss, exogenous, T=None, Js=None):
         return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous), ss)
@@ -175,3 +154,15 @@ def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):
             J[o_name] = SimpleSparse(o.elements)
 
     return J
+
+
+def make_impulse_uniform_length(out, output_list):
+    # If the function has multiple outputs
+    if isinstance(out, tuple):
+        # Because we know at least one of the outputs in `out` must be of length T
+        T = np.max([np.size(o) for o in out])
+        out_unif_dim = [np.full(T, misc.numeric_primitive(o)) if np.isscalar(o) else
+                        misc.numeric_primitive(o) for o in out]
+        return dict(zip(output_list, misc.make_tuple(out_unif_dim)))
+    else:
+        return dict(zip(output_list, misc.make_tuple(misc.numeric_primitive(out))))
