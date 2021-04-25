@@ -118,7 +118,8 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
 
     # extra evaluation to report variables
     ss = household.ss(Pi=Pi, a_grid=a_grid, e_grid=e_grid, r=r, w=w, beta=beta, eis=eis, Va=Va)
-    ss.update({'Z': Z, 'K': K, 'L': 1, 'Y': Y, 'alpha': alpha, 'delta': delta, 'goods_mkt': Y - ss['C'] - delta * K,
-               'nA': nA, 'amax': amax, 'sigma': sigma, 'rho': rho, 'nS': nS, 'asset_mkt': ss["A"] - K})
+    ss.update({'Pi': Pi, 'Z': Z, 'K': K, 'L': 1, 'Y': Y, 'alpha': alpha, 'delta': delta,
+               'goods_mkt': Y - ss['C'] - delta * K, 'nA': nA, 'amax': amax, 'sigma': sigma,
+               'rho': rho, 'nS': nS, 'asset_mkt': ss["A"] - K})
 
     return ss

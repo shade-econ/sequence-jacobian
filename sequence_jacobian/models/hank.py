@@ -216,7 +216,7 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     assert np.abs(goods_mkt) < 1E-8
     
     # add aggregate variables
-    ss.update({'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
+    ss.update({'Pi': Pi, 'B': B, 'phi': phi, 'kappa': kappa, 'Y': 1, 'rstar': r, 'Z': 1, 'mu': mu, 'L': 1, 'pi': 0,
                'rho_s': rho_s, 'labor_mkt': ss["N_e"] - 1, 'nA': nA, 'nS': nS, 'B_Y': B_Y, 'sigma_s': sigma_s,
                'goods_mkt': 1 - ss["C"], 'amax': amax, 'asset_mkt': ss["A"] - B, 'nkpc_res': kappa * (w - 1 / mu)})
 
