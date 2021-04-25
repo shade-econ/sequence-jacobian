@@ -65,6 +65,9 @@ class SteadyStateDict:
     def values(self):
         return self.toplevel.values()
 
+    def items(self):
+        return self.toplevel.items()
+
     def update(self, new_data):
         if isinstance(new_data, SteadyStateDict):
             self.toplevel.update(new_data.toplevel)
