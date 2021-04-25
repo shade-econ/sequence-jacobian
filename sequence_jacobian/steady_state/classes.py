@@ -17,26 +17,9 @@ def construct_internal_namespace(data, block):
 
 class SteadyStateDict:
     def __init__(self, data, internal=None):
-        if isinstance(data, SteadyStateDict):
-            self.internal = deepcopy(data.internal)
-            self.toplevel = deepcopy(data.toplevel)
-        else:
-            if internal is not None:
-                # Either we can construct the internal namespace for you (if it's a Block) otherwise,
-                # you can provide the nested dict representing the internal namespace directly
-                if hasattr(internal, "inputs") and hasattr(internal, "outputs"):
-                    self.internal = construct_internal_namespace(data, internal)
-                else:
-                    self.internal = internal
-            else:
-                self.internal = {}
-            if self.internal:
-                toplevel = deepcopy(data)
-                for internal_dict in self.internal.values():
-                    toplevel = dict_diff(toplevel, internal_dict)
-                self.toplevel = toplevel
-            else:
-                self.toplevel = deepcopy(data)
+        self.toplevel = {}
+        self.internal = {}
+        self.update(data, internal=internal)
 
     def __repr__(self):
         if self.internal:
@@ -68,14 +51,26 @@ class SteadyStateDict:
     def items(self):
         return self.toplevel.items()
 
-    def update(self, new_data):
-        if isinstance(new_data, SteadyStateDict):
-            self.toplevel.update(new_data.toplevel)
-            self.internal.update(new_data.internal)
+    def update(self, data, internal=None):
+        if isinstance(data, SteadyStateDict):
+            self.internal.update(deepcopy(data.internal))
+            self.toplevel.update(deepcopy(data.toplevel))
         else:
-            # TODO: This is assuming new_data only contains aggregates. Upgrade in later commit to handle the case of
-            #   vector-valued variables/collection into internal namespaces
-            self.toplevel.update(new_data)
+            toplevel = deepcopy(data)
+            if internal is not None:
+                # Either we can construct the internal namespace for you (if it's a Block) otherwise,
+                # you can provide the nested dict representing the internal namespace directly
+                if hasattr(internal, "inputs") and hasattr(internal, "outputs"):
+                    internal = construct_internal_namespace(data, internal)
+
+                # Remove the internal data from `data` if it's there
+                for internal_dict in internal.values():
+                    toplevel = dict_diff(toplevel, internal_dict)
+
+                self.toplevel.update(toplevel)
+                self.internal.update(internal)
+            else:
+                self.toplevel.update(toplevel)
 
     def difference(self, data_to_remove):
         return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), internal=deepcopy(self.internal))
