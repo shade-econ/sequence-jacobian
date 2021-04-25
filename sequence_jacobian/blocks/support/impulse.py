@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from ...steady_state.classes import SteadyStateDict
+
 
 class ImpulseDict:
     def __init__(self, impulse, ss):
@@ -9,8 +11,9 @@ class ImpulseDict:
             self.impulse = impulse.impulse
             self.ss = impulse.ss
         else:
-            if not isinstance(impulse, dict) or not isinstance(ss, dict):
-                raise ValueError('ImpulseDicts are initialized with two dicts.')
+            if not isinstance(impulse, dict) or not isinstance(ss, SteadyStateDict):
+                raise ValueError('ImpulseDicts are initialized with a `dict` of impulse responses'
+                                 ' and a `SteadyStateDict` of steady state values.')
             self.impulse = impulse
             self.ss = ss
 

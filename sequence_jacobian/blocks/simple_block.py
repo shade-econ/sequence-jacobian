@@ -93,7 +93,7 @@ class SimpleBlock(Block):
         for k, v in exogenous.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
-            input_args[k] = Displace(v + ss[k], ss=ss.get(k, None), name=k)
+            input_args[k] = Displace(v + ss[k], ss=ss[k], name=k)
 
         for k in self.input_list:
             if k not in input_args:
