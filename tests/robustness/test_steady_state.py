@@ -19,8 +19,7 @@ def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_dag):
     unknowns_ss = {"beta": (0.95, 0.97, 0.999 / (1 + 0.005)), "vphi": (0.001, 1.0, 10.), "w": 0.8}
     targets_ss = {"asset_mkt": 0, "labor_mkt": 0, "nkpc_res": 0.}
     ss_ref = hank_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
-                                           helper_blocks=helper_blocks, helper_targets=["nkpc_res"],
-                                           solver="broyden1", solver_kwargs={"options": {"maxiter": 300}},
+                                           helper_blocks=helper_blocks, helper_targets=["nkpc_res"], solver="hybr",
                                            constrained_kwargs={"boundary_epsilon": 5e-3, "penalty_scale": 100})
 
     for k in ss.keys():
