@@ -116,6 +116,14 @@ def dict_diff(d1, d2):
     return o_dict
 
 
+def smart_set(data):
+    # We want set to construct a single-element set for strings, i.e. ignoring the .iter method of strings
+    if isinstance(data, str):
+        return {data}
+    else:
+        return set(data)
+
+
 def smart_zip(keys, values):
     """For handling the case where keys and values may be scalars"""
     if isinstance(values, float):

@@ -1,44 +1,66 @@
 """Various classes to support the computation of steady states"""
 
 from copy import deepcopy
-import numpy as np
+
+from ..utilities.misc import dict_diff
 
 
 class SteadyStateDict:
-    def __init__(self, raw_dict, blocks=None):
-        # TODO: Will need to re-think flat storage of data if/when we move to implementing remapping
-        self.data = deepcopy(raw_dict)
+    def __init__(self, data, internal=None):
+        self.toplevel = {}
+        self.internal = {}
+        self.update(data, internal_namespaces=internal)
 
-        if blocks is not None:
-            self.block_map = {b.name: b.outputs for b in blocks}
-            self.block_names = list(self.block_map.keys())
-
-            # Record the values in raw_dict not output by any of the blocks as part of the `calibration`
-            self.block_map["calibration"] = set(raw_dict.keys()) - set().union(*self.block_map.values())
+    def __repr__(self):
+        if self.internal:
+            return f"<{type(self).__name__}: {list(self.toplevel.keys())}, internal={list(self.internal.keys())}>"
         else:
-            self.block_map = {"calibration": set(raw_dict.keys())}
-            self.block_names = ["calibration"]
+            return f"<{type(self).__name__}: {list(self.toplevel.keys())}>"
 
-    def __repr__(self, raw=False):
-        if set(self.block_names) == {"calibration"} or raw:
-            return self.data.__repr__()
+    def __iter__(self):
+        return iter(self.toplevel)
+
+    def __getitem__(self, k):
+        if isinstance(k, str):
+            return self.toplevel[k]
         else:
-            return f"<{type(self).__name__} blocks={self.block_names}"
+            try:
+                return {ki: self.toplevel[ki] for ki in k}
+            except TypeError:
+                raise TypeError(f'Key {k} needs to be a string or an iterable (list, set, etc) of strings')
 
-    def __getitem__(self, key):
-        if key in self.block_names:
-            return {k: v for k, v in self.data.items() if k in self.block_map[key]}
+    def __setitem__(self, k, v):
+        self.toplevel[k] = v
+
+    def keys(self):
+        return self.toplevel.keys()
+
+    def values(self):
+        return self.toplevel.values()
+
+    def items(self):
+        return self.toplevel.items()
+
+    def update(self, data, internal_namespaces=None):
+        if isinstance(data, SteadyStateDict):
+            self.internal.update(deepcopy(data.internal))
+            self.toplevel.update(deepcopy(data.toplevel))
         else:
-            return self.data[key]
+            toplevel = deepcopy(data)
+            if internal_namespaces is not None:
+                # Construct the internal namespace from the Block object, if a Block is provided
+                if hasattr(internal_namespaces, "internal"):
+                    internal_namespaces = {internal_namespaces.name: {k: v for k, v in deepcopy(data).items() if k in
+                                                                      internal_namespaces.internal}}
 
-    def __setitem__(self, key, value):
-        if key not in self.data:
-            block_name_to_assign = "calibration"
-            self.block_map[block_name_to_assign] = self.block_map[block_name_to_assign] | {key}
-        self.data[key] = value
+                # Remove the internal data from `data` if it's there
+                for internal_dict in internal_namespaces.values():
+                    toplevel = dict_diff(toplevel, internal_dict)
 
-    def aggregates(self):
-        return {k: v for k, v in self.data.items() if np.isscalar(v)}
+                self.toplevel.update(toplevel)
+                self.internal.update(internal_namespaces)
+            else:
+                self.toplevel.update(toplevel)
 
-    def idiosyncratic_variables(self):
-        return {k: v for k, v in self.data.items() if not np.isscalar(v)}
+    def difference(self, data_to_remove):
+        return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), internal=deepcopy(self.internal))

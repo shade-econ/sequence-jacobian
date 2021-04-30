@@ -74,8 +74,9 @@ def test_fake_news_v_actual(one_asset_hank_dag):
     curlyYs, curlyDs = {}, {}
     for i in shock_list:
         curlyYs[i], curlyDs[i] = household.backward_iteration_fakenews(i, output_list, ssin_dict,
-                                                                       ssout_list, ss['D'], Pi.T.copy(), sspol_i,
-                                                                       sspol_pi, sspol_space, T, h, ss_for_hetinput)
+                                                                       ssout_list, ss.internal["household"]['D'],
+                                                                       Pi.T.copy(), sspol_i, sspol_pi, sspol_space,
+                                                                       T, h, ss_for_hetinput)
 
     asset_effects = np.sum(curlyDs['r'] * ss['a_grid'], axis=(1, 2))
     assert np.linalg.norm(asset_effects - curlyYs["r"]["a"], np.inf) < 2e-15
@@ -83,7 +84,7 @@ def test_fake_news_v_actual(one_asset_hank_dag):
     # Step 2 of fake news algorithm: (transpose) forward iteration
     curlyPs = {}
     for o in output_list:
-        curlyPs[o] = household.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
+        curlyPs[o] = household.forward_iteration_fakenews(ss.internal["household"][o], Pi, sspol_i, sspol_pi, T-1)
 
     persistent_asset = np.array([np.vdot(curlyDs['r'][0, ...],
                                          curlyPs['a'][u, ...]) for u in range(30)])

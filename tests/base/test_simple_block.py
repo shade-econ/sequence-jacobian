@@ -1,8 +1,10 @@
 """Test SimpleBlock functionality"""
 
-from sequence_jacobian import simple, utilities
 import numpy as np
 import pytest
+
+from sequence_jacobian import simple
+from sequence_jacobian.steady_state.classes import SteadyStateDict
 
 
 @simple
@@ -27,10 +29,10 @@ def taylor(r, pi, phi):
     return i
 
 
-@pytest.mark.parametrize("block,ss", [(F, {"K": 1, "L": 1, "Z": 1, "alpha": 0.5}),
-                                      (investment, {"Q": 1, "K": 1, "r": 0.05, "N": 1, "mc": 1, "Z": 1, "delta": 0.05,
-                                                    "epsI": 2, "alpha": 0.5}),
-                                      (taylor, {"r": 0.05, "pi": 0.01, "phi": 1.5})])
+@pytest.mark.parametrize("block,ss", [(F, SteadyStateDict({"K": 1, "L": 1, "Z": 1, "alpha": 0.5})),
+                                      (investment, SteadyStateDict({"Q": 1, "K": 1, "r": 0.05, "N": 1, "mc": 1,
+                                                                    "Z": 1, "delta": 0.05, "epsI": 2, "alpha": 0.5})),
+                                      (taylor, SteadyStateDict({"r": 0.05, "pi": 0.01, "phi": 1.5}))])
 def test_block_consistency(block, ss):
     """Make sure ss, td, and jac methods are all consistent with each other.
     Requires that all inputs of simple block allow calculating Jacobians"""
