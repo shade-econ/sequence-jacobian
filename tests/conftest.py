@@ -90,10 +90,10 @@ def two_asset_hank_dag():
                    "epsI": 4, "omega": 0.005, "kappaw": 0.1, "phi": 1.5, "nZ": 3, "nB": 10, "nA": 16,
                    "nK": 4, "bmax": 50, "amax": 4000, "kmax": 1, "rho_z": 0.966, "sigma_z": 0.92}
     unknowns_ss = {"beta": 0.976, "chi1": 6.5, "vphi": 1.71, "Z": 0.4678, "alpha": 0.3299, "mup": 1.015, 'w': 0.66}
-    targets_ss = {"asset_mkt": 0., "B": "Bh", 'wnkpc': 0., 'pi': 0.0, "K": 10., "wealth": "tot_wealth", "N": 1.0}
+    targets_ss = {"asset_mkt": 0., "B": "Bh", 'wnkpc': 0., 'piw': 0.0, "K": 10., "wealth": "tot_wealth", "N": 1.0}
     ss = two_asset_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="broyden_custom",
                                             helper_blocks=helper_blocks,
-                                            helper_targets=["wnkpc", "pi", "K", "wealth", "N"])
+                                            helper_targets=["wnkpc", "piw", "K", "wealth", "N"])
 
     # Transitional Dynamics/Jacobian Calculation
     exogenous = ["rstar", "Z", "G"]
