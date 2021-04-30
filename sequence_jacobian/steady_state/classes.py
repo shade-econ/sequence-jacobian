@@ -2,24 +2,14 @@
 
 from copy import deepcopy
 
-from ..utilities.misc import dict_diff, smart_set
-
-
-def construct_internal_namespace(data, block):
-    # Only supporting internal namespaces for HetBlocks currently
-    if hasattr(block, "back_step_fun"):
-        return {block.name: {k: v for k, v in deepcopy(data).items() if k in
-                             smart_set(block.back_step_outputs) | smart_set(block.exogenous) | {"D"} |
-                             smart_set(block.hetinput_outputs) | smart_set(block.hetoutput_outputs)}}
-    else:
-        return {}
+from ..utilities.misc import dict_diff
 
 
 class SteadyStateDict:
     def __init__(self, data, internal=None):
         self.toplevel = {}
         self.internal = {}
-        self.update(data, internal=internal)
+        self.update(data, internal_namespaces=internal)
 
     def __repr__(self):
         if self.internal:
@@ -51,24 +41,24 @@ class SteadyStateDict:
     def items(self):
         return self.toplevel.items()
 
-    def update(self, data, internal=None):
+    def update(self, data, internal_namespaces=None):
         if isinstance(data, SteadyStateDict):
             self.internal.update(deepcopy(data.internal))
             self.toplevel.update(deepcopy(data.toplevel))
         else:
             toplevel = deepcopy(data)
-            if internal is not None:
-                # Either we can construct the internal namespace for you (if it's a Block) otherwise,
-                # you can provide the nested dict representing the internal namespace directly
-                if hasattr(internal, "inputs") and hasattr(internal, "outputs"):
-                    internal = construct_internal_namespace(data, internal)
+            if internal_namespaces is not None:
+                # Construct the internal namespace from the Block object, if a Block is provided
+                if hasattr(internal_namespaces, "internal"):
+                    internal_namespaces = {internal_namespaces.name: {k: v for k, v in deepcopy(data).items() if k in
+                                                                      internal_namespaces.internal}}
 
                 # Remove the internal data from `data` if it's there
-                for internal_dict in internal.values():
+                for internal_dict in internal_namespaces.values():
                     toplevel = dict_diff(toplevel, internal_dict)
 
                 self.toplevel.update(toplevel)
-                self.internal.update(internal)
+                self.internal.update(internal_namespaces)
             else:
                 self.toplevel.update(toplevel)
 

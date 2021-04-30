@@ -103,6 +103,10 @@ class HetBlock(Block):
         self.hetoutput_outputs = set()
         self.hetoutput_outputs_order = tuple()
 
+        # The set of variables that will be wrapped in a separate namespace for this HetBlock
+        # as opposed to being available at the top level
+        self.internal = utils.misc.smart_set(self.back_step_outputs) | utils.misc.smart_set(self.exogenous) | {"D"}
+
         if len(self.policy) > 2:
             raise ValueError(f"More than two endogenous policies in {back_step_fun.__name__}, not yet supported")
 
@@ -467,6 +471,8 @@ class HetBlock(Block):
             self.inputs |= self.hetinput_inputs
             self.inputs -= self.hetinput_outputs
 
+            self.internal |= self.hetinput_outputs
+
     def add_hetoutput(self, hetoutput, overwrite=False, verbose=True):
         """Add a hetoutput to this HetBlock. Any call to self.back_step_fun will first process
          inputs through the hetoutput function.
@@ -502,6 +508,8 @@ class HetBlock(Block):
             self.inputs |= (self.hetoutput_inputs - self.hetinput_outputs - self.back_step_outputs - self.hetoutput_outputs - set("D"))
             # Modify the HetBlock's outputs to include the aggregated hetoutputs
             self.outputs |= set([o.capitalize() for o in self.hetoutput_outputs])
+
+            self.internal |= self.hetoutput_outputs
 
     '''Part 3: components of ss():
         - policy_ss : backward iteration to get steady-state policies and other outcomes
