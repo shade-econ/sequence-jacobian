@@ -98,6 +98,10 @@ def unprime(s):
         return s
 
 
+def uncapitalize(s):
+    return s[0].lower() + s[1:]
+
+
 def list_diff(l1, l2):
     """Returns the list that is the "set difference" between l1 and l2 (based on element values)"""
     o_list = []
