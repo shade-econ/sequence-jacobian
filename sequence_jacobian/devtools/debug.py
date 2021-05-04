@@ -18,15 +18,12 @@ def ensure_computability(blocks, calibration=None, unknowns_ss=None,
     # Check if unknowns and exogenous are not outputs of any blocks, and that targets are not inputs to any blocks
     if exogenous and unknowns and targets:
         ensure_unknowns_exogenous_and_targets_valid_candidates(blocks, exogenous + unknowns, targets,
-                                                               verbose=verbose, fragile=fragile,
-                                                               ignore_helpers=ignore_helpers,
-                                                               calibration=calibration)
+                                                               verbose=verbose, fragile=fragile)
 
     # Check if there are any "broken" links between unknowns and targets, i.e. if there are any unknowns that don't
     # affect any targets, or if there are any targets that aren't affected by any unknowns
     if unknowns and targets and ss:
-        ensure_unknowns_and_targets_are_valid(blocks, unknowns, targets, ss, verbose=verbose, fragile=fragile,
-                                              ignore_helpers=ignore_helpers, calibration=calibration)
+        ensure_unknowns_and_targets_are_valid(blocks, unknowns, targets, ss, verbose=verbose, fragile=fragile)
 
 
 # To ensure that no input argument that is required for one of the blocks to evaluate is missing
@@ -49,10 +46,8 @@ def ensure_all_inputs_accounted_for(blocks, calibration, unknowns, verbose=False
 
 
 def ensure_unknowns_exogenous_and_targets_valid_candidates(blocks, exogenous_unknowns, targets,
-                                                           verbose=False, fragile=True,
-                                                           ignore_helpers=True, calibration=None):
-    cand_xu, cand_targets = find_candidate_unknowns_and_targets(blocks, ignore_helpers=ignore_helpers,
-                                                                calibration=calibration)
+                                                           verbose=False, fragile=True):
+    cand_xu, cand_targets = find_candidate_unknowns_and_targets(blocks)
     invalid_xu = []
     invalid_targ = []
     for xu in exogenous_unknowns:
@@ -72,10 +67,9 @@ def ensure_unknowns_exogenous_and_targets_valid_candidates(blocks, exogenous_unk
         print("The provided exogenous/unknowns and targets are all valid candidates for this DAG.")
 
 
-def find_candidate_unknowns_and_targets(block_list, verbose=False, ignore_helpers=True, calibration=None):
-    dep, inputs, outputs = graph.block_sort(block_list, return_io=True, ignore_helpers=ignore_helpers,
-                                            calibration=calibration)
-    required = graph.find_outputs_that_are_intermediate_inputs(block_list, ignore_helpers=ignore_helpers)
+def find_candidate_unknowns_and_targets(block_list, verbose=False):
+    dep, inputs, outputs = graph.block_sort(block_list, return_io=True)
+    required = graph.find_outputs_that_are_intermediate_inputs(block_list)
 
     # Candidate exogenous and unknowns (also includes parameters): inputs that are not outputs of any block
     # Candidate targets: outputs that are not inputs to any block
@@ -89,12 +83,10 @@ def find_candidate_unknowns_and_targets(block_list, verbose=False, ignore_helper
     return cand_xu, cand_targets
 
 
-def ensure_unknowns_and_targets_are_valid(blocks, unknowns, targets, ss, verbose=False, fragile=True,
-                                          calibration=None, ignore_helpers=True):
+def ensure_unknowns_and_targets_are_valid(blocks, unknowns, targets, ss, verbose=False, fragile=True):
     io_net = analysis.BlockIONetwork(blocks)
-    io_net.record_input_variables_paths(unknowns, ss, calibration=calibration, ignore_helpers=ignore_helpers)
-    ut_net = io_net.find_unknowns_targets_links(unknowns, targets, calibration=calibration,
-                                                ignore_helpers=ignore_helpers)
+    io_net.record_input_variables_paths(unknowns, ss)
+    ut_net = io_net.find_unknowns_targets_links(unknowns, targets)
     broken_unknowns = []
     broken_targets = []
     for u in unknowns:
