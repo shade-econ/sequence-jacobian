@@ -82,6 +82,7 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
 
     helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
     helper_indices = np.arange(len(blocks), len(blocks_all))
+    helper_outputs = {}
 
     if sort_blocks:
         dep = graph.construct_dependency_graph(blocks, graph.construct_output_map(blocks, helper_blocks=helper_blocks),
@@ -90,10 +91,8 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
     else:
         topsorted = range(len(blocks + helper_blocks))
 
-    def residual(targets_dict, unknown_keys, unknown_values, include_helpers=True):
+    def residual(targets_dict, unknown_keys, unknown_values, include_helpers=True, consistency_check=False):
         ss_values.update(misc.smart_zip(unknown_keys, unknown_values))
-
-        helper_outputs = {}
 
         # TODO: Later on optimize to not evaluating blocks in residual that are no longer needed due to helper
         #   block subsetting
@@ -104,8 +103,9 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
                 continue
             # Want to see hetoutputs
             elif hasattr(blocks_all[i], 'hetoutput') and blocks_all[i].hetoutput is not None:
-                outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
-                ss_values.update(outputs.difference(helper_outputs))
+                outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True,
+                                        consistency_check=consistency_check, verbose=verbose, **block_kwargs)
+                ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
             else:
                 outputs = eval_block_ss(blocks_all[i], ss_values, consistency_check=consistency_check,
                                         ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
@@ -115,7 +115,7 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
                 else:
                     # Don't overwrite entries in ss_values corresponding to what has already
                     # been solved for in helper_blocks so we can check for consistency after-the-fact
-                    ss_values.update(outputs.difference(helper_outputs))
+                    ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
         # dict of ss_values to compute the "unknown_solutions"
@@ -135,12 +135,12 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
                                               tol=ttol, verbose=verbose, fragile=fragile)
 
     # Check that the solution is consistent with what would come out of the DAG without the helper blocks
-    if consistency_check:
+    if consistency_check and helper_blocks:
         # Add the unknowns not handled by helpers into the DAG to be checked.
         unknowns_solved.update({k: ss_values[k] for k in unknowns if k not in unknowns_solved})
 
         cresid = abs(np.max(residual(targets, unknowns_solved.keys(), unknowns_solved.values(),
-                                     include_helpers=False)))
+                                     include_helpers=False, consistency_check=True)))
         run_consistency_check(cresid, ctol=ctol, fragile=fragile)
 
     # Update to set the solutions for the steady state values of the unknowns
@@ -151,9 +151,18 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
 
 def eval_block_ss(block, calibration, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
-    input_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
-    return block.steady_state({k: v for k, v in input_dict.items() if k in block.inputs},
-                              **{k: v for k, v in kwargs.items() if k in misc.input_kwarg_list(block.steady_state)})
+    # Add the block's internal variables as inputs, if the block has an internal attribute
+    input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
+
+    # If evaluating a CombinedBlock or SolvedBlock do not numerically solve for unknowns again just evaluate the
+    # block at the provided values in `calibration`
+    valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
+    input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
+    if "consistency_check" in kwargs and kwargs["consistency_check"] and "solver" in valid_input_kwargs:
+        input_kwarg_dict["solver"] = "solved"
+        input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
+
+    return block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
 
 
 def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, residual_kwargs=None,
@@ -248,9 +257,12 @@ def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, resi
                                                          tol=tol, verbose=verbose, **solver_kwargs)
         unknown_solutions = list(unknown_solutions)
     elif solver == "solved":
-        # If the model does not require a numerical solution then return an empty tuple for the unknowns
-        # that require a numerical solution
-        unknown_solutions = ()
+        # If the model either doesn't require a numerical solution or is being evaluated at a candidate solution
+        # simply call residual_f once to populate the `ss_values` dict and verify if the targets are hit
+        if not np.all(np.isclose(residual_f(*unknowns.values()), 0.)):
+            raise RuntimeError("The `solver` kwarg was set to 'solved' even though the residual function indicates that"
+                               " the targets were not hit.")
+        unknown_solutions = unknowns.values()
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
 
@@ -265,7 +277,8 @@ def _solve_for_unknowns_w_helper_blocks(residual, unknowns, targets, helper_unkn
     with helper blocks, reducing the number of unknowns that need to be numerically solved for."""
     # Initial evaluation of the DAG at the initial values of the unknowns, including the helper blocks,
     # to populate the `ss_values` dict with the unknown values that:
-    # a) are handled by helper blocks and b) are excludable from the main DAG.
+    # a) are handled by helper blocks and b) are excludable from the main DAG
+    # and to populate `helper_outputs` with outputs handled by helpers that ought not be changed
     unknowns_init_vals = [v if not isinstance(v, tuple) else (v[0] + v[1]) / 2 for v in unknowns.values()]
     targets_init_vals = dict(misc.smart_zip(targets.keys(), residual(targets, unknowns.keys(), unknowns_init_vals)))
 
