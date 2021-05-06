@@ -116,8 +116,8 @@ def income(e_grid, tax, w, N):
 
 # A potential hetoutput to include with the above HetBlock
 @hetoutput()
-def adjustment_costs(a, a_grid, r, chi0, chi1, chi2):
-    chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, r, chi0, chi1, chi2)
+def adjustment_costs(a, a_grid, ra, chi0, chi1, chi2):
+    chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, ra, chi0, chi1, chi2)
     return chi
 
 
@@ -237,8 +237,8 @@ def dividend(Y, w, N, K, pi, mup, kappap, delta, epsI):
     psip = mup / (mup - 1) / 2 / kappap * (1 + pi).apply(np.log) ** 2 * Y
     k_adjust = K(-1) * (K / K(-1) - 1) ** 2 / (2 * delta * epsI)
     I = K - (1 - delta) * K(-1) + k_adjust
-    div = Y - w * N - I
-    return psip, I, div
+    div = Y - w * N - I - psip
+    return I, div
 
 
 @simple
