@@ -98,21 +98,16 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
         for i in topsorted:
             if not include_helpers and blocks_all[i] in helper_blocks:
                 continue
-            # Want to see hetoutputs
-            elif hasattr(blocks_all[i], 'hetoutput') and blocks_all[i].hetoutput is not None:
-                outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
-                ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
+            outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, toplevel_unknowns=unknown_keys,
+                                    consistency_check=consistency_check, ttol=ttol, ctol=ctol,
+                                    verbose=verbose, **block_kwargs)
+            if include_helpers and blocks_all[i] in helper_blocks:
+                helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
+                ss_values.update(outputs)
             else:
-                outputs = eval_block_ss(blocks_all[i], ss_values, toplevel_unknowns=unknown_keys,
-                                        consistency_check=consistency_check, ttol=ttol, ctol=ctol,
-                                        verbose=verbose, **block_kwargs)
-                if include_helpers and blocks_all[i] in helper_blocks:
-                    helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
-                    ss_values.update(outputs)
-                else:
-                    # Don't overwrite entries in ss_values corresponding to what has already
-                    # been solved for in helper_blocks so we can check for consistency after-the-fact
-                    ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
+                # Don't overwrite entries in ss_values corresponding to what has already
+                # been solved for in helper_blocks so we can check for consistency after-the-fact
+                ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
         # dict of ss_values to compute the "unknown_solutions"
