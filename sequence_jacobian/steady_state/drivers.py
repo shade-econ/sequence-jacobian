@@ -100,12 +100,12 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
                 continue
             # Want to see hetoutputs
             elif hasattr(blocks_all[i], 'hetoutput') and blocks_all[i].hetoutput is not None:
-                outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True,
-                                        consistency_check=consistency_check, verbose=verbose, **block_kwargs)
+                outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, verbose=verbose, **block_kwargs)
                 ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
             else:
-                outputs = eval_block_ss(blocks_all[i], ss_values, consistency_check=consistency_check,
-                                        ttol=ttol, ctol=ctol, verbose=verbose, **block_kwargs)
+                outputs = eval_block_ss(blocks_all[i], ss_values, toplevel_unknowns=unknown_keys,
+                                        consistency_check=consistency_check, ttol=ttol, ctol=ctol,
+                                        verbose=verbose, **block_kwargs)
                 if include_helpers and blocks_all[i] in helper_blocks:
                     helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
                     ss_values.update(outputs)
@@ -145,19 +145,24 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
     return ss_values
 
 
-def eval_block_ss(block, calibration, **kwargs):
+def eval_block_ss(block, calibration, toplevel_unknowns=None, consistency_check=False, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
+    if toplevel_unknowns is None:
+        toplevel_unknowns = {}
+
     # Add the block's internal variables as inputs, if the block has an internal attribute
     input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
 
-    # If evaluating a SolvedBlock during a consistency check do not numerically solve for unknowns again,
-    # just evaluate the block at the provided values in `calibration`.
-    # This functionality is to invoke a true "PE"-like behavior for SolvedBlock, where unknowns are not re-solved for
-    # if they have already been found, which proves useful when SolvedBlocks' targets are dynamic restrictions
-    # but not static restrictions as is the case with dynamic debt rules in fiscal blocks.
+    # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
+    # at the provided set of unknowns if:
+    # A) SolvedBlock's internal DAG is subsumed by the main DAG, i.e. we want to solve for its unknown at the top-level.
+    #    This is useful in steady state computations when SolvedBlocks' targets are only dynamic restrictions, as in
+    #    the case of the debt adjustment fiscal rule
+    # B) A consistency check is being performed at a particular set of steady state values, so we don't need to
+    #    re-solve for the unknowns of the the SolvedBlock
     valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
-    if "consistency_check" in kwargs and kwargs["consistency_check"] and "solver" in valid_input_kwargs:
+    if "solver" in valid_input_kwargs and (set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) or consistency_check):
         input_kwarg_dict["solver"] = "solved"
         input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
 
