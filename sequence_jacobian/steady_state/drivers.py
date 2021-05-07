@@ -257,10 +257,8 @@ def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, resi
         unknown_solutions = list(unknown_solutions)
     elif solver == "solved":
         # If the model either doesn't require a numerical solution or is being evaluated at a candidate solution
-        # simply call residual_f once to populate the `ss_values` dict and verify if the targets are hit
-        if not np.all(np.isclose(residual_f(unknowns.values()), 0.)):
-            raise RuntimeError("The `solver` kwarg was set to 'solved' even though the residual function indicates that"
-                               " the targets were not hit.")
+        # simply call residual_f once to populate the `ss_values` dict
+        residual_f(unknowns.values())
         unknown_solutions = unknowns.values()
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
