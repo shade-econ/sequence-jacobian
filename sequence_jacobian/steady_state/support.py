@@ -5,9 +5,11 @@ from numbers import Real
 import numpy as np
 
 
-def instantiate_steady_state_mutable_kwargs(helper_blocks, helper_targets, block_kwargs, solver_kwargs,
-                                            constrained_kwargs):
+def instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targets,
+                                            block_kwargs, solver_kwargs, constrained_kwargs):
     """Instantiate mutable types from `None` default values in the steady_state function"""
+    if dissolve is None:
+        dissolve = []
     if helper_blocks is None and helper_targets is None:
         helper_blocks = []
         helper_targets = []
@@ -24,7 +26,7 @@ def instantiate_steady_state_mutable_kwargs(helper_blocks, helper_targets, block
     if constrained_kwargs is None:
         constrained_kwargs = {}
 
-    return helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
+    return dissolve, helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
 
 
 def provide_solver_default(unknowns):

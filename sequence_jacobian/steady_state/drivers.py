@@ -7,14 +7,14 @@ from functools import partial
 
 from .support import compute_target_values, extract_multivariate_initial_values_and_bounds,\
     extract_univariate_initial_values_or_bounds, constrained_multivariate_residual, run_consistency_check,\
-    subset_helper_block_unknowns, instantiate_steady_state_mutable_kwargs, find_excludable_helper_blocks
+    subset_helper_block_unknowns, instantiate_steady_state_mutable_kwargs
 from .classes import SteadyStateDict
 from ..utilities import solvers, graph, misc
 
 
 # Find the steady state solution
-def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
-                 helper_blocks=None, helper_targets=None,
+def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
+                 sort_blocks=True, helper_blocks=None, helper_targets=None,
                  consistency_check=True, ttol=2e-12, ctol=1e-9, fragile=False,
                  block_kwargs=None, verbose=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
@@ -29,6 +29,9 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
         A dictionary mapping unknown variables to either initial values or bounds to be provided to the numerical solver
     targets: `dict`
         A dictionary mapping target variables to desired numerical values, other variables solved for along the DAG
+    dissolve: `list`
+        A list of blocks, either SolvedBlock or CombinedBlock, where block-level unknowns are removed and subsumed
+        by the top-level unknowns, effectively removing the "solve" components of the blocks
     sort_blocks: `bool`
         Whether the blocks need to be topologically sorted (only False when this function is called from within a
         Block object, like CombinedBlock, that has already pre-sorted the blocks)
@@ -60,7 +63,7 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
     constrained_method: `str`
         When using solvers that typically only take an initial value, x0, we provide a few options for manipulating
         the solver to account for bounds when finding a solution. These methods are described in the
-        constrained_multivariate_residual function.
+        constrained_multivariate_residual function
     constrained_kwargs:
         The keyword arguments that the user's chosen constrained method requires to run
 
@@ -68,9 +71,9 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
         A dictionary containing all of the pre-specified values and computed values from the steady state computation
     """
 
-    helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs =\
-        instantiate_steady_state_mutable_kwargs(helper_blocks, helper_targets, block_kwargs,
-                                                solver_kwargs, constrained_kwargs)
+    dissolve, helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs =\
+        instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targets,
+                                                block_kwargs, solver_kwargs, constrained_kwargs)
 
     # Initial setup of blocks, targets, and dictionary of steady state values to be returned
     blocks_all = blocks + helper_blocks
@@ -99,7 +102,7 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
             if not include_helpers and blocks_all[i] in helper_blocks:
                 continue
             outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, toplevel_unknowns=unknown_keys,
-                                    consistency_check=consistency_check, ttol=ttol, ctol=ctol,
+                                    dissolve=dissolve, consistency_check=consistency_check,
                                     verbose=verbose, **block_kwargs)
             if include_helpers and blocks_all[i] in helper_blocks:
                 helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
@@ -140,10 +143,11 @@ def steady_state(blocks, calibration, unknowns, targets, sort_blocks=True,
     return ss_values
 
 
-def eval_block_ss(block, calibration, toplevel_unknowns=None, consistency_check=False, **kwargs):
+def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, consistency_check=False, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
     if toplevel_unknowns is None:
         toplevel_unknowns = {}
+    block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
 
     # Add the block's internal variables as inputs, if the block has an internal attribute
     input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
@@ -157,9 +161,16 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, consistency_check=
     #    re-solve for the unknowns of the the SolvedBlock
     valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
-    if "solver" in valid_input_kwargs and (set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) or consistency_check):
-        input_kwarg_dict["solver"] = "solved"
-        input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
+    if block.name in dissolve:
+        if "solver" in valid_input_kwargs and (block_unknowns_in_toplevel_unknowns or consistency_check):
+            input_kwarg_dict["solver"] = "solved"
+            input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
+    elif block.name not in dissolve and block_unknowns_in_toplevel_unknowns:
+        raise RuntimeError(f"The block '{block.name}' is not in the kwarg `dissolve` but its unknowns,"
+                           f" {set(block.unknowns.keys())} are a subset of the top-level unknowns,"
+                           f" {set(toplevel_unknowns)}.\n"
+                           f"If the user provides a set of top-level unknowns that subsume block-level unknowns,"
+                           f" it must be explicitly declared in `dissolve`.")
 
     return block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
 
