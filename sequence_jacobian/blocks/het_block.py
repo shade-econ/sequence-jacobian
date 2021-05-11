@@ -239,7 +239,7 @@ class HetBlock(Block):
         aggregates = {o.capitalize(): np.vdot(D, sspol[o]) for o in self.non_back_iter_outputs}
         ss.update(aggregates)
 
-        if hetoutput:
+        if hetoutput and self.hetoutput is not None:
             hetoutputs = self.hetoutput.evaluate(ss)
             aggregate_hetoutputs = self.hetoutput.aggregate(hetoutputs, D, ss, mode="ss")
         else:

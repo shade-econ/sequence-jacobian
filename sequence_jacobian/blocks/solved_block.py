@@ -84,7 +84,8 @@ class SolvedBlock(Block):
                       DeprecationWarning)
         return self.jacobian(ss, shock_list, T, **kwargs)
 
-    def steady_state(self, calibration, helper_blocks=None, consistency_check=True, ttol=1e-9, ctol=1e-9, verbose=False):
+    def steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
+                     consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:
@@ -92,7 +93,14 @@ class SolvedBlock(Block):
                                                               calibration=calibration)
             self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
 
-        return super().solve_steady_state(calibration, self.unknowns, self.targets, solver=self.solver,
+        # Allow override of unknowns/solver, if one wants to evaluate the SolvedBlock at a particular set of
+        # unknown values akin to the steady_state method of Block
+        if unknowns is None:
+            unknowns = self.unknowns
+        if solver is None:
+            solver = self.solver
+
+        return super().solve_steady_state(calibration, unknowns, self.targets, solver=solver,
                                           consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
 
     def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):

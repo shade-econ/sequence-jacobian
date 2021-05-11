@@ -5,9 +5,11 @@ from numbers import Real
 import numpy as np
 
 
-def instantiate_steady_state_mutable_kwargs(helper_blocks, helper_targets, block_kwargs, solver_kwargs,
-                                            constrained_kwargs):
+def instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targets,
+                                            block_kwargs, solver_kwargs, constrained_kwargs):
     """Instantiate mutable types from `None` default values in the steady_state function"""
+    if dissolve is None:
+        dissolve = []
     if helper_blocks is None and helper_targets is None:
         helper_blocks = []
         helper_targets = []
@@ -24,7 +26,7 @@ def instantiate_steady_state_mutable_kwargs(helper_blocks, helper_targets, block
     if constrained_kwargs is None:
         constrained_kwargs = {}
 
-    return helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
+    return dissolve, helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
 
 
 def provide_solver_default(unknowns):
@@ -108,16 +110,14 @@ def subset_helper_block_unknowns(unknowns_all, helper_blocks, helper_targets):
     return unknowns_handled_by_helpers
 
 
-def find_excludable_helper_blocks(blocks_all, block_dependencies, helper_indices, helper_unknowns, helper_targets):
+def find_excludable_helper_blocks(blocks_all, helper_indices, helper_unknowns, helper_targets):
     """Of the set of helper_unknowns and helper_targets, find the ones that can be excluded from the main DAG
     for the purposes of numerically solving unknowns."""
     excludable_helper_unknowns = {}
     excludable_helper_targets = {}
     for i in helper_indices:
-        # If the helper block has no dependencies on other blocks in the DAG
-        if not block_dependencies[i]:
-            excludable_helper_unknowns.update({h: helper_unknowns[h] for h in blocks_all[i].outputs if h in helper_unknowns})
-            excludable_helper_targets.update({h: helper_targets[h] for h in blocks_all[i].outputs | blocks_all[i].inputs if h in helper_targets})
+        excludable_helper_unknowns.update({h: helper_unknowns[h] for h in blocks_all[i].outputs if h in helper_unknowns})
+        excludable_helper_targets.update({h: helper_targets[h] for h in blocks_all[i].outputs | blocks_all[i].inputs if h in helper_targets})
     return excludable_helper_unknowns, excludable_helper_targets
 
 

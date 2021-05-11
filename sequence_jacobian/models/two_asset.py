@@ -238,7 +238,7 @@ def dividend(Y, w, N, K, pi, mup, kappap, delta, epsI):
     k_adjust = K(-1) * (K / K(-1) - 1) ** 2 / (2 * delta * epsI)
     I = K - (1 - delta) * K(-1) + k_adjust
     div = Y - w * N - I - psip
-    return I, div
+    return psip, I, div
 
 
 @simple
