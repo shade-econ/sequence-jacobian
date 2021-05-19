@@ -76,14 +76,16 @@ def broyden_solver(f, x0, y0=None, tol=1E-9, maxcount=100, backtrack_c=0.5, verb
     if y is None:
         y = f(x)
 
-    # initialize J with Newton!
-    J = obtain_J(f, x, y)
     for count in range(maxcount):
         if verbose:
             printit(count, x, y)
 
         if np.max(np.abs(y)) < tol:
             return x, y
+
+        # initialize J with Newton!
+        if count == 0:
+            J = obtain_J(f, x, y)
 
         if len(x) == len(y):
             dx = np.linalg.solve(J, -y)
