@@ -155,7 +155,7 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
     # at the provided set of unknowns if included in dissolve.
     valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
-    if block.name in dissolve:
+    if block.name in dissolve and "solver" in valid_input_kwargs:
         input_kwarg_dict["solver"] = "solved"
         input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
     elif block.name not in dissolve and block_unknowns_in_toplevel_unknowns:
