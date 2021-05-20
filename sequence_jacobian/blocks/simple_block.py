@@ -64,7 +64,8 @@ class SimpleBlock(Block):
 
     def steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}
-        output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [misc.numeric_primitive(self.f(**input_args))]
+        output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [
+            misc.numeric_primitive(self.f(**input_args))]
         return SteadyStateDict({**calibration, **dict(zip(self.output_list, output_vars))})
 
     def impulse_nonlinear(self, ss, exogenous):
@@ -90,18 +91,19 @@ class SimpleBlock(Block):
         ----------
         ss : dict,
             steady state values
+        exogenous : list of str, optional
+            names of input variables to differentiate wrt; if omitted, assume all inputs
         T : int, optional
             number of time periods for explicit T*T Jacobian
             if omitted, more efficient SimpleSparse objects returned
-        exogenous : list of str, optional
-            names of input variables to differentiate wrt; if omitted, assume all inputs
+        Js : dict of {str: JacobianDict}, optional
+            pre-computed Jacobians
 
         Returns
         -------
         J : dict of {str: dict of {str: array(T,T)}}
             J[o][i] for output o and input i gives Jacobian of o with respect to i
-            This Jacobian is a SimpleSparse object or, if T specific, a T*T matrix, omitted by convention
-            if zero
+            This Jacobian is a SimpleSparse object or, if T specific, a T*T matrix, omitted by convention if zero
         """
 
         if exogenous is None:

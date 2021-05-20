@@ -9,6 +9,7 @@ from .steady_state.drivers import steady_state
 from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
+from .steady_state.classes import SteadyStateDict
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
 
@@ -70,15 +71,15 @@ class Block(abc.ABC, metaclass=ABCMeta):
     # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
     # input and output argument structure
     def steady_state(self, calibration: Dict[str, Union[Real, Array]],
-                     **kwargs) -> Dict[str, Union[Real, Array]]:
+                     **kwargs) -> SteadyStateDict:
         raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
 
     def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
-                          exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
+                          exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
         raise NotImplementedError(f'{type(self)} does not implement .impulse_nonlinear()')
 
     def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
-                       exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
+                       exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
         raise NotImplementedError(f'{type(self)} does not implement .impulse_linear()')
 
     def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous: List[str] = None,
@@ -88,7 +89,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]],
-                           solver: Optional[str] = "", **kwargs) -> Dict[str, Union[Real, Array]]:
+                           solver: Optional[str] = "", **kwargs) -> SteadyStateDict:
         """Evaluate a general equilibrium steady state of Block given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
