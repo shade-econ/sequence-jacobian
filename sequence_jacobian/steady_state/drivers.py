@@ -102,8 +102,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
             if not include_helpers and blocks_all[i] in helper_blocks:
                 continue
             outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, toplevel_unknowns=unknown_keys,
-                                    dissolve=dissolve, consistency_check=consistency_check,
-                                    verbose=verbose, **block_kwargs)
+                                    dissolve=dissolve, verbose=verbose, **block_kwargs)
             if include_helpers and blocks_all[i] in helper_blocks:
                 helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
                 ss_values.update(outputs)
@@ -143,7 +142,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
     return ss_values
 
 
-def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, consistency_check=False, **kwargs):
+def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
     if toplevel_unknowns is None:
         toplevel_unknowns = {}
@@ -153,18 +152,12 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, con
     input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
 
     # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
-    # at the provided set of unknowns if:
-    # A) SolvedBlock's internal DAG is subsumed by the main DAG, i.e. we want to solve for its unknown at the top-level.
-    #    This is useful in steady state computations when SolvedBlocks' targets are only dynamic restrictions, as in
-    #    the case of the debt adjustment fiscal rule
-    # B) A consistency check is being performed at a particular set of steady state values, so we don't need to
-    #    re-solve for the unknowns of the the SolvedBlock
+    # at the provided set of unknowns if included in dissolve.
     valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
     if block.name in dissolve:
-        if "solver" in valid_input_kwargs and (block_unknowns_in_toplevel_unknowns or consistency_check):
-            input_kwarg_dict["solver"] = "solved"
-            input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
+        input_kwarg_dict["solver"] = "solved"
+        input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
     elif block.name not in dissolve and block_unknowns_in_toplevel_unknowns:
         raise RuntimeError(f"The block '{block.name}' is not in the kwarg `dissolve` but its unknowns,"
                            f" {set(block.unknowns.keys())} are a subset of the top-level unknowns,"
