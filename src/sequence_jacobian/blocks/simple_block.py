@@ -20,7 +20,7 @@ def simple(f):
 
 class SimpleBlock(Block):
     """Generated from simple block written in Dynare-ish style and decorated with @simple, e.g.
-    
+
     @simple
     def production(Z, K, L, alpha):
         Y = Z * K(-1) ** alpha * L ** (1 - alpha)
@@ -29,7 +29,7 @@ class SimpleBlock(Block):
     which is a SimpleBlock that takes in Z, K, L, and alpha, all of which can be either constants
     or series, and implements a Cobb-Douglas production function, noting that for production today
     we use the capital K(-1) determined yesterday.
-    
+
     Key methods are .ss, .td, and .jac, like HetBlock.
     """
 

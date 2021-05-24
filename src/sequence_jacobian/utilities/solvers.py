@@ -145,4 +145,3 @@ def printit(it, x, y, **kwargs):
     for kw, val in kwargs.items():
         print(f'{kw} = {val:.3f}')
     print('\n')
-

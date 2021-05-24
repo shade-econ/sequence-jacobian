@@ -12,7 +12,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, Js=None, monotonic=Fa
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 
     Use a quasi-Newton method with the Jacobian H_U mapping unknowns to targets around steady state.
-    
+
     Parameters
     ----------
     block_list      : list, blocks in model (SimpleBlocks or HetBlocks)
@@ -81,7 +81,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, Js=None, monotonic=Fa
 def td_map(block_list, ss, exogenous, unknowns=None, sort=None,
            monotonic=False, returnindividual=False, grid_paths=None):
     """Helper for td_solve, calculates H(U, Z), where U and Z are in kwargs.
-    
+
     Goes through block_list, topologically sorts the implied DAG, calculates H(U, Z),
     with missing paths always being interpreted as remaining at the steady state for a particular variable"""
 

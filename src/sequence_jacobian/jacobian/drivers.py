@@ -6,7 +6,7 @@ from .classes import JacobianDict
 from .support import pack_vectors, unpack_vectors
 from ..utilities import misc, graph
 
-'''Drivers: 
+'''Drivers:
     - get_H_U               : get H_U matrix mapping all unknowns to all targets
     - get_impulse           : get single GE impulse response
     - get_G                 : get G matrices characterizing all GE impulse responses

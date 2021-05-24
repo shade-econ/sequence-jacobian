@@ -171,5 +171,3 @@ def forward_step_transpose_endo_2d(D, x_i, y_i, x_pi, y_pi):
                                     (1-alpha) * beta * D[iz, ixp+1, iyp] +
                                     (1-alpha) * (1-beta) * D[iz, ixp+1, iyp+1])
     return Dnew
-
-

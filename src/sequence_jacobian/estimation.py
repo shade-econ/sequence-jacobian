@@ -14,7 +14,7 @@ def all_covariances(M, sigmas):
 
     Parameters
     ----------
-    M      : array (T*O*Z), stacked impulse responses of nO variables to nZ shocks (MA(T-1) representation) 
+    M      : array (T*O*Z), stacked impulse responses of nO variables to nZ shocks (MA(T-1) representation)
     sigmas : array (Z), standard deviations of shocks
 
     Returns

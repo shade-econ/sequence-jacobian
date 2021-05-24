@@ -92,4 +92,3 @@ def rbc_ss(r=0.01, eis=1, frisch=1, delta=0.025, alpha=0.11):
     return {'beta': beta, 'eis': eis, 'frisch': frisch, 'vphi': vphi, 'delta': delta, 'alpha': alpha,
             'Z': Z, 'K': K, 'I': I, 'Y': Y, 'L': 1, 'C': C, 'w': w, 'r': r, 'walras': walras, 'euler': euler,
             'goods_mkt': goods_mkt}
-

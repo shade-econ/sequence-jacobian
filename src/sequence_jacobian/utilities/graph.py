@@ -277,5 +277,3 @@ class SetStack:
 
     def __repr__(self):
         return self.mylist.__repr__()
-
-

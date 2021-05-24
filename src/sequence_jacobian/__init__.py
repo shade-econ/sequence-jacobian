@@ -28,4 +28,3 @@ import warnings
 formatwarning_orig = warnings.formatwarning
 warnings.formatwarning = lambda message, category, filename, lineno, line=None: \
     formatwarning_orig(message, category, filename, lineno, line='')
-

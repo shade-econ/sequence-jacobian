@@ -113,7 +113,7 @@ class HetBlock(Block):
         # Checking that the various inputs/outputs attributes are correctly set
         if self.exogenous + '_p' not in self.back_step_inputs:
             raise ValueError(f"Markov matrix '{self.exogenous}_p' not included as argument in {back_step_fun.__name__}")
-        
+
         for pol in self.policy:
             if pol not in self.back_step_outputs:
                 raise ValueError(f"Policy '{pol}' not included as output in {back_step_fun.__name__}")
@@ -255,7 +255,7 @@ class HetBlock(Block):
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
 
         CANNOT provide time-varying paths of grid or Markov transition matrix for now.
-        
+
         Parameters
         ----------
         ss : dict
@@ -557,7 +557,7 @@ class HetBlock(Block):
             ssin.update({k + '_p': sspol[k] for k in self.back_iter_vars})
         else:
             raise ValueError(f'No convergence of policy functions after {maxit} backward iterations!')
-        
+
         # want to record inputs in ssin, but remove _p, add in hetinput inputs if there
         for k in self.inputs_to_be_primed:
             ssin[k] = ssin[k + '_p']
@@ -598,7 +598,7 @@ class HetBlock(Block):
         if D_seed is None:
             # compute stationary distribution for exogenous variable
             pi = utils.discretize.stationary(Pi, pi_seed)
-            
+
             # now initialize full distribution with this, assuming uniform distribution on endogenous vars
             endogenous_dims = [grid[k].shape[0] for k in self.policy]
             D = np.tile(pi, endogenous_dims[::-1] + [1]).T / np.prod(endogenous_dims)
@@ -623,7 +623,7 @@ class HetBlock(Block):
             D = Dnew
         else:
             raise ValueError(f'No convergence after {maxit} forward iterations!')
-        
+
         return D
 
     '''Part 4: components of jac(), corresponding to *4 steps of fake news algorithm* in paper
@@ -633,7 +633,7 @@ class HetBlock(Block):
         - Step 4: J_from_F to get Jacobian from fake news matrix
     '''
 
-    def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list, 
+    def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list,
                                Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4):
         # shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.back_step_output_list,
@@ -659,7 +659,7 @@ class HetBlock(Block):
 
         return curlyV, curlyD, curlyY
 
-    def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T, 
+    def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T,
                                     sspol_i, sspol_pi, sspol_space, T, h=1E-4, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
         # TODO: Might need to add a check for ss_for_hetinput if self.hetinput is not None
@@ -676,7 +676,7 @@ class HetBlock(Block):
             din_dict = {input_shocked: 1}
 
         # contemporaneous response to unit scalar shock
-        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list, 
+        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list,
                                                              Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=h)
 
         # infer dimensions from this and initialize empty arrays
@@ -691,7 +691,7 @@ class HetBlock(Block):
         # fill in anticipation effects
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
-                                                    output_list, ssin_dict, ssout_list, 
+                                                    output_list, ssin_dict, ssout_list,
                                                     Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
@@ -700,7 +700,7 @@ class HetBlock(Block):
 
     def forward_iteration_fakenews(self, o_ss, Pi, pol_i_ss, pol_pi_ss, T):
         """Iterate transpose forward T steps to get full set of curlyPs for a given outcome.
-        
+
         Note we depart from definition in paper by applying the demeaning operator in addition to Lambda
         at each step. This does not affect products with curlyD (which are the only way curlyPs enter
         Jacobian) since perturbations to distribution always have mean zero. It has numerical benefits

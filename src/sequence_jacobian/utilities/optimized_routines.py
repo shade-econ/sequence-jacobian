@@ -41,5 +41,3 @@ def fast_aggregate(X, Y):
     for t in range(T):
         Z[t] = Xnew[t, :] @ Ynew[t, :]
     return Z
-
-

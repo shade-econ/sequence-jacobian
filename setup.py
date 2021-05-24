@@ -27,6 +27,6 @@ setup(
         "Operating System :: OS Independent",
     ],
 
-    packages=find_packages(where='sequence_jacobian'),
-    package_dir={'': 'sequence_jacobian'},
+    packages=find_packages(where='src'),
+    package_dir={'': 'src'},
 )
