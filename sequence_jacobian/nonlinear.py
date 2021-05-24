@@ -45,7 +45,7 @@ def td_solve(block_list, ss, exogenous, unknowns, targets, Js=None, monotonic=Fa
         break
 
     # initialize guess for unknowns to steady state length T
-    unknown_paths = {k: np.full(T, ss[k]) for k in unknowns}
+    unknown_paths = {k: np.zeros(T) for k in unknowns}
     Uvec = pack_vectors(unknown_paths, unknowns, T)
 
     # obtain Jacobian of targets wrt to unknowns
@@ -105,7 +105,7 @@ def td_map(block_list, ss, exogenous, unknowns=None, sort=None,
 
         # if any input to the block has changed, run the block
         if not block.inputs.isdisjoint(results):
-            results.update(block.impulse_nonlinear(ss, exogenous={k: results[k] - ss[k] for k in block.inputs if k in results},
+            results.update(block.impulse_nonlinear(ss, exogenous={k: results[k] for k in block.inputs if k in results},
                                                    **{k: v for k, v in hetoptions.items()
                                                       if k in misc.input_kwarg_list(block.impulse_nonlinear)}))
 

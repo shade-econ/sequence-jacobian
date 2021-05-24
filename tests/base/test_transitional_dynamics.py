@@ -22,8 +22,8 @@ def test_rbc_td(rbc_dag):
     td_nonlin = rbc_model.solve_impulse_nonlinear(ss, {"Z": dZ[:, 0]}, unknowns=unknowns, targets=targets)
     td_nonlin_news = rbc_model.solve_impulse_nonlinear(ss, {"Z": dZ[:, 1]}, unknowns=unknowns, targets=targets)
 
-    dC_nonlin = 100 * (td_nonlin['C'] / ss['C'] - 1)
-    dC_nonlin_news = 100 * (td_nonlin_news['C'] / ss['C'] - 1)
+    dC_nonlin = 100 * td_nonlin['C'] / ss['C']
+    dC_nonlin_news = 100 * td_nonlin_news['C'] / ss['C']
 
     assert np.linalg.norm(dC[:, 0] - dC_nonlin, np.inf) < 3e-2
     assert np.linalg.norm(dC[:, 1] - dC_nonlin_news, np.inf) < 7e-2
@@ -40,7 +40,7 @@ def test_ks_td(krusell_smith_dag):
 
         td_nonlin = ks_model.solve_impulse_nonlinear(ss, {"Z": dZ}, unknowns=unknowns, targets=targets,
                                                      monotonic=True)
-        dr_nonlin = 10000 * (td_nonlin['r'] - ss['r'])
+        dr_nonlin = 10000 * td_nonlin['r']
         dr_lin = 10000 * G['r']['Z'] @ dZ
 
         assert np.linalg.norm(dr_nonlin - dr_lin, np.inf) < tol
@@ -59,7 +59,7 @@ def test_hank_td(one_asset_hank_dag):
 
     td_nonlin = hank_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets, Js={'household': J_ha})
 
-    dC_nonlin = 100 * (td_nonlin['C'] / ss['C'] - 1)
+    dC_nonlin = 100 * td_nonlin['C'] / ss['C']
     dC_lin = 100 * G['C']['rstar'] @ drstar / ss['C']
 
     assert np.linalg.norm(dC_nonlin - dC_lin, np.inf) < 3e-3
@@ -79,7 +79,7 @@ def test_two_asset_td(two_asset_hank_dag):
         td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, {"rstar": drstar}, unknowns, targets,
                                                             Js={'household': J_ha})
 
-        dY_nonlin = 100 * (td_nonlin['Y'] - 1)
+        dY_nonlin = 100 * td_nonlin['Y']
         dY_lin = 100 * G['Y']['rstar'] @ drstar
 
         assert np.linalg.norm(dY_nonlin - dY_lin, np.inf) < tol

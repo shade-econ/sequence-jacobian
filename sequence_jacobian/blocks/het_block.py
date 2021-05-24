@@ -258,7 +258,7 @@ class HetBlock(Block):
         
         Parameters
         ----------
-        ss : dict
+        ss : SteadyStateDict
             all steady-state info, intended to be from .ss()
         exogenous : dict of {str : array(T, ...)}
             all time-varying inputs here (in deviations), with first dimension being time
@@ -356,9 +356,9 @@ class HetBlock(Block):
         # return either this, or also include distributional information
         if returnindividual:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths,
-                                'D': D_path})
+                                'D': D_path}) - ss
         else:
-            return ImpulseDict({**aggregates, **aggregate_hetoutputs})
+            return ImpulseDict({**aggregates, **aggregate_hetoutputs}) - ss
 
     def impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
         # infer T from exogenous, check that all shocks have same length

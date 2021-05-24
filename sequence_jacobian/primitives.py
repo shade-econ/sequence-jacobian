@@ -107,7 +107,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         irf_nonlin_gen_eq = td_solve(blocks, ss,
-                                     exogenous={k: ss[k] + v for k, v in exogenous.items()},
+                                     exogenous={k: v for k, v in exogenous.items()},
                                      unknowns=unknowns, targets=targets, Js=Js, **kwargs)
         return ImpulseDict(irf_nonlin_gen_eq)
 
