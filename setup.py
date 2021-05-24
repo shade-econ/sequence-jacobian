@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -12,7 +12,6 @@ read = lambda p: Path(Path(__file__).resolve().parent / p).read_text()
 
 setup(
     name="sequence-jacobian",
-    packages=find_packages(),
     python_requires=">=3.7",
     install_requires=read("requirements.txt").splitlines(),
     version="0.0.1",
@@ -27,4 +26,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+
+    packages=find_packages(where='sequence_jacobian'),
+    package_dir={'': 'sequence_jacobian'},
 )
