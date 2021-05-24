@@ -1,0 +1,7 @@
+README.md
+setup.py
+src/sequence_jacobian.egg-info/PKG-INFO
+src/sequence_jacobian.egg-info/SOURCES.txt
+src/sequence_jacobian.egg-info/dependency_links.txt
+src/sequence_jacobian.egg-info/requires.txt
+src/sequence_jacobian.egg-info/top_level.txt
