@@ -107,9 +107,9 @@ class Block(abc.ABC, metaclass=ABCMeta):
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         irf_nonlin_gen_eq = td_solve(blocks, ss,
-                                     exogenous={k: ss[k] + v for k, v in exogenous.items()},
+                                     exogenous={k: v for k, v in exogenous.items()},
                                      unknowns=unknowns, targets=targets, Js=Js, **kwargs)
-        return ImpulseDict(irf_nonlin_gen_eq, ss)
+        return ImpulseDict(irf_nonlin_gen_eq)
 
     def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
                              exogenous: Dict[str, Array],
@@ -122,7 +122,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
-        return ImpulseDict(irf_lin_gen_eq, ss)
+        return ImpulseDict(irf_lin_gen_eq)
 
     def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
                        exogenous: List[str],
