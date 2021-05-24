@@ -356,9 +356,9 @@ class HetBlock(Block):
         # return either this, or also include distributional information
         if returnindividual:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths,
-                                'D': D_path}, ss)
+                                'D': D_path})
         else:
-            return ImpulseDict({**aggregates, **aggregate_hetoutputs}, ss)
+            return ImpulseDict({**aggregates, **aggregate_hetoutputs})
 
     def impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
         # infer T from exogenous, check that all shocks have same length
@@ -367,7 +367,7 @@ class HetBlock(Block):
             raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
         T = shock_lengths[0]
 
-        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous), ss)
+        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
 
     def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, Js=None, h=1E-4):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.

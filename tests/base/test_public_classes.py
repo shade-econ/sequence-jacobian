@@ -58,7 +58,6 @@ def test_impulsedict(krusell_smith_dag):
 
     # Linearized impulse responses as deviations, nonlinear as levels
     ir_lin = ks_model.solve_impulse_linear(ss, {'Z': 0.01 * 0.5**np.arange(T)}, unknowns, targets)
-    ir_nonlin = ks_model.solve_impulse_nonlinear(ss, {'Z': 0.01 * 0.5 ** np.arange(T)}, unknowns, targets)
 
     # Get method
     assert isinstance(ir_lin, ImpulseDict)
@@ -69,11 +68,7 @@ def test_impulsedict(krusell_smith_dag):
     temp = ir_lin[['C', 'K']] | ir_lin[['r']]
     assert list(temp.impulse.keys()) == ['C', 'K', 'r']
 
-    # Normalize and scalar multiplication
+    # SS and scalar multiplication
     dC1 = 100 * ir_lin['C'] / ss['C']
-    dC2 = 100 * ir_lin[['C']].normalize()
+    dC2 = 100 * ir_lin[['C']] / ss
     assert np.allclose(dC1, dC2['C'])
-
-    # Levels and deviations
-    assert np.linalg.norm(ir_nonlin.deviations()['C'] - ir_lin['C']) < 1E-4
-    assert np.linalg.norm(ir_nonlin['C'] - ir_lin.levels()['C']) < 1E-4

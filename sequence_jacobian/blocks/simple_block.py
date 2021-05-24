@@ -79,10 +79,10 @@ class SimpleBlock(Block):
             if k not in input_args:
                 input_args[k] = ignore(ss[k])
 
-        return ImpulseDict(make_impulse_uniform_length(self.f(**input_args), self.output_list), ss)
+        return ImpulseDict(make_impulse_uniform_length(self.f(**input_args), self.output_list))
 
     def impulse_linear(self, ss, exogenous, T=None, Js=None):
-        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous), ss)
+        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
 
     def jacobian(self, ss, exogenous=None, T=None, Js=None):
         """Assemble nested dict of Jacobians
