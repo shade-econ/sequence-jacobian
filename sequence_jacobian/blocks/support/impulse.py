@@ -67,23 +67,3 @@ class ImpulseDict:
         # ImpulseDict[['C, 'Y']] / ss[['C', 'Y']]: matches steady states; don't divide by zero
         if isinstance(other, SteadyStateDict):
             return type(self)({k: v / other[k] if not np.isclose(other[k], 0) else v for k, v in self.impulse.items()})
-
-    # def normalize(self, x=None):
-    #     if x is None:
-    #         # default: normalize by steady state if not zero
-    #         impulse = {k: v/self.ss[k] if not np.isclose(self.ss[k], 0) else v for k, v in self.impulse.items()}
-    #     else:
-    #         # normalize by steady state of x
-    #         if x not in self.ss.keys():
-    #             raise ValueError(f'Cannot normalize with {x}: steady state is unknown.')
-    #         elif np.isclose(self.ss[x], 0):
-    #             raise ValueError(f'Cannot normalize with {x}: steady state is zero.')
-    #         else:
-    #             impulse = {k: v / self.ss[x] for k, v in self.impulse.items()}
-    #     return type(self)(impulse, self.ss)
-    #
-    # def levels(self):
-    #     return type(self)({k: v + self.ss[k] for k, v in self.impulse.items()}, self.ss)
-    #
-    # def deviations(self):
-    #     return type(self)({k: v - self.ss[k] for k, v in self.impulse.items()}, self.ss)
