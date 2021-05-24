@@ -46,7 +46,7 @@ class ImpulseDict:
     def __sub__(self, other):
         if isinstance(other, (float, int)):
             return type(self)({k: v - other for k, v in self.impulse.items()})
-        if isinstance(other, SteadyStateDict):
+        if isinstance(other, (SteadyStateDict, ImpulseDict)):
             return type(self)({k: v - other[k] for k, v in self.impulse.items()})
 
     def __mul__(self, other):
