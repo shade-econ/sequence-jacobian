@@ -1,0 +1,4 @@
+numpy>=1.18
+scipy>=1.5
+numba>=0.50
+xarray>=0.17
