@@ -234,7 +234,7 @@ class DiscontBlock(Block):
 
         return SteadyStateDict(ss, internal=self)
 
-    def impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
+    def impulse_nonlinear(self, ss, exogenous, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for DiscontBlock given dynamic paths for inputs in exogenous,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         exogenous are constant at their ss values. Analog to SimpleBlock.td.
@@ -246,9 +246,6 @@ class DiscontBlock(Block):
         exogenous : dict of {str : array(T, ...)}
             all time-varying inputs here (in deviations), with first dimension being time
             this must have same length T for all entries (all outputs will be calculated up to T)
-        monotonic : [optional] bool
-            flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
-            to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
         returnindividual : [optional] bool
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
@@ -269,7 +266,7 @@ class DiscontBlock(Block):
         T = shock_lengths[0]
 
         # copy from ss info
-        D, P = ss['D'], ss[self.disc_policy]
+        D, P = ss.internal[self.name]['D'], ss.internal[self.name][self.disc_policy]
 
         # construct grids for policy variables either from the steady state grid if the grid is meant to be
         # non-time-varying or from the provided `grid_path` if the grid is meant to be time-varying.
@@ -287,7 +284,7 @@ class DiscontBlock(Block):
         P_path = np.empty((T,) + P.shape)
 
         # obtain full path of multidimensional inputs
-        multidim_inputs = {k: np.empty((T,) + ss[k].shape) for k in self.hetinput_outputs_order}
+        multidim_inputs = {k: np.empty((T,) + ss.internal[self.name][k].shape) for k in self.hetinput_outputs_order}
         if self.hetinput is not None:
             indict = dict(ss.items())
             for t in range(T):
@@ -305,11 +302,11 @@ class DiscontBlock(Block):
             backdict.update({k: ss[k] + v[t, ...] for k, v in exogenous.items()})
 
             # add in multidimensional inputs EXCEPT exogenous state transitions (at lead 0)
-            backdict.update({k: ss[k] + v[t, ...] for k, v in multidim_inputs.items() if k not in self.exogenous})
+            backdict.update({k: ss.internal[self.name][k] + v[t, ...] for k, v in multidim_inputs.items() if k not in self.exogenous})
 
             # add in multidimensional inputs FOR exogenous state transitions (at lead 1)
             if t < T - 1:
-                backdict.update({k: ss[k] + v[t+1, ...] for k, v in multidim_inputs.items() if k in self.exogenous})
+                backdict.update({k: ss.internal[self.name][k] + v[t+1, ...] for k, v in multidim_inputs.items() if k in self.exogenous})
 
             # step back
             individual = {k: v for k, v in zip(self.back_step_output_list,
@@ -339,7 +336,7 @@ class DiscontBlock(Block):
             grid_var = grid
         else:
             grid_var = grid[0, ...]
-        sspol_i, sspol_pi = utils.interpolate.interpolate_coord_robust(grid_var, ss[self.policy])
+        sspol_i, sspol_pi = utils.interpolate.interpolate_coord_robust(grid_var, ss.internal[self.name][self.policy])
         D_path[0, ...] = self.forward_step(D, P_path[0, ...], Pi_path[0], sspol_i, sspol_pi)
         for t in range(T-1):
             # have to interpolate policy separately for each t to get sparse transition matrices
@@ -352,7 +349,7 @@ class DiscontBlock(Block):
             Pi_path.append(Pi)
 
             # step forward
-            D_path[t+1, ...] = self.forward_step(D_path[t, ...], P_path[t+1, ...], Pi_path[t+1, ...], pol_i, pol_pi)
+            D_path[t+1, ...] = self.forward_step(D_path[t, ...], P_path[t+1, ...], Pi, pol_i, pol_pi)
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
