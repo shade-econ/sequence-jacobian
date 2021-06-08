@@ -212,3 +212,32 @@ def forward_step_cpol(D3, a_i, a_pi):
                 D4[iw, iz, i] += d * pi
                 D4[iw, iz, i+1] += d * (1 - pi)
     return D4
+
+
+@njit
+def forward_step_cpol_shock(D3, a_i_ss, a_pi_shock):
+    """forward_step_cpol linearized wrt a_pi"""
+    nS, nZ, nA = D3.shape
+    dD4 = np.zeros_like(D3)
+    for iw in range(nS):
+        for iz in range(nZ):
+            for ia in range(nA):
+                i = a_i_ss[iw, iz, ia]
+                dshock = a_pi_shock[iw, iz, ia] * D3[iw, iz, ia]
+                dD4[iw, iz, i] += dshock
+                dD4[iw, iz, i + 1] -= dshock
+    return dD4
+
+
+@njit
+def forward_step_cpol_transpose(D3, a_i, a_pi):
+    """Transpose of forward_step_cpol"""
+    nS, nZ, nA = D3.shape
+    D4 = np.zeros_like(D3)
+    for iw in range(nS):
+        for iz in range(nZ):
+            for ia in range(nA):
+                i = a_i[iw, iz, ia]
+                pi = a_pi[iw, iz, ia]
+                D4[iw, iz, ia] = pi * D3[iw, iz, i] + (1 - pi) * D3[iw, iz, i + 1]
+    return D4

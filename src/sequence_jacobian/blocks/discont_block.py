@@ -7,7 +7,6 @@ from ..primitives import Block
 from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict
-from ..devtools.deprecate import rename_output_list_to_outputs
 from ..utilities.misc import verify_saved_jacobian
 
 
@@ -375,8 +374,7 @@ class DiscontBlock(Block):
 
         return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
 
-    # TODO: update this
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, Js=None, h=1E-4):
+    def jacobian(self, ss, exogenous=None, T=300, outputs=None, Js=None, h=1E-4):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -404,10 +402,8 @@ class DiscontBlock(Block):
         # except for the backward iteration variables themselves
         if exogenous is None:
             exogenous = list(self.inputs)
-        if outputs is None or output_list is None:
+        if outputs is None:
             outputs = self.non_back_iter_outputs
-        else:
-            outputs = rename_output_list_to_outputs(outputs=outputs, output_list=output_list)
 
         relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
 
@@ -418,22 +414,23 @@ class DiscontBlock(Block):
                 return Js[self.name]
 
         # step 0: preliminary processing of steady state
-        (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)
+        (ssin_dict, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space, D0, D2, Pi, P) = self.jac_prelim(ss)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
-        curlyYs, curlyDs = {}, {}
+        dYs, dDs, dD_ps, dD_direct = {}, {}, {}, {}
         for i in relevant_shocks:
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, ssin_dict, ssout_list,
-                                                                      ss.internal[self.name]['D'], Pi.T.copy(),
-                                                                      sspol_i, sspol_pi, sspol_space, T, h,
-                                                                      ss_for_hetinput)
+            dYs[i], dDs[i], dD_ps[i], dD_direct[i] = self.backward_iteration_fakenews(i, outputs, ssin_dict, ssout_list,
+                                                                                      ss.internal[self.name]['D'],
+                                                                                      D0, D2, P, Pi, sspol_i, sspol_pi,
+                                                                                      sspol_space, T, h,
+                                                                                      ss_for_hetinput)
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = {}
         for o in outputs:
-            curlyPs[o] = self.forward_iteration_fakenews(ss.internal[self.name][o], Pi, sspol_i, sspol_pi, T-1)
+            curlyPs[o] = self.forward_iteration_fakenews(ss.internal[self.name][o], Pi, P, sspol_i, sspol_pi, T)
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
@@ -444,8 +441,8 @@ class DiscontBlock(Block):
                     F[o.capitalize()] = {}
                 if o.capitalize() not in J:
                     J[o.capitalize()] = {}
-                F[o.capitalize()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
-                J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
+                F[o.capitalize()][i] = DiscontBlock.build_F(dYs[i][o], dD_ps[i], curlyPs[o], dD_direct[i], dDs[i])
+                J[o.capitalize()][i] = DiscontBlock.J_from_F(F[o.capitalize()][i])
 
         return JacobianDict(J, name=self.name)
 
@@ -630,72 +627,109 @@ class DiscontBlock(Block):
         - Step 4: J_from_F to get Jacobian from fake news matrix
     '''
 
+    def shock_timing(self, input_shocked, D0, Pi_ss, P, ss_for_hetinput, h):
+        """Figure out the details of how the scalar shock feeds into back_step_fun.
+
+        Main complication: shocks to Pi transmit via hetinput with a lead of 1.
+        """
+        if self.hetinput is not None and input_shocked in self.hetinput_inputs:
+            # if input_shocked is an input to hetinput, take numerical diff to get response
+            din_dict = dict(zip(self.hetinput_outputs_order,
+                                utils.differentiate.numerical_diff_symmetric(self.hetinput, ss_for_hetinput,
+                                                                             {input_shocked: 1}, h)))
+
+            if all(k not in din_dict.keys() for k in self.exogenous):
+                # if Pi is not generated by hetinput, no work to be done
+                lead = 0
+                dD3_direct = None
+            elif all(np.count_nonzero(din_dict[k]) == 0 for k in self.exogenous if k in din_dict):
+                # if Pi is generated by hetinput but input_shocked does not affect it, replace Pi with Pi_p
+                lead = 0
+                dD3_direct = None
+                for k in self.exogenous:
+                    if k in din_dict.keys():
+                        din_dict[k + '_p'] = din_dict.pop(k)
+            else:
+                # if Pi is generated by hetinput and input_shocked affects it, replace that with Pi_p at lead 1
+                lead = 1
+                Pi = [din_dict[k] if k in din_dict else Pi_ss[num] for num, k in enumerate(self.exogenous)]
+                dD2_direct = utils.forward_step.forward_step_exo(D0, Pi)
+                dD3_direct = utils.forward_step.forward_step_dpol(dD2_direct, P)
+                for k in self.exogenous:
+                    if k in din_dict.keys():
+                        din_dict[k + '_p'] = din_dict.pop(k)
+        else:
+            # if input_shocked feeds directly into back_step_fun with lead 0, no work to be done
+            lead = 0
+            din_dict = {input_shocked: 1}
+            dD3_direct = None
+
+        return din_dict, lead, dD3_direct
+
     def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list,
-                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4):
-        # shock perturbs outputs
+                               Dss, D2, P, Pi, sspol_i, sspol_pi, sspol_space, h=1E-4):
+        # 1. shock perturbs outputs
         shocked_outputs = {k: v for k, v in zip(self.back_step_output_list,
                                                 utils.differentiate.numerical_diff(self.back_step_fun,
                                                                                    ssin_dict, din_dict, h,
                                                                                    ssout_list))}
-        curlyV = {k: shocked_outputs[k] for k in self.back_iter_vars}
+        dV = {k: shocked_outputs[k] for k in self.back_iter_vars}
 
-        # which affects the distribution tomorrow
-        pol_pi_shock = {k: -shocked_outputs[k] / sspol_space[k] for k in self.policy}
-
-        # Include an additional term to account for the effect of a deleveraging shock affecting the grid
+        # 2. which affects the distribution tomorrow via the savings policy
+        pol_pi_shock = -shocked_outputs[self.policy] / sspol_space
         if "delev_exante" in din_dict:
-            dx = np.zeros_like(sspol_pi["a"])
-            dx[sspol_i["a"] == 0] = 1.
-            add_term = sspol_pi["a"] * dx / sspol_space["a"]
-            pol_pi_shock["a"] += add_term
+            # include an additional term to account for the effect of a deleveraging shock affecting the grid
+            dx = np.zeros_like(sspol_pi)
+            dx[sspol_i == 0] = 1.
+            add_term = sspol_pi * dx / sspol_space
+            pol_pi_shock += add_term
+        dD3_p = self.forward_step_shock(Dss, sspol_i, pol_pi_shock, Pi, P)
 
-        curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
+        # 3. and the distribution today (and Dmid tomorrow) via the discrete choice
+        P_shock = shocked_outputs[self.disc_policy]
+        dD3 = utils.forward_step.forward_step_dpol(D2, P_shock)          # s[0], z[0], a[-1]
 
-        # and the aggregate outcomes today
-        curlyY = {k: np.vdot(Dss, shocked_outputs[k]) for k in output_list}
+        # 4. and the aggregate outcomes today (ignoring dD and dD_direct)
+        dY = {k: np.vdot(Dss, shocked_outputs[k]) for k in output_list}
 
-        return curlyV, curlyD, curlyY
+        return dV, dD3, dD3_p, dY
 
-    def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T,
+    def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, D0, D2, P, Pi,
                                     sspol_i, sspol_pi, sspol_space, T, h=1E-4, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
-        # TODO: Might need to add a check for ss_for_hetinput if self.hetinput is not None
-        #   since unless self.hetinput_inputs is exactly equal to input_shocked, calling
-        #   self.hetinput() inside the symmetric differentiation function will throw an error.
-        #   It's probably better/more informative to throw that error out here.
-        if self.hetinput is not None and input_shocked in self.hetinput_inputs:
-            # if input_shocked is an input to hetinput, take numerical diff to get response
-            din_dict = dict(zip(self.hetinput_outputs_order,
-                                utils.differentiate.numerical_diff_symmetric(self.hetinput,
-                                                                             ss_for_hetinput, {input_shocked: 1}, h)))
-        else:
-            # otherwise, we just have that one shock
-            din_dict = {input_shocked: 1}
+        # map name of shocked input into a perturbation of the inputs of back_step_fun
+        din_dict, lead, dD_direct = self.shock_timing(input_shocked, D0, Pi.copy(), P, ss_for_hetinput, h)
 
         # contemporaneous response to unit scalar shock
-        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list,
-                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=h)
+        dV, dD, dD_p, dY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list,
+                                                       Dss, D2, P, Pi, sspol_i, sspol_pi, sspol_space, h=h)
 
         # infer dimensions from this and initialize empty arrays
-        curlyDs = np.empty((T,) + curlyD.shape)
-        curlyYs = {k: np.empty(T) for k in curlyY.keys()}
+        dDs = np.empty((T,) + dD.shape)
+        dD_ps = np.empty((T,) + dD_p.shape)
+        dYs = {k: np.empty(T) for k in dY.keys()}
 
-        # fill in current effect of shock
-        curlyDs[0, ...] = curlyD
-        for k in curlyY.keys():
-            curlyYs[k][0] = curlyY[k]
+        # fill in current effect of shock (be careful to handle lead = 1)
+        dDs[:lead, ...], dD_ps[:lead, ...] = 0, 0
+        dDs[lead, ...], dD_ps[lead, ...] = dD, dD_p
+        for k in dY.keys():
+            dYs[k][:lead] = 0
+            dYs[k][lead] = dY[k]
 
         # fill in anticipation effects
-        for t in range(1, T):
-            curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
-                                                    output_list, ssin_dict, ssout_list,
-                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
-            for k in curlyY.keys():
-                curlyYs[k][t] = curlyY[k]
+        for t in range(lead + 1, T):
+            dV, dDs[t, ...], dD_ps[t, ...], dY = self.backward_step_fakenews({k + '_p':
+                                                                             v for k, v in dV.items()},
+                                                                             output_list, ssin_dict, ssout_list,
+                                                                             Dss, D2, P, Pi, sspol_i, sspol_pi,
+                                                                             sspol_space, h)
 
-        return curlyYs, curlyDs
+            for k in dY.keys():
+                dYs[k][t] = dY[k]
 
-    def forward_iteration_fakenews(self, o_ss, Pi, pol_i_ss, pol_pi_ss, T):
+        return dYs, dDs, dD_ps, dD_direct
+
+    def forward_iteration_fakenews(self, o_ss, Pi, P, pol_i_ss, pol_pi_ss, T):
         """Iterate transpose forward T steps to get full set of curlyPs for a given outcome.
 
         Note we depart from definition in paper by applying the demeaning operator in addition to Lambda
@@ -707,16 +741,26 @@ class DiscontBlock(Block):
         curlyPs[0, ...] = utils.misc.demean(o_ss)
         for t in range(1, T):
             curlyPs[t, ...] = utils.misc.demean(self.forward_step_transpose(curlyPs[t - 1, ...],
-                                                                            Pi, pol_i_ss, pol_pi_ss))
+                                                                            P, Pi, pol_i_ss, pol_pi_ss))
         return curlyPs
 
     @staticmethod
-    def build_F(curlyYs, curlyDs, curlyPs):
-        T = curlyDs.shape[0]
-        Tpost = curlyPs.shape[0] - T + 2
-        F = np.empty((Tpost + T - 1, T))
-        F[0, :] = curlyYs
-        F[1:, :] = curlyPs.reshape((Tpost + T - 2, -1)) @ curlyDs.reshape((T, -1)).T
+    def build_F(dYs, dD_ps, curlyPs, dD_direct, dDs):
+        T = dYs.shape[0]
+        F = np.empty((T, T))
+
+        # standard effect
+        F[0, :] = dYs
+        F[1:, :] = curlyPs[:T-1, ...].reshape((T-1, -1)) @ dD_ps.reshape((T, -1)).T
+
+        # contemporaneous effect via discrete choice
+        if dDs is not None:
+            F += curlyPs.reshape((T, -1)) @ dDs.reshape((T, -1)).T
+
+        # direct effect of shock
+        if dD_direct is not None:
+            F[:, 0] += curlyPs.reshape((T, -1)) @ dD_direct.ravel()
+
         return F
 
     @staticmethod
@@ -738,7 +782,7 @@ class DiscontBlock(Block):
         Returns
         ----------
         ssin_dict       : dict, ss vals of exactly the inputs needed by self.back_step_fun for backward step
-        Pi              : array (S*S), Markov matrix for exogenous state
+        D0              : array (nS, nZ, nA), distribution over s[-1], z[-1], a[-1]
         ssout_list      : tuple, what self.back_step_fun returns when given ssin_dict (not exactly the same
                             as steady-state numerically since SS convergence was to some tolerance threshold)
         ss_for_hetinput : dict, ss vals of exactly the inputs needed by self.hetinput (if it exists)
@@ -748,24 +792,26 @@ class DiscontBlock(Block):
         """
         # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_inputs(ss)
-        Pi = ss[self.exogenous]
-        grid = {k: ss[k+'_grid'] for k in self.policy}
         ssout_list = self.back_step_fun(**ssin_dict)
 
         ss_for_hetinput = None
         if self.hetinput is not None:
             ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
 
-        # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
-        sspol_i = {}
-        sspol_pi = {}
-        sspol_space = {}
-        for pol in self.policy:
-            # use robust binary-search-based method that only requires grids to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss.internal[self.name][pol])
-            sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
+        # preliminary b: get sparse representations of policy rules and distance between neighboring policy gridpoints
+        grid = ss[self.policy + '_grid']
+        sspol_i, sspol_pi = utils.interpolate.interpolate_coord_robust(grid, ss.internal[self.name][self.policy])
+        sspol_space = grid[sspol_i + 1] - grid[sspol_i]
 
-        toreturn = (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
+        # preliminary c: get end-of-period distribution, need it when Pi is shocked
+        Pi = [ss.internal[self.name][k] for k in self.exogenous]
+        D = ss.internal[self.name]['D']
+        D0 = utils.forward_step.forward_step_cpol(D, sspol_i, sspol_pi)
+        D2 = utils.forward_step.forward_step_exo(D0, Pi)
+
+        Pss = ss.internal[self.name][self.disc_policy]
+
+        toreturn = (ssin_dict, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space, D0, D2, Pi, Pss)
 
         return toreturn
 
@@ -827,30 +873,20 @@ class DiscontBlock(Block):
         D3 = utils.forward_step.forward_step_dpol(D2, P)
         return D3
 
+    def forward_step_shock(self, D0, pol_i, pol_pi_shock, Pi, P):
+        """Forward_step linearized wrt pol_pi."""
+        D4 = utils.forward_step.forward_step_cpol_shock(D0, pol_i, pol_pi_shock)
+        D2 = utils.forward_step.forward_step_exo(D4, Pi)
+        D3 = utils.forward_step.forward_step_dpol(D2, P)
+        return D3
 
-    def forward_step_transpose(self, D, Pi, pol_i, pol_pi):
-        """Transpose of forward_step (note: this takes Pi rather than Pi_T as argument!)"""
-        if len(self.policy) == 1:
-            p, = self.policy
-            return utils.forward_step.forward_step_transpose_1d(D, Pi, pol_i[p], pol_pi[p])
-        elif len(self.policy) == 2:
-            p1, p2 = self.policy
-            return utils.forward_step.forward_step_transpose_2d(D, Pi, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
-        else:
-            raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
-
-    def forward_step_shock(self, Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_pi_shock):
-        """Forward_step linearized with respect to pol_pi"""
-        if len(self.policy) == 1:
-            p, = self.policy
-            return utils.forward_step.forward_step_shock_1d(Dss, Pi_T, pol_i_ss[p], pol_pi_shock[p])
-        elif len(self.policy) == 2:
-            p1, p2 = self.policy
-            return utils.forward_step.forward_step_shock_2d(Dss, Pi_T, pol_i_ss[p1], pol_i_ss[p2],
-                                                            pol_pi_ss[p1], pol_pi_ss[p2],
-                                                            pol_pi_shock[p1], pol_pi_shock[p2])
-        else:
-            raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
+    def forward_step_transpose(self, D, P, Pi, a_i, a_pi):
+        """Transpose of forward_step."""
+        D1 = np.einsum('sza,xsza->xza', D, P)
+        D2 = np.einsum('xpa,zp->xza', D1, Pi[1])
+        D3 = np.einsum('xza,sx->sza', D2, Pi[0])
+        D4 = utils.forward_step.forward_step_cpol_transpose(D3, a_i, a_pi)
+        return D4
 
 
 def hetoutput(custom_aggregation=None):
