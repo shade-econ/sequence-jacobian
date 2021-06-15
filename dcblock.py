@@ -335,14 +335,16 @@ def asset_state_vars(amin, amax, nA):
 
 
 @simple
-def firm(Z, K, L, mc, alpha, delta, psi):
+def firm(Z, K, L, mc, alpha, delta0, delta1, psi):
     Y = Z * K(-1) ** alpha * L ** (1 - alpha)
     w = (1 - alpha) * mc * Y / L
-    u = 1.0
+    u = (alpha / delta0 / delta1 * mc * Y / K(-1)) ** (1 / delta1)
+    # u = 1.0
+    delta = delta0 * u ** delta1
     Q = 1 + psi * (K / K(-1) - 1)
     I = K - (1 - delta) * K(-1) + psi / 2 * (K / K(-1) - 1) ** 2 * K(-1)
     transfer = Y - w * L - I
-    return Y, w, u, Q, I, transfer
+    return Y, w, u, delta, Q, I, transfer
 
 
 @simple
@@ -366,7 +368,7 @@ def valuation(rpost, mc, Y, K, Q, delta, psi, alpha):
 
 
 @solved(unknowns={'B': [0.0, 10.0]}, targets=['budget'], solver='brentq')
-def fiscal(B, tax, w, rpost, G, Ze, Ui):
+def fiscal1(B, tax, w, rpost, G, Ze, Ui):
     budget = (1 + rpost) * B + G + (1 - tax) * w * Ui - tax * w * Ze - B
     # tax_rule = tax - tax.ss - phi * (B(-1) - B.ss) / Y.ss
     tax_rule = B - B.ss
@@ -396,52 +398,44 @@ def mkt_clearing(A, B, Y, C, I, G, L, Ze):
 
 
 @simple
-def partial_ss(Y, Ze, rpost, alpha, delta, eps):
-    # uses u=1
-    L = Ze
-    mc = (eps - 1) / eps
-    K = mc * Y * alpha / (rpost + delta)
-    # transfer = rpost * K + Y * (1 - mc)
+def helper1(A, tax, w, Ze, rpost, Ui):
+    # after hh
+    B = A
+    G = tax * w * Ze - rpost * B - (1 - tax) * w * Ui
+    return B, G
 
-    # depend on L
+
+@simple
+def helper2(eps, rpost, Y, L, alpha, delta0):
+    # uses u=1
+    mc = (eps - 1) / eps
+    K = mc * Y * alpha / (rpost + delta0)
+    delta1 = alpha / delta0 * mc * Y / K
     Z = Y / (K ** alpha * L ** (1 - alpha))
     w = (1 - alpha) * mc * Y / L
-    # atw = (1 - tax) * w
-    I = delta * K
-    Q = 1.0
-    return mc, K, Z, w, I, Q
+    return mc, K, delta1, Z, w
 
 
 '''Try this'''
 
 
-hh = create_model([income_state_vars, employment_state_vars, asset_state_vars, household], name='SingleMen')
-
-# calibration = {'beta': 0.99, 'eis': 1.0, 'vphi': 0.65, 'chi': 0.6,
-#                'rpost': 0.002, 'uicap': 0.66, 'uirate': 0.5, 'atw': 0.9, 'transfer': 0.15,
-#                'expiry': 1/6, 'fU': 0.25, 'fN': 0.1, 's': 0.025,
-#                'amin': 0.0, 'amax': 500, 'nA': 100,
-#                'lamM': 0.01, 'lamB': 0.01, 'lamL': 0.04,
-#                'mean_z': 1.0, 'rho_z': 0.98, 'sd_z': 0.943*0.82, 'nZ': 7}
-#
-# hh_ss = hh.solve_steady_state(calibration, solver='hybr', unknowns={'mean_z': 1.2}, targets={'Ze': 1.0})
-
-# J = household.jacobian(ss, exogenous=['beta', 'fU'], T=10)
-
 calibration = {'eis': 1.0, 'vphi': 0.65, 'chi': 0.6,
                'uicap': 0.66, 'uirate': 0.5, 'expiry': 1/6, 'fU': 0.25, 'fN': 0.1, 's': 0.025,
                'amin': 0.0, 'amax': 500, 'nA': 100, 'lamM': 0.01, 'lamB': 0.01, 'lamL': 0.04,
-               'mean_z': 1.0, 'rho_z': 0.98, 'sd_z': 0.943*0.82, 'nZ': 7,
-               'kappa': 0.03, 'phi_pi': 1.25, 'rstar': 0.002, 'pi': 0, 'alpha': 0.2, 'psi': 30, 'delta': 0.0083,
-               'eps': 10, 'fU_eps': 10.0, 'fN_eps': 5.0, 's_eps': -8.0, 'tax': 0.3, 'B': 3.0}
+               'mean_z': 1.0, 'rho_z': 0.98, 'sd_z': 0.943*0.82, 'nZ': 7, 'beta': 0.985,
+               'kappa': 0.03, 'phi_pi': 1.25, 'rstar': 0.002, 'pi': 0, 'alpha': 0.2, 'psi': 30, 'delta0': 0.0083,
+               'eps': 10, 'fU_eps': 10.0, 'fN_eps': 5.0, 's_eps': -8.0, 'tax': 0.3}
 
-hank = create_model([hh, firm, monetary, valuation, nkpc, fiscal, fiscal2, flows, mkt_clearing], name='HANK')
+hh = create_model([income_state_vars, employment_state_vars, asset_state_vars, household], name='SingleMen')
+hank = create_model([hh, firm, monetary, valuation, nkpc, fiscal1, fiscal2, flows, mkt_clearing], name='HANK')
 
-ss = hank.solve_steady_state(calibration, solver='hybr', dissolve=[fiscal, flows],
-                             unknowns={'Z': 1.0, 'L': 1.0, 'mc': 0.9, 'G': 0.3,
-                                       'beta': 0.99, 'K': 6.0},
+ss = hank.solve_steady_state(calibration, solver='hybr', dissolve=[fiscal1, flows],
+                             unknowns={'Z': 0.63, 'L': 0.86, 'mc': 0.9, 'G': 0.2, 'delta1': 1.2,
+                                       'B': 3.0, 'K': 17.0},
                              targets={'Y': 1.0, 'labor_mkt': 0.0, 'nkpc_res': 0.0, 'budget': 0.0,
-                                      'asset_mkt': 0.0, 'val': 0.0})
+                                      'asset_mkt': 0.0, 'val': 0.0, 'u': 1.0},
+                             helper_blocks=[helper1, helper2],
+                             helper_targets=['asset_mkt', 'budget', 'val', 'nkpc_res', 'Y', 'u'])
 
 
 
