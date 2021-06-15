@@ -147,9 +147,14 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
     if toplevel_unknowns is None:
         toplevel_unknowns = {}
     block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
+    if dissolve is None:
+        dissolve = []
 
     # Add the block's internal variables as inputs, if the block has an internal attribute
-    input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
+    if isinstance(calibration, dict):
+        input_arg_dict = deepcopy(calibration)
+    else:
+        input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
 
     # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
     # at the provided set of unknowns if included in dissolve.

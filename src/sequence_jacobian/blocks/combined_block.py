@@ -9,6 +9,7 @@ from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
+from ..steady_state.classes import SteadyStateDict
 
 
 def combine(blocks, name="", model_alias=False):
@@ -66,7 +67,7 @@ class CombinedBlock(Block):
         ss_partial_eq = deepcopy(calibration)
         for i in topsorted:
             ss_partial_eq.update(eval_block_ss(blocks_all[i], ss_partial_eq, **kwargs))
-        return ss_partial_eq
+        return SteadyStateDict(ss_partial_eq)
 
     def impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
