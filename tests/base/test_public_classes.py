@@ -1,10 +1,12 @@
 """Test public-facing classes"""
 
 import numpy as np
+import pytest
 
 from sequence_jacobian import het
 from sequence_jacobian.steady_state.classes import SteadyStateDict
 from sequence_jacobian.blocks.support.impulse import ImpulseDict
+from sequence_jacobian.blocks.support.bijection import Bijection
 
 
 def test_steadystatedict():
@@ -72,3 +74,16 @@ def test_impulsedict(krusell_smith_dag):
     dC1 = 100 * ir_lin['C'] / ss['C']
     dC2 = 100 * ir_lin[['C']] / ss
     assert np.allclose(dC1, dC2['C'])
+
+
+def test_bijection():
+    mymap = Bijection({'a1': 'a', 'b1': 'b'})
+    mymapinv = mymap.inv
+
+    assert mymap['a1'] == 'a' and mymap['b1'] == 'b'
+    assert mymapinv['a'] == 'a1' and mymapinv['b'] == 'b1'
+
+    with pytest.raises(ValueError):
+        badmap = Bijection({'a1': 'a', 'b1': 'a'})
+
+
