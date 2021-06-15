@@ -77,13 +77,16 @@ def test_impulsedict(krusell_smith_dag):
 
 
 def test_bijection():
-    mymap = Bijection({'a1': 'a', 'b1': 'b'})
+    # generate and invert
+    mymap = Bijection({'a': 'a1', 'b': 'b1'})
     mymapinv = mymap.inv
+    assert mymap['a'] == 'a1' and mymap['b'] == 'b1'
+    assert mymapinv['a1'] == 'a' and mymapinv['b1'] == 'b'
 
-    assert mymap['a1'] == 'a' and mymap['b1'] == 'b'
-    assert mymapinv['a'] == 'a1' and mymapinv['b'] == 'b1'
-
+    # duplicate keys rejected
     with pytest.raises(ValueError):
-        badmap = Bijection({'a1': 'a', 'b1': 'a'})
+        Bijection({'a': 'a1', 'b': 'a1'})
 
-
+    # composition
+    mymap2 = Bijection({'A': 'a'})
+    assert (mymap @ mymap2)['A'] == 'a1'
