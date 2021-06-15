@@ -4,6 +4,7 @@ import abc
 from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
+from copy import deepcopy
 
 from .steady_state.drivers import steady_state
 from .steady_state.support import provide_solver_default
@@ -12,6 +13,7 @@ from .jacobian.drivers import get_impulse, get_G
 from .steady_state.classes import SteadyStateDict
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
+from .blocks.support.bijection import Bijection
 
 # Basic types
 Array = Any
@@ -135,3 +137,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
+
+    def remap(self, map):
+        remapped = deepcopy(self)
+        remapped.M = self.M @ Bijection(map)
+        return remapped

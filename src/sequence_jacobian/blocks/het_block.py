@@ -7,6 +7,7 @@ from ..primitives import Block
 from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict
+from .support.bijection import Bijection
 from ..devtools.deprecate import rename_output_list_to_outputs
 from ..utilities.misc import verify_saved_jacobian
 
@@ -55,6 +56,7 @@ class HetBlock(Block):
         Currently, we only support up to two policy variables.
         """
         self.name = back_step_fun.__name__
+        self.M = Bijection({})
 
         # self.back_step_fun is one iteration of the backward step function pertaining to a given HetBlock.
         # i.e. the function pertaining to equation (14) in the paper: v_t = curlyV(v_{t+1}, X_t)

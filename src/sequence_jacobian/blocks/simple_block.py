@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .support.impulse import ImpulseDict
+from .support.bijection import Bijection
 from ..primitives import Block
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
@@ -40,6 +41,7 @@ class SimpleBlock(Block):
         self.output_list = misc.output_list(f)
         self.inputs = set(self.input_list)
         self.outputs = set(self.output_list)
+        self.M = Bijection({})
 
     def __repr__(self):
         return f"<SimpleBlock '{self.f.__name__}'>"
