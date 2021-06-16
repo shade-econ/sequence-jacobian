@@ -75,6 +75,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def steady_state(self, calibration: Dict[str, Union[Real, Array]],
                      **kwargs) -> SteadyStateDict:
         raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
+    # def steady_state(self, calibration, **kwargs):
+    #     return self.M @ self.steady_state(self.M.inv @ calibration, **kwargs)
 
     def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                           exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:

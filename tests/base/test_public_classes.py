@@ -87,6 +87,12 @@ def test_bijection():
     with pytest.raises(ValueError):
         Bijection({'a': 'a1', 'b': 'a1'})
 
-    # composition
-    mymap2 = Bijection({'A': 'a'})
-    assert (mymap @ mymap2)['A'] == 'a1'
+    # composition with another bijection (flows backwards)
+    mymap2 = Bijection({'a1': 'a2'})
+    assert (mymap2 @ mymap)['a'] == 'a2'
+
+    # composition with SteadyStateDict (only left __matmul__ works as intended)
+    ss = SteadyStateDict({'a': 2.0, 'b': 1.0}, internal={})
+    ss_remapped = ss @ mymap
+    assert isinstance(ss_remapped, SteadyStateDict)
+    assert ss_remapped['a1'] == ss['a'] and ss_remapped['b1'] == ss['b']
