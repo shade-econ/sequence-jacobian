@@ -163,7 +163,7 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
     if block in dissolve and "solver" in valid_input_kwargs:
         input_kwarg_dict["solver"] = "solved"
         input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
-    elif block.name not in dissolve and block_unknowns_in_toplevel_unknowns:
+    elif block not in dissolve and block_unknowns_in_toplevel_unknowns:
         raise RuntimeError(f"The block '{block.name}' is not in the kwarg `dissolve` but its unknowns,"
                            f" {set(block.unknowns.keys())} are a subset of the top-level unknowns,"
                            f" {set(toplevel_unknowns)}.\n"
