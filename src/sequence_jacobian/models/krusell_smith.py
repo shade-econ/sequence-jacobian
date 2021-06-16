@@ -105,28 +105,24 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
     Y = Z * K ** alpha
     w = (1 - alpha) * Z * (alpha * Z / rk) ** (alpha / (1 - alpha))
 
-    # figure out initializer
-    # coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis]
-    # Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
     calibration = {'Pi': Pi, 'a_grid': a_grid, 'e_grid': e_grid, 'r': r, 'w': w, 'eis': eis}
-    calibration = SteadyStateDict(calibration)
 
     # solve for beta consistent with this
     beta_min = lb / (1 + r)
     beta_max = ub / (1 + r)
-    def res(beta_):
-        calibration['beta'] = beta_
+    def res(beta_loc):
+        calibration['beta'] = beta_loc
         return household.steady_state(calibration)['A'] - K
 
     beta, sol = opt.brentq(res, beta_min, beta_max, full_output=True)
+    calibration['beta'] = beta
 
     if not sol.converged:
         raise ValueError('Steady-state solver did not converge.')
 
     # extra evaluation to report variables
-    calibration['beta'] = beta
     ss = household.steady_state(calibration)
-    ss.update({'Z': Z, 'K': K, 'L': 1.0, 'Y': Y, 'alpha': alpha, 'delta': delta,
+    ss.update({'Z': Z, 'K': K, 'L': 1.0, 'Y': Y, 'alpha': alpha, 'delta': delta, 'Pi': Pi,
                'goods_mkt': Y - ss['C'] - delta * K, 'nA': nA, 'amax': amax, 'sigma': sigma,
                'rho': rho, 'nS': nS, 'asset_mkt': ss['A'] - K})
 

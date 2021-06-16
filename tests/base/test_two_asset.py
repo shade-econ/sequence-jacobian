@@ -36,13 +36,11 @@ def hank_ss_singlerun(beta=0.976, r=0.0125, tot_wealth=14, K=10, delta=0.02, Bg=
     rb = r - omega
 
     # figure out initializer
-    z_grid = two_asset.income(e_grid, tax, w, 1)
-    Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
-    Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
+    calibration = {'Pi': Pi, 'a_grid': a_grid, 'b_grid': b_grid, 'e_grid': e_grid, 'k_grid': k_grid,
+                   'beta': beta, 'N': 1.0, 'tax': tax, 'w': w, 'eis': eis, 'rb': rb, 'ra': ra,
+                   'chi0': chi0, 'chi1': chi1, 'chi2': chi2}
 
-    out = two_asset.household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid,
-                                 N=1, tax=tax, w=w, e_grid=e_grid, k_grid=k_grid, beta=beta,
-                                 eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+    out = two_asset.household.steady_state(calibration)
     
     return out['A'], out['B'], out['U']
 

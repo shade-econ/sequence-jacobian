@@ -40,5 +40,5 @@ class Bijection:
             return [self[k] for k in x]
         elif isinstance(x, tuple):
             return tuple(self[k] for k in x)
-        else:
-            return NotImplementedError
+        # else:
+        #     return NotImplementedError
