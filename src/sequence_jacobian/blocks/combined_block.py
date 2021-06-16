@@ -10,6 +10,7 @@ from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
 from ..steady_state.classes import SteadyStateDict
+from .support.bijection import Bijection
 
 
 def combine(blocks, name="", model_alias=False):
@@ -34,6 +35,7 @@ class CombinedBlock(Block):
         self._sorted_indices = utils.graph.block_sort(blocks)
         self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks)
         self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices]
+        self.M = Bijection({})
 
         if not name:
             self.name = f"{self.blocks[0].name}_to_{self.blocks[-1].name}_combined"
@@ -56,7 +58,7 @@ class CombinedBlock(Block):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def steady_state(self, calibration, helper_blocks=None, **kwargs):
+    def _steady_state(self, calibration, helper_blocks=None, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         if helper_blocks is None:
             helper_blocks = []

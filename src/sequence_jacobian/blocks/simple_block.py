@@ -46,7 +46,7 @@ class SimpleBlock(Block):
     def __repr__(self):
         return f"<SimpleBlock '{self.f.__name__}'>"
 
-    def steady_state(self, calibration):
+    def _steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}
         output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [
             misc.numeric_primitive(self.f(**input_args))]

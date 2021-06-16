@@ -6,7 +6,7 @@ from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 from copy import deepcopy
 
-from .steady_state.drivers import steady_state
+from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
@@ -72,11 +72,11 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
     # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
     # input and output argument structure
-    def steady_state(self, calibration: Dict[str, Union[Real, Array]],
-                     **kwargs) -> SteadyStateDict:
-        raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
-    # def steady_state(self, calibration, **kwargs):
-    #     return self.M @ self.steady_state(self.M.inv @ calibration, **kwargs)
+    # def steady_state(self, calibration: Dict[str, Union[Real, Array]],
+    #                  **kwargs) -> SteadyStateDict:
+    #     raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
+    def steady_state(self, calibration, **kwargs):
+        return self._steady_state(calibration @ self.M.inv, **kwargs) @ self.M
 
     def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                           exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
@@ -99,7 +99,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         solver = solver if solver else provide_solver_default(unknowns)
-        return steady_state(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
+        return ss(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],

@@ -3,6 +3,7 @@ import copy
 import numpy as np
 
 from .support.impulse import ImpulseDict
+from .support.bijection import Bijection
 from ..primitives import Block
 from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
@@ -165,8 +166,8 @@ class HetBlock(Block):
                          each backward iteration step in td, jacobian is not computed for these!
     '''
 
-    def steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
-                     forward_tol=1E-10, forward_maxit=100_000, hetoutput=False):
+    def _steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
+                      forward_tol=1E-10, forward_maxit=100_000):
         """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
 
         Parameters
@@ -223,7 +224,7 @@ class HetBlock(Block):
         aggregates = {o.capitalize(): np.vdot(D, sspol[o]) for o in self.non_back_iter_outputs}
         ss.update(aggregates)
 
-        if hetoutput and self.hetoutput is not None:
+        if self.hetoutput is not None:
             hetoutputs = self.hetoutput.evaluate(ss)
             aggregate_hetoutputs = self.hetoutput.aggregate(hetoutputs, D, ss, mode="ss")
         else:

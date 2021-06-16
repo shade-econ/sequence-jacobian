@@ -41,4 +41,13 @@ class Bijection:
         elif isinstance(x, tuple):
             return tuple(self[k] for k in x)
         # else:
+        # would this prevent calling SteadyStateDict.__rmatmul__?
         #     return NotImplementedError
+
+    def __rmatmul__(self, x):
+        if isinstance(x, dict):
+            return {self[k]: v for k, v in x.items()}
+        elif isinstance(x, list):
+            return [self[k] for k in x]
+        elif isinstance(x, tuple):
+            return tuple(self[k] for k in x)

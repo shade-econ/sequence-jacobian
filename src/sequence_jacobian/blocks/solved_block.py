@@ -3,6 +3,7 @@ import warnings
 from ..primitives import Block
 from ..blocks.simple_block import simple
 from ..utilities import graph
+from .support.bijection import Bijection
 
 
 def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name=""):
@@ -39,6 +40,7 @@ class SolvedBlock(Block):
     def __init__(self, blocks, name, unknowns, targets, solver=None, solver_kwargs={}):
         # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
         self._blocks_unsorted = blocks
+        self.M = Bijection({})  # don't inherit membrane from parent blocks (think more about this later)
 
         # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
         # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
@@ -66,8 +68,8 @@ class SolvedBlock(Block):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    def steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
-                     consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
+    def _steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
+                      consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:

@@ -8,6 +8,7 @@ from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict
 from ..utilities.misc import verify_saved_jacobian
+from .support.bijection import Bijection
 
 
 def discont(exogenous, policy, disc_policy, backward, backward_init=None):
@@ -168,8 +169,8 @@ class DiscontBlock(Block):
     '''
 
 
-    def steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
-                     forward_tol=1E-10, forward_maxit=100_000, hetoutput=False):
+    def _steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
+                      forward_tol=1E-10, forward_maxit=100_000, hetoutput=False):
         """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
 
         Parameters
