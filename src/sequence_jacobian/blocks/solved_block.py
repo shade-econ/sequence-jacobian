@@ -66,24 +66,6 @@ class SolvedBlock(Block):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    # TODO: Deprecated methods, to be removed!
-    def ss(self, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(kwargs)
-
-    def td(self, ss, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
-                      DeprecationWarning)
-        return self.impulse_nonlinear(ss, **kwargs)
-
-    def jac(self, ss, T=None, shock_list=None, **kwargs):
-        if shock_list is None:
-            shock_list = []
-        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
-                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
-                      DeprecationWarning)
-        return self.jacobian(ss, shock_list, T, **kwargs)
-
     def steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
                      consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices

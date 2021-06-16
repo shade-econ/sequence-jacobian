@@ -157,14 +157,14 @@ class DiscontBlock(Block):
             return f"<DiscontBlock '{self.back_step_fun.__name__}'>"
 
     '''Part 2: high-level routines, with first three called analogously to SimpleBlock counterparts
-        - ss    : do backward and forward iteration until convergence to get complete steady state
-        - td    : do backward and forward iteration up to T to compute dynamics given some shocks
-        - jac   : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
-        - ajac  : compute asymptotic columns of jacobians output by jac, also using fake news algorithm
+        - steady_state      : do backward and forward iteration until convergence to get complete steady state
+        - impulse_nonlinear : do backward and forward iteration up to T to compute dynamics given some shocks
+        - impulse_linear    : apply jacobians to compute linearized dynamics given some shocks
+        - jacobian          : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
 
         - add_hetinput : add a hetinput to the HetBlock that first processes inputs through function hetinput
         - add_hetoutput: add a hetoutput to the HetBlock that is computed after the entire ss computation, or after
-                         each backward iteration step in td
+                         each backward iteration step in td, jacobian is not computed for these!
     '''
 
 
@@ -771,7 +771,7 @@ class DiscontBlock(Block):
             J[1:, t] += J[:-1, t - 1]
         return J
 
-    '''Part 5: helpers for .jac and .ajac: preliminary processing'''
+    '''Part 5: helpers for .jac: preliminary processing'''
 
     def jac_prelim(self, ss):
         """Helper that does preliminary processing of steady state for fake news algorithm.

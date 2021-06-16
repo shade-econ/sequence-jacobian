@@ -155,33 +155,15 @@ class HetBlock(Block):
             return f"<HetBlock '{self.back_step_fun.__name__}'>"
 
     '''Part 2: high-level routines, with first three called analogously to SimpleBlock counterparts
-        - ss    : do backward and forward iteration until convergence to get complete steady state
-        - td    : do backward and forward iteration up to T to compute dynamics given some shocks
-        - jac   : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
-        - ajac  : compute asymptotic columns of jacobians output by jac, also using fake news algorithm
+        - steady_state      : do backward and forward iteration until convergence to get complete steady state
+        - impulse_nonlinear : do backward and forward iteration up to T to compute dynamics given some shocks
+        - impulse_linear    : apply jacobians to compute linearized dynamics given some shocks
+        - jacobian          : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
 
         - add_hetinput : add a hetinput to the HetBlock that first processes inputs through function hetinput
         - add_hetoutput: add a hetoutput to the HetBlock that is computed after the entire ss computation, or after
-                         each backward iteration step in td
+                         each backward iteration step in td, jacobian is not computed for these!
     '''
-
-    # TODO: Deprecated methods, to be removed!
-    def ss(self, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(kwargs)
-
-    def td(self, ss, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
-                      DeprecationWarning)
-        return self.impulse_nonlinear(ss, **kwargs)
-
-    def jac(self, ss, shock_list=None, T=None, **kwargs):
-        if shock_list is None:
-            shock_list = list(self.inputs)
-        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
-                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
-                      DeprecationWarning)
-        return self.jacobian(ss, shock_list, T, **kwargs)
 
     def steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
                      forward_tol=1E-10, forward_maxit=100_000, hetoutput=False):

@@ -46,24 +46,6 @@ class SimpleBlock(Block):
     def __repr__(self):
         return f"<SimpleBlock '{self.f.__name__}'>"
 
-    # TODO: Deprecated methods, to be removed!
-    def ss(self, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(kwargs)
-
-    def td(self, ss, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
-                      DeprecationWarning)
-        return self.impulse_nonlinear(ss, exogenous=kwargs)
-
-    def jac(self, ss, T=None, shock_list=None):
-        if shock_list is None:
-            shock_list = []
-        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
-                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
-                      DeprecationWarning)
-        return self.jacobian(ss, exogenous=shock_list, T=T)
-
     def steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}
         output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [
