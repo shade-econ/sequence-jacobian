@@ -138,9 +138,15 @@ class Block(abc.ABC, metaclass=ABCMeta):
         return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
 
     def remap(self, map):
-        remapped = deepcopy(self)
-        remapped.M = self.M @ Bijection(map)
-        return remapped
+        other = deepcopy(self)
+        other.M = self.M @ Bijection(map)
+        other.inputs = other.M @ self.inputs
+        other.outputs = other.M @ self.outputs
+        if hasattr(self, 'input_list'):
+            other.input_list = other.M @ self.input_list
+        if hasattr(self, 'output_list'):
+            other.output_list = other.M @ self.output_list
+        return other
 
     def rename(self, name):
         renamed = deepcopy(self)

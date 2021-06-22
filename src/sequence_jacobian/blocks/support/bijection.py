@@ -38,6 +38,8 @@ class Bijection:
             return {self[k]: v for k, v in x.items()}
         elif isinstance(x, list):
             return [self[k] for k in x]
+        elif isinstance(x, set):
+            return {self[k] for k in x}
         elif isinstance(x, tuple):
             return tuple(self[k] for k in x)
         else:
@@ -48,5 +50,9 @@ class Bijection:
             return {self[k]: v for k, v in x.items()}
         elif isinstance(x, list):
             return [self[k] for k in x]
+        elif isinstance(x, set):
+            return {self[k] for k in x}
         elif isinstance(x, tuple):
             return tuple(self[k] for k in x)
+        else:
+            return NotImplemented

@@ -85,8 +85,8 @@ def mkt_clearing(K, A, Y, C, delta):
 
 @simple
 def income_state_vars(rho, sigma, nS):
-    e, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
-    return e, Pi
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
+    return e_grid, Pi
 
 
 @simple
@@ -96,41 +96,48 @@ def asset_state_vars(amax, nA):
 
 
 @simple
-def firm_steady_state_solution(r, delta, alpha):
+def firm_ss(r, Y, L, delta, alpha):
     rk = r + delta
-    Z = (rk / alpha) ** alpha  # normalize so that Y=1
-    K = (alpha * Z / rk) ** (1 / (1 - alpha))
-    Y = Z * K ** alpha
-    w = (1 - alpha) * Z * (alpha * Z / rk) ** (alpha / (1 - alpha))
-    return Z, K, Y, w
+    w = (1 - alpha) * Y / L
+    K = alpha * Y / rk
+    Z = Y / K ** alpha / L ** (1 - alpha)
+    return w, K, Z
+
+
+@hetoutput()
+def mpcs(c, a, a_grid, r):
+    mpc = get_mpcs(c, a, a_grid, r)
+    return mpc
 
 
 '''Part 3: permanent heterogeneity'''
 
 # remap method takes a dict and returns new copies of blocks
+household.add_hetoutput(mpcs, verbose=False)
 to_map = ['beta', *household.outputs]
 hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('patient household')
 hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('impatient household')
 
 
 @simple
-def aggregate(A_patient, A_impatient, C_patient, C_impatient, mass_patient):
+def aggregate(A_patient, A_impatient, C_patient, C_impatient, Mpc_patient, Mpc_impatient, mass_patient):
     C = mass_patient * C_patient + (1 - mass_patient) * C_impatient
     A = mass_patient * A_patient + (1 - mass_patient) * A_impatient
-    return C, A
+    Mpc = mass_patient * Mpc_patient + (1 - mass_patient) * Mpc_impatient
+    return C, A, Mpc
 
 
 '''Steady state'''
 
 # DAG
-# blocks = [hh_patient, hh_impatient, firm, mkt_clearing, income_state_vars, asset_state_vars, aggregate]
-# helper_blocks = [firm_steady_state_solution]
-# ks_model = create_model(blocks, name="Krusell-Smith")
+blocks = [hh_patient, hh_impatient, firm, mkt_clearing, income_state_vars, asset_state_vars, aggregate]
+ks_model = create_model(blocks, name="Krusell-Smith")
 
-# # Steady State
-# calibration = {"eis": 1, "delta": 0.025, "alpha": 0.3, "rho": 0.966, "sigma": 0.5, "L": 1.0,
-#                "nS": 11, "nA": 100, "amax": 1000, "r": 0.01, 'beta_impatient': 0.98}
-# unknowns_ss = {"beta_patient": (0.98/1.01, 0.999/1.01), "Z": 0.85, "K": 3.}
-# targets_ss = {"asset_mkt": 0., "Y": 1., "r": 0.01}
-# ss = ks_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="brentq",
-#                                  helper_blocks=helper_blocks, helper_targets=["Y", "r"])
+# Steady State
+calibration = {'eis': 1, 'delta': 0.025, 'alpha': 0.3, 'rho': 0.966, 'sigma': 0.5, 'L': 1.0,
+               'nS': 11, 'nA': 500, 'amax': 1000, 'beta_impatient': 0.98, 'mass_patient': 0.5}
+ss = ks_model.solve_steady_state(calibration, solver='brentq',
+                                 unknowns={'beta_patient': (0.97/1.01, 0.999/1.01), 'Z': 0.5, 'K': 8.6},
+                                 targets={'asset_mkt': 0.0, 'Y': 1.0, 'r': 0.01},
+                                 helper_blocks=[firm_ss], helper_targets=['Y', 'r'])
+# TODO why is this solution so inaccurate?
