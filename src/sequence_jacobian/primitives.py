@@ -72,11 +72,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
     # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
     # input and output argument structure
-    # def steady_state(self, calibration: Dict[str, Union[Real, Array]],
-    #                  **kwargs) -> SteadyStateDict:
-    #     raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
     def steady_state(self, calibration, **kwargs):
-        return self._steady_state(calibration @ self.M.inv, **kwargs) @ self.M
+        return self.M @ self._steady_state(self.M.inv @ calibration, **kwargs)
 
     def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                           exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:

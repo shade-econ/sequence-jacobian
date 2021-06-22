@@ -150,8 +150,8 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
         dissolve = []
 
     # Remapping
-    calibration = calibration @ block.M.inv
-    toplevel_unknowns = list(toplevel_unknowns) @ block.M.inv
+    calibration = block.M.inv @ calibration
+    toplevel_unknowns = block.M.inv @ list(toplevel_unknowns)
 
     # Add the block's internal variables as inputs, if the block has an internal attribute
     if isinstance(calibration, dict):
@@ -174,7 +174,7 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
                            f"If the user provides a set of top-level unknowns that subsume block-level unknowns,"
                            f" it must be explicitly declared in `dissolve`.")
 
-    return block.steady_state(input_arg_dict, **input_kwarg_dict) @ block.M
+    return block.M @ block.steady_state(input_arg_dict, **input_kwarg_dict)
 
 
 def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, residual_kwargs=None,
