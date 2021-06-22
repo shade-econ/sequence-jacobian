@@ -140,4 +140,3 @@ ss = ks_model.solve_steady_state(calibration, solver='brentq',
                                  unknowns={'beta_patient': (0.97/1.01, 0.999/1.01), 'Z': 0.5, 'K': 8.6},
                                  targets={'asset_mkt': 0.0, 'Y': 1.0, 'r': 0.01},
                                  helper_blocks=[firm_ss], helper_targets=['Y', 'r'])
-# TODO why is this solution so inaccurate?
