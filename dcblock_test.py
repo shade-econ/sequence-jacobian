@@ -1,3 +1,5 @@
+'''This model is to test DisContBlock'''
+
 import numpy as np
 from numba import guvectorize, njit
 import dfols
