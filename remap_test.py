@@ -109,8 +109,8 @@ def firm_steady_state_solution(r, delta, alpha):
 
 # remap method takes a dict and returns new copies of blocks
 to_map = ['beta', *household.outputs]
-hh_patient = household.remap({k: k + '_patient' for k in to_map})
-hh_impatient = household.remap({k: k + '_impatient' for k in to_map})
+hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('patient household')
+hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('impatient household')
 
 
 @simple
@@ -123,9 +123,9 @@ def aggregate(A_patient, A_impatient, C_patient, C_impatient, mass_patient):
 '''Steady state'''
 
 # DAG
-blocks = [hh_patient, hh_impatient, firm, mkt_clearing, income_state_vars, asset_state_vars, aggregate]
-helper_blocks = [firm_steady_state_solution]
-ks_model = create_model(blocks, name="Krusell-Smith")
+# blocks = [hh_patient, hh_impatient, firm, mkt_clearing, income_state_vars, asset_state_vars, aggregate]
+# helper_blocks = [firm_steady_state_solution]
+# ks_model = create_model(blocks, name="Krusell-Smith")
 
 # # Steady State
 # calibration = {"eis": 1, "delta": 0.025, "alpha": 0.3, "rho": 0.966, "sigma": 0.5, "L": 1.0,

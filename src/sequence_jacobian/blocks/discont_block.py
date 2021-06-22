@@ -150,12 +150,12 @@ class DiscontBlock(Block):
         """Nice string representation of HetBlock for printing to console"""
         if self.hetinput is not None:
             if self.hetoutput is not None:
-                return f"<DiscontBlock '{self.back_step_fun.__name__}' with hetinput '{self.hetinput.__name__}'" \
+                return f"<DiscontBlock '{self.name}' with hetinput '{self.hetinput.__name__}'" \
                        f" and with hetoutput `{self.hetoutput.name}'>"
             else:
-                return f"<DiscontBlock '{self.back_step_fun.__name__}' with hetinput '{self.hetinput.__name__}'>"
+                return f"<DiscontBlock '{self.name}' with hetinput '{self.hetinput.__name__}'>"
         else:
-            return f"<DiscontBlock '{self.back_step_fun.__name__}'>"
+            return f"<DiscontBlock '{self.name}'>"
 
     '''Part 2: high-level routines, with first three called analogously to SimpleBlock counterparts
         - steady_state      : do backward and forward iteration until convergence to get complete steady state

@@ -44,7 +44,7 @@ class SimpleBlock(Block):
         self.M = Bijection({})
 
     def __repr__(self):
-        return f"<SimpleBlock '{self.f.__name__}'>"
+        return f"<SimpleBlock '{self.name}'>"
 
     def _steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}

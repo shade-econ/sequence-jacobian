@@ -144,3 +144,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
         remapped = deepcopy(self)
         remapped.M = self.M @ Bijection(map)
         return remapped
+
+    def rename(self, name):
+        renamed = deepcopy(self)
+        renamed.name = name
+        return renamed

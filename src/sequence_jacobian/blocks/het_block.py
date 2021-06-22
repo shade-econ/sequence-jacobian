@@ -148,12 +148,12 @@ class HetBlock(Block):
         """Nice string representation of HetBlock for printing to console"""
         if self.hetinput is not None:
             if self.hetoutput is not None:
-                return f"<HetBlock '{self.back_step_fun.__name__}' with hetinput '{self.hetinput.__name__}'" \
+                return f"<HetBlock '{self.name}' with hetinput '{self.hetinput.__name__}'" \
                        f" and with hetoutput `{self.hetoutput.name}'>"
             else:
-                return f"<HetBlock '{self.back_step_fun.__name__}' with hetinput '{self.hetinput.__name__}'>"
+                return f"<HetBlock '{self.name}' with hetinput '{self.hetinput.__name__}'>"
         else:
-            return f"<HetBlock '{self.back_step_fun.__name__}'>"
+            return f"<HetBlock '{self.name}'>"
 
     '''Part 2: high-level routines, with first three called analogously to SimpleBlock counterparts
         - steady_state      : do backward and forward iteration until convergence to get complete steady state
