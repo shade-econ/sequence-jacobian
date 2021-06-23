@@ -126,7 +126,7 @@ def test_fake_news_v_direct_method(one_asset_hank_dag):
 
     household = hank_model._blocks_unsorted[0]
     T = 40
-    exogenous = 'r'
+    exogenous = ['r']
     output_list = household.non_back_iter_outputs
     h = 1E-4
 

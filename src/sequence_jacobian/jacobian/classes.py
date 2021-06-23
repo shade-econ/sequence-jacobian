@@ -386,8 +386,17 @@ class JacobianDict(NestedDict):
     def __matmul__(self, x):
         if isinstance(x, JacobianDict):
             return self.compose(x)
+        elif isinstance(x, Bijection):
+            nesteddict = x @ self.nesteddict
+            for o in nesteddict.keys():
+                nesteddict[o] = x @ nesteddict[o]
+            return JacobianDict(nesteddict, inputs=x @ self.inputs, outputs=x @ self.outputs)
         else:
             return self.apply(x)
+
+    def __rmatmul__(self, x):
+        if isinstance(x, Bijection):
+            return JacobianDict(x @ self.nesteddict, inputs=x @ self.inputs, outputs=x @ self.outputs)
 
     def __bool__(self):
         return bool(self.outputs) and bool(self.inputs)

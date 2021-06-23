@@ -84,9 +84,9 @@ class Block(abc.ABC, metaclass=ABCMeta):
         from a steady state `ss`."""
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def jacobian(self, ss, exogenous, **kwargs):
+    def jacobian(self, ss, exogenous, T=None, **kwargs):
         """Calculate a partial equilibrium Jacobian to a set of `exogenous` shocks at a steady state `ss`."""
-        return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
+        return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, T=T, **kwargs)
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],

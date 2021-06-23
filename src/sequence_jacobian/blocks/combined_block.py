@@ -105,7 +105,7 @@ class CombinedBlock(Block):
         kwargs = {"exogenous": exogenous, "T": T, "outputs": outputs, "Js": Js}
 
         for i, block in enumerate(self.blocks):
-            curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block.jacobian) if k in kwargs}).complete()
+            curlyJ = block._jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block._jacobian) if k in kwargs}).complete()
 
             # If we want specific list of outputs, restrict curlyJ to that before continuing
             curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]

@@ -73,13 +73,14 @@ def firm(K, L, Z, alpha, delta):
     r = alpha * Z * (K(-1) / L) ** (alpha-1) - delta
     w = (1 - alpha) * Z * (K(-1) / L) ** alpha
     Y = Z * K(-1) ** alpha * L ** (1 - alpha)
-    return r, w, Y
+    I = K - (1 - delta) * K(-1)
+    return r, w, Y, I
 
 
 @simple
-def mkt_clearing(K, A, Y, C, delta):
+def mkt_clearing(K, A, Y, C, I):
     asset_mkt = A - K
-    goods_mkt = Y - C - delta * K
+    goods_mkt = Y - C - I
     return asset_mkt, goods_mkt
 
 
