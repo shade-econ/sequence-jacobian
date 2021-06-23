@@ -52,7 +52,7 @@ class SimpleBlock(Block):
             misc.numeric_primitive(self.f(**input_args))]
         return SteadyStateDict({**calibration, **dict(zip(self.output_list, output_vars))})
 
-    def impulse_nonlinear(self, ss, exogenous):
+    def _impulse_nonlinear(self, ss, exogenous):
         input_args = {}
         for k, v in exogenous.items():
             if np.isscalar(v):
@@ -65,10 +65,10 @@ class SimpleBlock(Block):
 
         return ImpulseDict(make_impulse_uniform_length(self.f(**input_args), self.output_list)) - ss
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
 
-    def jacobian(self, ss, exogenous=None, T=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=None, Js=None):
         """Assemble nested dict of Jacobians
 
         Parameters

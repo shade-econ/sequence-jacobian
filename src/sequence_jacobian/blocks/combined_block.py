@@ -71,7 +71,7 @@ class CombinedBlock(Block):
             ss_partial_eq.update(eval_block_ss(blocks_all[i], ss_partial_eq, **kwargs))
         return SteadyStateDict(ss_partial_eq)
 
-    def impulse_nonlinear(self, ss, exogenous, **kwargs):
+    def _impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
         a steady state, `ss`"""
         irf_nonlin_partial_eq = deepcopy(exogenous)
@@ -83,7 +83,7 @@ class CombinedBlock(Block):
 
         return ImpulseDict(irf_nonlin_partial_eq)
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
         a steady_state, `ss`"""
         irf_lin_partial_eq = deepcopy(exogenous)
@@ -95,7 +95,7 @@ class CombinedBlock(Block):
 
         return ImpulseDict(irf_lin_partial_eq)
 
-    def jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):
         """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
         a steady state, `ss`"""
         if exogenous is None:

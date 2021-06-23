@@ -70,22 +70,23 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def outputs(self):
         pass
 
-    # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
-    # input and output argument structure
     def steady_state(self, calibration, **kwargs):
+        """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
         return self.M @ self._steady_state(self.M.inv @ calibration, **kwargs)
 
-    def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
-                          exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
-        raise NotImplementedError(f'{type(self)} does not implement .impulse_nonlinear()')
+    def impulse_nonlinear(self, ss, exogenous, **kwargs):
+        """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`."""
+        return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
-                       exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
-        raise NotImplementedError(f'{type(self)} does not implement .impulse_linear()')
+    def impulse_linear(self, ss, exogenous, **kwargs):
+        """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`."""
+        return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous: List[str] = None,
-                 T: int = None, **kwargs) -> JacobianDict:
-        raise NotImplementedError(f'{type(self)} does not implement .jacobian()')
+    def jacobian(self, ss, exogenous, **kwargs):
+        """Calculate a partial equilibrium Jacobian to a set of `exogenous` shocks at a steady state `ss`."""
+        return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],

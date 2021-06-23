@@ -5,6 +5,7 @@ import copy
 import numpy as np
 
 from . import support
+from ..blocks.support.bijection import Bijection
 
 
 class Jacobian(metaclass=ABCMeta):

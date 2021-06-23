@@ -234,7 +234,7 @@ class HetBlock(Block):
 
         return SteadyStateDict(ss, internal=self)
 
-    def impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
+    def _impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         kwargs are constant at their ss values. Analog to SimpleBlock.td.
@@ -345,7 +345,7 @@ class HetBlock(Block):
         else:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs}) - ss
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
+    def _impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
         # infer T from exogenous, check that all shocks have same length
         shock_lengths = [x.shape[0] for x in exogenous.values()]
         if shock_lengths[1:] != shock_lengths[:-1]:
@@ -354,7 +354,7 @@ class HetBlock(Block):
 
         return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
 
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, Js=None, h=1E-4):
+    def _jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, Js=None, h=1E-4):
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters

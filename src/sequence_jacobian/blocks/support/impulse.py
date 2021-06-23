@@ -1,8 +1,10 @@
 """ImpulseDict class for manipulating impulse responses."""
 
 import numpy as np
+from copy import deepcopy
 
 from ...steady_state.classes import SteadyStateDict
+from .bijection import Bijection
 
 
 class ImpulseDict:
@@ -67,3 +69,13 @@ class ImpulseDict:
         # ImpulseDict[['C, 'Y']] / ss[['C', 'Y']]: matches steady states; don't divide by zero
         if isinstance(other, SteadyStateDict):
             return type(self)({k: v / other[k] if not np.isclose(other[k], 0) else v for k, v in self.impulse.items()})
+
+    def __matmul__(self, x):
+        # remap keys in toplevel
+        if isinstance(x, Bijection):
+            new = deepcopy(self)
+            new.impulse = x @ self.impulse
+            return new
+
+    def __rmatmul__(self, x):
+        return self.__matmul__(x)
