@@ -70,21 +70,25 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def outputs(self):
         pass
 
-    def steady_state(self, calibration, **kwargs):
+    def steady_state(self, calibration: SteadyStateDict, **kwargs) -> SteadyStateDict:
         """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
         return self.M @ self._steady_state(self.M.inv @ calibration, **kwargs)
 
-    def impulse_nonlinear(self, ss, exogenous, **kwargs):
+    def impulse_nonlinear(self, ss: SteadyStateDict,
+                          exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`."""
         return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def impulse_linear(self, ss, exogenous, **kwargs):
+    def impulse_linear(self, ss: SteadyStateDict,
+                       exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`."""
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def jacobian(self, ss, exogenous, T=None, **kwargs):
+    def jacobian(self, ss: SteadyStateDict,
+                 exogenous: Dict[str, Array],
+                 T: Optional[int] = None, **kwargs) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `exogenous` shocks at a steady state `ss`."""
         return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, T=T, **kwargs)
 
