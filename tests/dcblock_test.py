@@ -116,9 +116,8 @@ def household(V_p, Va_p, Pi_z_p, Pi_s_p, choice_set, a_grid, y_grid, z_grid, b_g
     a_nextgrid = (c_nextgrid + a_grid[np.newaxis, np.newaxis, :] - y_grid[:, :, np.newaxis]) / (1 + rpost)
 
     # e. upper envelope
-    # V, c = upper_envelope(W, a_nextgrid, c_nextgrid, a_grid, y_grid, rpost, eis, vphi, chi)
     imin, imax = nonconcave(uc_nextgrid)  # bounds of non-concave region
-    V, c = upper_envelope_fast(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, rpost, eis, vphi, chi)
+    V, c = upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, rpost, eis, vphi, chi)
 
     # f. update Va
     uc = c ** (-1 / eis)
@@ -208,7 +207,7 @@ def nonconcave(uc_nextgrid, imin, imax):
 
 
 @njit
-def upper_envelope_fast(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, rpost, *args):
+def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, rpost, *args):
     """
     Interpolate consumption and value function to exogenous grid. Brute force but safe.
     Parameters
@@ -341,7 +340,6 @@ def firm(Z, K, L, mc, alpha, delta0, delta1, psi):
     Y = Z * K(-1) ** alpha * L ** (1 - alpha)
     w = (1 - alpha) * mc * Y / L
     u = (alpha / delta0 / delta1 * mc * Y / K(-1)) ** (1 / delta1)
-    # u = 1.0
     delta = delta0 * u ** delta1
     Q = 1 + psi * (K / K(-1) - 1)
     I = K - (1 - delta) * K(-1) + psi / 2 * (K / K(-1) - 1) ** 2 * K(-1)
@@ -400,8 +398,24 @@ def mkt_clearing(A, B, Y, C, I, G, L, Ze):
 
 
 @simple
+def dividends(transfer):
+    transfer_sm = transfer
+    transfer_sw = transfer
+    return transfer_sm, transfer_sw
+
+
+@simple
+def aggregate(A_sm, C_sm, Ze_sm, Ui_sm, A_sw, C_sw, Ze_sw, Ui_sw):
+    A = (A_sm + A_sw) / 2
+    C = (C_sm + C_sw) / 2
+    Ze = (Ze_sm + Ze_sw) / 2
+    Ui = (Ui_sm + Ui_sw) / 2
+    return A, C, Ze, Ui
+
+
+@simple
 def helper1(A, tax, w, Ze, rpost, Ui):
-    # after hh
+    # after hh block
     B = A
     G = tax * w * Ze - rpost * B - (1 - tax) * w * Ui
     return B, G
@@ -420,24 +434,42 @@ def helper2(eps, rpost, Y, L, alpha, delta0):
 
 '''Try this'''
 
+cali_sm = {'beta': 0.9782, 'vphi': 0.8079, 'chi': 0.5690, 'fU': 0.25, 'fN': 0.1174, 's': 0.0218,
+           'mean_z': 1.0, 'rho_z': 0.98, 'sd_z': 0.943*0.82,
+           'fU_eps': 10.69, 'fN_eps': 5.57, 's_eps': -11.17}
 
-calibration = {'eis': 1.0, 'vphi': 0.65, 'chi': 0.6,
-               'uicap': 0.66, 'uirate': 0.5, 'expiry': 1/6, 'fU': 0.25, 'fN': 0.1, 's': 0.025,
-               'amin': 0.0, 'amax': 500, 'nA': 100, 'lamM': 0.01, 'lamB': 0.01, 'lamL': 0.04,
-               'mean_z': 1.0, 'rho_z': 0.98, 'sd_z': 0.943*0.82, 'nZ': 7, 'beta': 0.985,
-               'kappa': 0.03, 'phi_pi': 1.25, 'rstar': 0.002, 'pi': 0, 'alpha': 0.2, 'psi': 30, 'delta0': 0.0083,
-               'eps': 10, 'fU_eps': 10.0, 'fN_eps': 5.0, 's_eps': -8.0, 'tax': 0.3}
+cali_sw = {'beta': 0.9830, 'vphi': 0.9909, 'chi': 0.4982, 'fU': 0.22, 'fN': 0.1099, 's': 0.0132,
+           'mean_z': 0.8, 'rho_z': 0.98, 'sd_z': 0.86*0.82,
+           'fU_eps': 8.72, 'fN_eps': 3.55, 's_eps': -6.55}
 
-hh = create_model([income_state_vars, employment_state_vars, asset_state_vars, household], name='SingleMen')
-hank = create_model([hh, firm, monetary, valuation, nkpc, fiscal1, fiscal2, flows, mkt_clearing], name='HANK')
+cali_sm = {k + '_sm': v for k, v in cali_sm.items()}
+cali_sw = {k + '_sw': v for k, v in cali_sw.items()}
 
-ss = hank.solve_steady_state(calibration, solver='hybr', dissolve=[fiscal1, flows],
-                             unknowns={'Z': 0.63, 'L': 0.86, 'mc': 0.9, 'G': 0.2, 'delta1': 1.2,
-                                       'B': 3.0, 'K': 17.0},
-                             targets={'Y': 1.0, 'labor_mkt': 0.0, 'nkpc_res': 0.0, 'budget': 0.0,
-                                      'asset_mkt': 0.0, 'val': 0.0, 'u': 1.0},
+calibration = {**cali_sm, **cali_sw,
+               'eis': 1.0, 'uicap': 0.66, 'uirate': 0.5, 'expiry': 1/6, 'eps': 10.0, 'tax': 0.3,
+               'amin': 0.0, 'amax': 500, 'nA': 100, 'lamM': 0.01, 'lamB': 0.01, 'lamL': 0.04, 'nZ': 7,
+               'kappa': 0.03, 'phi_pi': 1.25, 'rstar': 0.002, 'pi': 0.0, 'alpha': 0.2, 'psi': 30, 'delta0': 0.0083}
+
+hh = create_model([income_state_vars, employment_state_vars, asset_state_vars, flows, household], name='Single')
+
+
+to_map = ['beta', 'vphi', 'chi', 'fU', 'fN', 's', 'mean_z', 'rho_z', 'sd_z', 'transfer', 'fU_eps', 'fN_eps', 's_eps',
+          *hh.outputs]
+hh_sm = hh.remap({k: k + '_sm' for k in to_map}).rename('SingleMen')
+hh_sw = hh.remap({k: k + '_sw' for k in to_map}).rename('SingleWomen')
+
+
+hank = create_model([hh_sm, hh_sw, aggregate, dividends, firm, monetary, valuation, nkpc, fiscal1, fiscal2,
+                     mkt_clearing], name='HANK')
+
+ss = hank.solve_steady_state(calibration, solver='brentq', dissolve=[fiscal1, flows],
+                             unknowns={'L': (0.7, 0.72),
+                                       'Z': 0.63, 'mc': 0.9, 'G': 0.2, 'delta1': 1.2, 'B': 3.0, 'K': 17.0},
+                             targets={'labor_mkt': 0.0,
+                                      'Y': 1.0, 'nkpc_res': 0.0, 'budget': 0.0, 'asset_mkt': 0.0, 'val': 0.0, 'u': 1.0},
                              helper_blocks=[helper1, helper2],
                              helper_targets=['asset_mkt', 'budget', 'val', 'nkpc_res', 'Y', 'u'])
 
+out = hh_sm.steady_state(ss)
 
 
