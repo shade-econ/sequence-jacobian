@@ -39,6 +39,8 @@ class SteadyStateDict:
             new = deepcopy(self)
             new.toplevel = x @ self.toplevel
             return new
+        else:
+            NotImplemented
 
     def __rmatmul__(self, x):
         return self.__matmul__(x)

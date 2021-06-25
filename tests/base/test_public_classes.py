@@ -91,7 +91,7 @@ def test_bijection():
     mymap2 = Bijection({'a1': 'a2'})
     assert (mymap2 @ mymap)['a'] == 'a2'
 
-    # composition with SteadyStateDict (only left __matmul__ works as intended)
+    # composition with SteadyStateDict
     ss = SteadyStateDict({'a': 2.0, 'b': 1.0}, internal={})
     ss_remapped = ss @ mymap
     assert isinstance(ss_remapped, SteadyStateDict)
