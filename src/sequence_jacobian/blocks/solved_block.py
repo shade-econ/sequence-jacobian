@@ -4,6 +4,8 @@ from ..primitives import Block
 from ..blocks.simple_block import simple
 from ..utilities import graph
 
+from ..jacobian.classes import JacobianDict
+
 
 def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name=""):
     """Creates SolvedBlocks. Can be applied in two ways, both of which return a SolvedBlock:
@@ -121,6 +123,9 @@ class SolvedBlock(Block):
             outputs = list(self.outputs)
         relevant_shocks = [i for i in self.inputs if i in exogenous]
 
-        return super().solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
-                                      targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                      T=T, outputs=outputs, Js=Js)
+        if relevant_shocks:
+            return super().solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
+                                          targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
+                                          T=T, outputs=outputs, Js=Js)
+        else:
+            return JacobianDict({})
