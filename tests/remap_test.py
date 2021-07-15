@@ -115,13 +115,9 @@ def mpcs(c, a, a_grid, r):
 
 # remap method takes a dict and returns new copies of blocks
 household.add_hetoutput(mpcs, verbose=False)
-hh_patient = create_model([income_state_vars, household.rename('patient_hh')], name='PatientHH')
-to_map = ['beta', *hh_patient.outputs]
-
-hh_patient = hh_patient.remap({k: k + '_patient' for k in to_map})
-
-hh_impatient = create_model([income_state_vars, household.rename('impatient_hh')], name='ImpatientHH')
-hh_impatient = hh_impatient.remap({k: k + '_impatient' for k in to_map})
+to_map = ['beta', *household.outputs]
+hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('patient household')
+hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('impatient household')
 
 
 @simple
@@ -135,7 +131,7 @@ def aggregate(A_patient, A_impatient, C_patient, C_impatient, Mpc_patient, Mpc_i
 '''Steady state'''
 
 # DAG
-blocks = [hh_patient, hh_impatient, firm, mkt_clearing, asset_state_vars, aggregate]
+blocks = [hh_patient, hh_impatient, firm, mkt_clearing, income_state_vars, asset_state_vars, aggregate]
 ks_model = create_model(blocks, name="Krusell-Smith")
 
 # Steady State
@@ -146,5 +142,5 @@ ss = ks_model.solve_steady_state(calibration, solver='brentq',
                                  targets={'asset_mkt': 0.0, 'Y': 1.0, 'r': 0.01},
                                  helper_blocks=[firm_ss], helper_targets=['Y', 'r'])
 
-# td_nonlin = ks_model.solve_impulse_nonlinear(ss, {'Z': 0.001*0.9**np.arange(300)},
-#                                              unknowns=['K'], targets=['asset_mkt'])
+td_nonlin = ks_model.solve_impulse_nonlinear(ss, {'Z': 0.001*0.9**np.arange(300)},
+                                             unknowns=['K'], targets=['asset_mkt'])

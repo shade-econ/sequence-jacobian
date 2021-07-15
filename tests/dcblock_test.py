@@ -32,7 +32,8 @@ def monetary(pi, rstar, phi_pi):
 
 @simple
 def nkpc(pi, mc, eps, Y, rpost, kappa):
-    nkpc_res = kappa * (mc - (eps - 1) / eps) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + rpost(+1)) - np.log(1 + pi)
+    nkpc_res = kappa * (mc - (eps - 1) / eps) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / (1 + rpost(+1)) \
+               - (1 + pi).apply(np.log)
     return nkpc_res
 
 
@@ -123,32 +124,25 @@ cali_mc = {'beta': 0.9882, 'rho': 0.042,
 
 # variables to remap
 to_map_single = ['beta', 'vphi', 'chi', 'fU', 'fN', 's', 'mean_z', 'rho_z', 'sd_z', 'transfer',
-                 'fU_eps', 'fN_eps', 's_eps', *single.hh.outputs]
+                 'fU_eps', 'fN_eps', 's_eps'] + list(single.hh.outputs)
+
 to_map_couple = ['beta', 'transfer', 'rho',
                  'vphi_m', 'chi_m', 'fU_m', 'fN_m', 's_m', 'mean_m', 'rho_m', 'sd_m', 'fU_eps_m', 'fN_eps_m', 's_eps_m',
-                 'vphi_f', 'chi_f', 'fU_f', 'fN_f', 's_f', 'mean_f', 'rho_f', 'sd_f', 'fU_eps_f', 'fN_eps_f', 's_eps_f',
-                 *couple.hh.outputs]
+                 'vphi_f', 'chi_f', 'fU_f', 'fN_f', 's_f', 'mean_f', 'rho_f', 'sd_f', 'fU_eps_f', 'fN_eps_f', 's_eps_f'] + list(couple.hh.outputs)
 
-# Single men
-hh_sm = create_model([single.income_state_vars, single.employment_state_vars, single.asset_state_vars, single.flows,
-                      single.household.rename('single_men')], name='SingleMen')
-hh_sm = hh_sm.remap({k: k + '_sm' for k in to_map_single})
+# Singles
+blocks_sm = [b.remap({k: k + '_sm' for k in to_map_single}).rename(b.name + '_sm') for b in single.blocks]
+blocks_sw = [b.remap({k: k + '_sw' for k in to_map_single}).rename(b.name + '_sw') for b in single.blocks]
 
-# Single women
-hh_sw = create_model([single.income_state_vars, single.employment_state_vars, single.asset_state_vars, single.flows,
-                      single.household.rename('single_women')], name='SingleWomen')
-hh_sw = hh_sw.remap({k: k + '_sw' for k in to_map_single})
-
-# Married couples
-hh_mc = create_model([couple.income_state_vars, couple.employment_state_vars, couple.asset_state_vars,
-                      couple.flows_m, couple.flows_f, couple.household.rename('couples')], name='Couples')
-hh_mc = hh_mc.remap({k: k + '_mc' for k in to_map_couple})
+# Couples
+blocks_mc = [b.remap({k: k + '_mc' for k in to_map_couple}).rename(b.name + '_mc') for b in couple.blocks]
 
 
 '''Solve ss'''
 
 
-hank = create_model([hh_sm, hh_sw, hh_mc, aggregate, dividends, firm, monetary, valuation, nkpc, fiscal, mkt_clearing],
+hank = create_model(blocks_sm + blocks_sw + blocks_mc +
+                    [aggregate, dividends, firm, monetary, valuation, nkpc, fiscal, mkt_clearing],
                     name='HANK')
 
 # remap calibration
@@ -170,10 +164,14 @@ ss = hank.solve_steady_state(calibration, solver='toms748', dissolve=[fiscal], t
                              helper_targets=['asset_mkt', 'budget', 'val', 'nkpc_res', 'Y', 'u'])
 
 
-# jacobians
-# J = {}
-# J['sm'] = hh_sm.jacobian(ss, exogenous=['atw', 'rpost', 'beta_sm', 'Y', 'transfer_sm'], T=500)
-
-# td_nonlin = hank.solve_impulse_nonlinear(ss, {'Z': 0.001*0.9**np.arange(300)},
-#                                          unknowns=['K'], targets=['asset_mkt'])
-
+# # jacobians
+# J = dict()
+# J['household_sm'] = blocks_sm[4].jacobian(ss, exogenous=['transfer', 'atw', 'rpost', 'beta', 'fU', 'fN', 's'], T=500)
+# J['household_sw'] = blocks_sw[4].jacobian(ss, exogenous=['transfer', 'atw', 'rpost', 'beta', 'fU', 'fN', 's'], T=500)
+# J['household_mc'] = blocks_mc[5].jacobian(ss, exogenous=['transfer', 'atw', 'rpost', 'beta',
+#                                                          'fU_m', 'fN_m', 's_m', 'fU_f', 'fN_f', 's_f'], T=500)
+#
+# td_lin = hank.solve_impulse_linear(ss, {'rstar': 0.001*0.9**np.arange(500)},
+#                                    unknowns=['K', 'L', 'mc', 'pi', 'tax'],
+#                                    targets=['val', 'goods_mkt', 'labor_mkt', 'nkpc_res', 'tax_rule'],
+#                                    Js=J)

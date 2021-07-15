@@ -339,3 +339,4 @@ def flows(Y, fU, fN, s, fU_eps, fN_eps, s_eps):
 
 household.add_hetinput(labor_income, verbose=False)
 hh = create_model([income_state_vars, employment_state_vars, asset_state_vars, flows, household], name='SingleHH')
+blocks = [income_state_vars, employment_state_vars, asset_state_vars, flows, household]

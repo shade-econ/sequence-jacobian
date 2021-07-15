@@ -151,6 +151,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
             other.input_list = other.M @ self.input_list
         if hasattr(self, 'output_list'):
             other.output_list = other.M @ self.output_list
+        if hasattr(self, 'non_back_iter_outputs'):
+            other.non_back_iter_outputs = other.M @ self.non_back_iter_outputs
         return other
 
     def rename(self, name):

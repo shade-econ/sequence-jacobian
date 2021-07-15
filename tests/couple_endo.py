@@ -402,3 +402,4 @@ def flows_f(Y, fU_f, fN_f, s_f, fU_eps_f, fN_eps_f, s_eps_f):
 household.add_hetinput(labor_income, verbose=False)
 hh = create_model([income_state_vars, employment_state_vars, asset_state_vars, flows_m, flows_f, household],
                   name='CoupleHH')
+blocks = [income_state_vars, employment_state_vars, asset_state_vars, flows_m, flows_f, household]
