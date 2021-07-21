@@ -33,14 +33,14 @@ def monetary(pi, rstar, phi_pi):
 @simple
 def nkpc(pi, mc, eps, Y, rpost, kappa):
     nkpc_res = kappa * (mc - (eps - 1) / eps) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / (1 + rpost(+1)) \
-               - (1 + pi).apply(np.log)
+        - (1 + pi).apply(np.log)
     return nkpc_res
 
 
 @simple
 def valuation(rpost, mc, Y, K, Q, delta, psi, alpha):
     val = alpha * mc(+1) * Y(+1) / K - (K(+1) / K - (1 - delta) + psi / 2 * (K(+1) / K - 1) ** 2) + \
-          K(+1) / K * Q(+1) - (1 + rpost(+1)) * Q
+        K(+1) / K * Q(+1) - (1 + rpost(+1)) * Q
     return val
 
 
@@ -62,9 +62,12 @@ def mkt_clearing(A, B, Y, C, I, G, L, Ze):
 
 @simple
 def dividends(transfer, pop_sm, pop_sw, pop_mc, illiq_sm, illiq_sw, illiq_mc):
-    transfer_sm = illiq_sm * transfer / (pop_sm * illiq_sm + pop_sw * illiq_sw + pop_mc * illiq_mc)
-    transfer_sw = illiq_sw * transfer / (pop_sm * illiq_sm + pop_sw * illiq_sw + pop_mc * illiq_mc)
-    transfer_mc = illiq_mc * transfer / (pop_sm * illiq_sm + pop_sw * illiq_sw + pop_mc * illiq_mc)
+    transfer_sm = illiq_sm * transfer / \
+        (pop_sm * illiq_sm + pop_sw * illiq_sw + pop_mc * illiq_mc)
+    transfer_sw = illiq_sw * transfer / \
+        (pop_sm * illiq_sm + pop_sw * illiq_sw + pop_mc * illiq_mc)
+    transfer_mc = illiq_mc * transfer / \
+        (pop_sm * illiq_sm + pop_sw * illiq_sw + pop_mc * illiq_mc)
     return transfer_sm, transfer_sw, transfer_mc
 
 
@@ -124,26 +127,27 @@ cali_mc = {'beta': 0.9882, 'rho': 0.042,
 
 # variables to remap
 to_map_single = ['beta', 'vphi', 'chi', 'fU', 'fN', 's', 'mean_z', 'rho_z', 'sd_z', 'transfer',
-                 'fU_eps', 'fN_eps', 's_eps'] + list(single.hh.outputs)
+                 'fU_eps', 'fN_eps', 's_eps', *single.hh.outputs]
 
 to_map_couple = ['beta', 'transfer', 'rho',
                  'vphi_m', 'chi_m', 'fU_m', 'fN_m', 's_m', 'mean_m', 'rho_m', 'sd_m', 'fU_eps_m', 'fN_eps_m', 's_eps_m',
-                 'vphi_f', 'chi_f', 'fU_f', 'fN_f', 's_f', 'mean_f', 'rho_f', 'sd_f', 'fU_eps_f', 'fN_eps_f', 's_eps_f'] + list(couple.hh.outputs)
+                 'vphi_f', 'chi_f', 'fU_f', 'fN_f', 's_f', 'mean_f', 'rho_f', 'sd_f', 'fU_eps_f', 'fN_eps_f', 's_eps_f',
+                 *couple.hh.outputs]
 
-# Singles
-blocks_sm = [b.remap({k: k + '_sm' for k in to_map_single}).rename(b.name + '_sm') for b in single.blocks]
-blocks_sw = [b.remap({k: k + '_sw' for k in to_map_single}).rename(b.name + '_sw') for b in single.blocks]
-
-# Couples
-blocks_mc = [b.remap({k: k + '_mc' for k in to_map_couple}).rename(b.name + '_mc') for b in couple.blocks]
+# remap blocks one-by-one (replicates combinedblock)
+blocks_sm = [b.remap({k: k + '_sm' for k in to_map_single}
+                     ).rename(b.name + '_sm') for b in single.blocks]
+blocks_sw = [b.remap({k: k + '_sw' for k in to_map_single}
+                     ).rename(b.name + '_sw') for b in single.blocks]
+blocks_mc = [b.remap({k: k + '_mc' for k in to_map_couple}
+                     ).rename(b.name + '_mc') for b in couple.blocks]
 
 
 '''Solve ss'''
 
 
 hank = create_model(blocks_sm + blocks_sw + blocks_mc +
-                    [aggregate, dividends, firm, monetary, valuation, nkpc, fiscal, mkt_clearing],
-                    name='HANK')
+                    [aggregate, dividends, firm, monetary, valuation, nkpc, fiscal, mkt_clearing], name='HANK')
 
 # remap calibration
 cali_sm = {k + '_sm': v for k, v in cali_sm.items()}
