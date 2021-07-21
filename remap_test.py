@@ -111,13 +111,19 @@ def mpcs(c, a, a_grid, r):
     return mpc
 
 
+household.add_hetoutput(mpcs, verbose=False)
+
+
 '''Part 3: permanent heterogeneity'''
 
-# remap method takes a dict and returns new copies of blocks
-household.add_hetoutput(mpcs, verbose=False)
-to_map = ['beta', *household.outputs]
-hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('patient household')
-hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('impatient household')
+# permanent types given by CombinedBlocks with different names
+hh_patient = create_model([income_state_vars, household], name='patient_hh')
+hh_impatient = create_model([income_state_vars, household], name='impatient_hh')
+
+# remap variables
+to_map = ['beta', *hh_patient.outputs]
+hh_patient = hh_patient.remap({k: k + '_patient' for k in to_map})
+hh_impatient = hh_impatient.remap({k: k + '_impatient' for k in to_map})
 
 
 @simple
@@ -134,13 +140,16 @@ def aggregate(A_patient, A_impatient, C_patient, C_impatient, Mpc_patient, Mpc_i
 blocks = [hh_patient, hh_impatient, firm, mkt_clearing, income_state_vars, asset_state_vars, aggregate]
 ks_model = create_model(blocks, name="Krusell-Smith")
 
-# Steady State
+# steady state
 calibration = {'eis': 1, 'delta': 0.025, 'alpha': 0.3, 'rho': 0.966, 'sigma': 0.5, 'L': 1.0,
                'nS': 11, 'nA': 500, 'amax': 1000, 'beta_impatient': 0.98, 'mass_patient': 0.5}
+
+# this should return ss.internals['patient_hh']['household'] and ss.internals['impatient_hh']['household']
 ss = ks_model.solve_steady_state(calibration, solver='brentq',
                                  unknowns={'beta_patient': (0.97/1.01, 0.999/1.01), 'Z': 0.5, 'K': 8.6},
                                  targets={'asset_mkt': 0.0, 'Y': 1.0, 'r': 0.01},
                                  helper_blocks=[firm_ss], helper_targets=['Y', 'r'])
 
-td_nonlin = ks_model.solve_impulse_nonlinear(ss, {'Z': 0.001*0.9**np.arange(300)},
-                                             unknowns=['K'], targets=['asset_mkt'])
+# .jacobian will have to find the internals, .impulse_linear, .impulse_nonlinear should be able to return internals
+# td_nonlin = ks_model.solve_impulse_nonlinear(ss, {'Z': 0.001*0.9**np.arange(300)},
+#                                              unknowns=['K'], targets=['asset_mkt'])
