@@ -66,10 +66,15 @@ class CombinedBlock(Block):
         topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
         blocks_all = self.blocks + helper_blocks
 
-        ss_partial_eq = deepcopy(calibration)
+        ss_partial_eq_toplevel = deepcopy(calibration)
+        ss_partial_eq_internal = {}
         for i in topsorted:
-            ss_partial_eq.update(eval_block_ss(blocks_all[i], ss_partial_eq, **kwargs))
-        return SteadyStateDict(ss_partial_eq)
+            outputs = eval_block_ss(blocks_all[i], ss_partial_eq_toplevel, **kwargs)
+            ss_partial_eq_toplevel.update(outputs.toplevel)
+            if outputs.internal:
+                ss_partial_eq_internal.update(outputs.internal)
+        ss_partial_eq_internal = {self.name: ss_partial_eq_internal} if ss_partial_eq_internal else {}
+        return SteadyStateDict(ss_partial_eq_toplevel, internal=ss_partial_eq_internal)
 
     def _impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
