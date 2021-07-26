@@ -78,14 +78,12 @@ def asset_state_vars(amax, nA):
 
 
 @simple
-def firm_steady_state_solution(r, delta, alpha):
+def firm_steady_state_solution(r, Y, L, delta, alpha):
     rk = r + delta
-    Z = (rk / alpha) ** alpha  # normalize so that Y=1
-    K = (alpha * Z / rk) ** (1 / (1 - alpha))
-    Y = Z * K ** alpha
-    w = (1 - alpha) * Z * (alpha * Z / rk) ** (alpha / (1 - alpha))
-
-    return Z, K, Y, w
+    w = (1 - alpha) * Y / L
+    K = alpha * Y / rk
+    Z = Y / K ** alpha / L ** (1 - alpha)
+    return w, K, Z
 
 
 '''Part 3: Steady state'''
@@ -127,3 +125,13 @@ def ks_ss(lb=0.98, ub=0.999, r=0.01, eis=1, delta=0.025, alpha=0.11, rho=0.966, 
                'rho': rho, 'nS': nS, 'asset_mkt': ss['A'] - K})
 
     return ss
+
+
+'''Part 4: Permanent beta heterogeneity'''
+
+
+@simple
+def aggregate(A_patient, A_impatient, C_patient, C_impatient, mass_patient):
+    C = mass_patient * C_patient + (1 - mass_patient) * C_impatient
+    A = mass_patient * A_patient + (1 - mass_patient) * A_impatient
+    return C, A

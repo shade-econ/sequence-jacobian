@@ -98,3 +98,30 @@ def two_asset_hank_dag():
     targets = ["asset_mkt", "fisher", "wnkpc"]
 
     return two_asset_model, exogenous, unknowns, targets, ss
+
+
+@pytest.fixture(scope='session')
+def ks_remapped_dag():
+    # Create 2 versions of the household block using `remap`
+    to_map = ['beta', *krusell_smith.household.outputs]
+    hh_patient = krusell_smith.household.remap({k: k + '_patient' for k in to_map}).rename('hh_patient')
+    hh_impatient = krusell_smith.household.remap({k: k + '_impatient' for k in to_map}).rename('hh_impatient')
+    blocks = [hh_patient, hh_impatient, krusell_smith.firm, krusell_smith.mkt_clearing, krusell_smith.income_state_vars,
+              krusell_smith.asset_state_vars, krusell_smith.aggregate]
+    ks_remapped = create_model(blocks, name='Krusell-Smith')
+
+    # Steady State
+    calibration = {'eis': 1., 'delta': 0.025, 'alpha': 0.3, 'rho': 0.966, 'sigma': 0.5, 'L': 1.0,
+                   'nS': 3, 'nA': 100, 'amax': 1000, 'beta_impatient': 0.985, 'mass_patient': 0.5}
+    unknowns_ss = {'beta_patient': (0.98 / 1.01, 0.999 / 1.01), 'Z': 0.5, 'K': 8.}
+    targets_ss = {'asset_mkt': 0., 'Y': 1., 'r': 0.01}
+    helper_blocks = [krusell_smith.firm_steady_state_solution]
+    ss = ks_remapped.solve_steady_state(calibration, unknowns_ss, targets_ss, solver='brentq',
+                                        helper_blocks=helper_blocks, helper_targets=['Y', 'r'])
+
+    # Transitional Dynamics/Jacobian Calculation
+    exogenous = ["Z"]
+    unknowns = ["K"]
+    targets = ["asset_mkt"]
+
+    return ks_remapped, exogenous, unknowns, targets, ss
