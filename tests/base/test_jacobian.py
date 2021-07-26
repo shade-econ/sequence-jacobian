@@ -15,8 +15,8 @@ def test_ks_jac(krusell_smith_dag):
     G2 = ks_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
 
     # Manually calculate the general equilibrium Jacobian
-    J_firm = firm.jac(ss, shock_list=['K', 'Z'])
-    J_ha = household.jac(ss, T=T, shock_list=['r', 'w'])
+    J_firm = firm.jacobian(ss, exogenous=['K', 'Z'])
+    J_ha = household.jacobian(ss, T=T, exogenous=['r', 'w'])
     J_curlyK_K = J_ha['A']['r'] @ J_firm['r']['K'] + J_ha['A']['w'] @ J_firm['w']['K']
     J_curlyK_Z = J_ha['A']['r'] @ J_firm['r']['Z'] + J_ha['A']['w'] @ J_firm['w']['Z']
     J_curlyK = {'curlyK': {'K': J_curlyK_K, 'Z': J_curlyK_Z}}
@@ -62,8 +62,8 @@ def test_fake_news_v_actual(one_asset_hank_dag):
 
     household = hank_model._blocks_unsorted[0]
     T = 40
-    shock_list = ['w', 'r', 'Div', 'Tax']
-    Js = household.jac(ss, shock_list, T)
+    exogenous = ['w', 'r', 'Div', 'Tax']
+    Js = household.jacobian(ss, exogenous, T)
     output_list = household.non_back_iter_outputs
 
     # Preliminary processing of the steady state
@@ -72,7 +72,7 @@ def test_fake_news_v_actual(one_asset_hank_dag):
     # Step 1 of fake news algorithm: backward iteration
     h = 1E-4
     curlyYs, curlyDs = {}, {}
-    for i in shock_list:
+    for i in exogenous:
         curlyYs[i], curlyDs[i] = household.backward_iteration_fakenews(i, output_list, ssin_dict,
                                                                        ssout_list, ss.internal["household"]['D'],
                                                                        Pi.T.copy(), sspol_i, sspol_pi, sspol_space,
@@ -94,7 +94,7 @@ def test_fake_news_v_actual(one_asset_hank_dag):
     # Step 3 of fake news algorithm: combine everything to make the fake news matrix for each output-input pair
     Fs = {o.capitalize(): {} for o in output_list}
     for o in output_list:
-        for i in shock_list:
+        for i in exogenous:
             F = np.empty((T,T))
             F[0, ...] = curlyYs[i][o]
             F[1:, ...] = curlyPs[o].reshape(T-1, -1) @ curlyDs[i].reshape(T, -1).T
@@ -109,7 +109,7 @@ def test_fake_news_v_actual(one_asset_hank_dag):
     Js_original = Js
     Js = {o.capitalize(): {} for o in output_list}
     for o in output_list:
-        for i in shock_list:
+        for i in exogenous:
             # implement recursion (30): start with J=F and accumulate terms along diagonal
             J = Fs[o.capitalize()][i].copy()
             for t in range(1, J.shape[1]):
@@ -117,7 +117,7 @@ def test_fake_news_v_actual(one_asset_hank_dag):
             Js[o.capitalize()][i] = J
 
     for o in output_list:
-        for i in shock_list:
+        for i in exogenous:
             assert np.array_equal(Js[o.capitalize()][i], Js_original[o.capitalize()][i])
 
 
@@ -126,23 +126,23 @@ def test_fake_news_v_direct_method(one_asset_hank_dag):
 
     household = hank_model._blocks_unsorted[0]
     T = 40
-    shock_list = 'r'
+    exogenous = ['r']
     output_list = household.non_back_iter_outputs
     h = 1E-4
 
-    Js = household.jac(ss, shock_list, T)
-    Js_direct = {o.capitalize(): {i: np.empty((T, T)) for i in shock_list} for o in output_list}
+    Js = household.jacobian(ss, exogenous, T)
+    Js_direct = {o.capitalize(): {i: np.empty((T, T)) for i in exogenous} for o in output_list}
 
     # run td once without any shocks to get paths to subtract against
     # (better than subtracting by ss since ss not exact)
     # monotonic=True lets us know there is monotonicity of policy rule, makes TD run faster
-    # .td requires at least one input 'shock', so we put in steady-state w
-    td_noshock = household.td(ss, exogenous={"w": np.zeros(T)}, monotonic=True)
+    # .impulse_nonlinear requires at least one input 'shock', so we put in steady-state w
+    td_noshock = household.impulse_nonlinear(ss, exogenous={'w': np.zeros(T)}, monotonic=True)
 
-    for i in shock_list:
+    for i in exogenous:
         # simulate with respect to a shock at each date up to T
         for t in range(T):
-            td_out = household.td(ss, exogenous={i: h * (np.arange(T) == t)})
+            td_out = household.impulse_nonlinear(ss, exogenous={i: h * (np.arange(T) == t)})
 
             # store results as column t of J[o][i] for each outcome o
             for o in output_list:

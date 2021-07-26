@@ -190,9 +190,8 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
     Tax = r * B
     T = transfers(pi_e, Div, Tax, e_grid)
 
-    # initialize guess for policy function iteration
-    coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis] + T[:, np.newaxis]
-    Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
+    calibration = {'Pi': Pi, 'a_grid': a_grid, 'e_grid': e_grid, 'pi_e': pi_e, 'w': w, 'r': r, 'eis': eis, 'Div': Div,
+                   'Tax': Tax, 'frisch': frisch}
 
     # residual function
     def res(x):
@@ -200,16 +199,18 @@ def hank_ss(beta_guess=0.986, vphi_guess=0.8, r=0.005, eis=0.5, frisch=0.5, mu=1
         # precompute constrained c and n which don't depend on Va
         if beta_loc > 0.999 / (1 + r) or vphi_loc < 0.001:
             raise ValueError('Clearly invalid inputs')
-        out = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta_loc,
-                           eis=eis, Div=Div, Tax=Tax, frisch=frisch, vphi=vphi_loc)
+
+        calibration['beta'], calibration['vphi'] = beta_loc, vphi_loc
+        out = household.steady_state(calibration)
+
         return np.array([out['A'] - B, out['N_e'] - 1])
 
     # solve for beta, vphi
     (beta, vphi), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, vphi_guess]), verbose=False)
+    calibration['beta'], calibration['vphi'] = beta, vphi
 
     # extra evaluation for reporting
-    ss = household.ss(Va=Va, Pi=Pi, a_grid=a_grid, e_grid=e_grid, pi_e=pi_e, w=w, r=r, beta=beta, eis=eis,
-                      Div=Div, Tax=Tax, frisch=frisch, vphi=vphi)
+    ss = household.steady_state(calibration)
 
     # check Walras's law
     goods_mkt = 1 - ss['C']

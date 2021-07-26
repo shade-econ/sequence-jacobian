@@ -171,3 +171,73 @@ def forward_step_transpose_endo_2d(D, x_i, y_i, x_pi, y_pi):
                                     (1-alpha) * beta * D[iz, ixp+1, iyp] +
                                     (1-alpha) * (1-beta) * D[iz, ixp+1, iyp+1])
     return Dnew
+
+
+'''
+For HetDC block.
+
+D0 : s[-1], z[-1], a[-1] (end of last period)
+D1 : x[0],  z[-1], a[-1] (employment shock)
+D2 : x[0],  z[0],  a[-1] (productivity shock)
+D3 : s[0],  z[0],  a[-1] (discrete choice)      REFERENCE STAGE
+D4 : s[0],  z[0],  a[0]  (cont choice)
+
+'''
+
+
+def forward_step_exo(D0, Pi):
+    """Update distribution s[-1], z[-1], a[-1] to x[0], z[0], a[-1]."""
+    D1 = np.einsum('sza,sx->xza', D0, Pi[0])    # s[-1] -> x[0]
+    D2 = np.einsum('xza,zp->xpa', D1, Pi[1])    # z[-1] -> z[0]
+    return D2
+
+
+def forward_step_dpol(D2, P):
+    """Update distribution x[0], z[0], a[-1] to s[0], z[0], a[-1]."""
+    D3 = np.einsum('xza,xsza->sza', D2, P)
+    return D3
+
+
+@njit
+def forward_step_cpol(D3, a_i, a_pi):
+    """Update distribution s[0], z[0], a[-1] to s[0], z[0], a[0]."""
+    nS, nZ, nA = D3.shape
+    D4 = np.zeros_like(D3)
+    for iw in range(nS):
+        for iz in range(nZ):
+            for ia in range(nA):
+                i = a_i[iw, iz, ia]
+                pi = a_pi[iw, iz, ia]
+                d = D3[iw, iz, ia]
+                D4[iw, iz, i] += d * pi
+                D4[iw, iz, i+1] += d * (1 - pi)
+    return D4
+
+
+@njit
+def forward_step_cpol_shock(D3, a_i_ss, a_pi_shock):
+    """forward_step_cpol linearized wrt a_pi"""
+    nS, nZ, nA = D3.shape
+    dD4 = np.zeros_like(D3)
+    for iw in range(nS):
+        for iz in range(nZ):
+            for ia in range(nA):
+                i = a_i_ss[iw, iz, ia]
+                dshock = a_pi_shock[iw, iz, ia] * D3[iw, iz, ia]
+                dD4[iw, iz, i] += dshock
+                dD4[iw, iz, i + 1] -= dshock
+    return dD4
+
+
+@njit
+def forward_step_cpol_transpose(D3, a_i, a_pi):
+    """Transpose of forward_step_cpol"""
+    nS, nZ, nA = D3.shape
+    D4 = np.zeros_like(D3)
+    for iw in range(nS):
+        for iz in range(nZ):
+            for ia in range(nA):
+                i = a_i[iw, iz, ia]
+                pi = a_pi[iw, iz, ia]
+                D4[iw, iz, ia] = pi * D3[iw, iz, i] + (1 - pi) * D3[iw, iz, i + 1]
+    return D4

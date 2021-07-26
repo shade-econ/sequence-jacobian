@@ -4,14 +4,16 @@ import abc
 from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
+from copy import deepcopy
 
-from .steady_state.drivers import steady_state
+from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
 from .steady_state.classes import SteadyStateDict
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
+from .blocks.support.bijection import Bijection
 
 # Basic types
 Array = Any
@@ -68,23 +70,27 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def outputs(self):
         pass
 
-    # Typing information is purely to inform future user-developed `Block` sub-classes to enforce a canonical
-    # input and output argument structure
-    def steady_state(self, calibration: Dict[str, Union[Real, Array]],
-                     **kwargs) -> SteadyStateDict:
-        raise NotImplementedError(f'{type(self)} does not implement .steady_state()')
+    def steady_state(self, calibration: SteadyStateDict, **kwargs) -> SteadyStateDict:
+        """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
+        return self.M @ self._steady_state(self.M.inv @ calibration, **kwargs)
 
-    def impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
+    def impulse_nonlinear(self, ss: SteadyStateDict,
                           exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
-        raise NotImplementedError(f'{type(self)} does not implement .impulse_nonlinear()')
+        """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`."""
+        return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
+    def impulse_linear(self, ss: SteadyStateDict,
                        exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
-        raise NotImplementedError(f'{type(self)} does not implement .impulse_linear()')
+        """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks
+        from a steady state `ss`."""
+        return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def jacobian(self, ss: Dict[str, Union[Real, Array]], exogenous: List[str] = None,
-                 T: int = None, **kwargs) -> JacobianDict:
-        raise NotImplementedError(f'{type(self)} does not implement .jacobian()')
+    def jacobian(self, ss: SteadyStateDict,
+                 exogenous: Dict[str, Array],
+                 T: Optional[int] = None, **kwargs) -> JacobianDict:
+        """Calculate a partial equilibrium Jacobian to a set of `exogenous` shocks at a steady state `ss`."""
+        return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, T=T, **kwargs)
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
@@ -95,7 +101,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         solver = solver if solver else provide_solver_default(unknowns)
-        return steady_state(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
+        return ss(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],
@@ -135,3 +141,21 @@ class Block(abc.ABC, metaclass=ABCMeta):
         variables to be solved for and the target conditions that must hold in general equilibrium"""
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
+
+    def remap(self, map):
+        other = deepcopy(self)
+        other.M = self.M @ Bijection(map)
+        other.inputs = other.M @ self.inputs
+        other.outputs = other.M @ self.outputs
+        if hasattr(self, 'input_list'):
+            other.input_list = other.M @ self.input_list
+        if hasattr(self, 'output_list'):
+            other.output_list = other.M @ self.output_list
+        if hasattr(self, 'non_back_iter_outputs'):
+            other.non_back_iter_outputs = other.M @ self.non_back_iter_outputs
+        return other
+
+    def rename(self, name):
+        renamed = deepcopy(self)
+        renamed.name = name
+        return renamed

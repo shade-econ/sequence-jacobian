@@ -3,6 +3,7 @@ import warnings
 from ..primitives import Block
 from ..blocks.simple_block import simple
 from ..utilities import graph
+from .support.bijection import Bijection
 
 from ..jacobian.classes import JacobianDict
 
@@ -41,6 +42,7 @@ class SolvedBlock(Block):
     def __init__(self, blocks, name, unknowns, targets, solver=None, solver_kwargs={}):
         # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
         self._blocks_unsorted = blocks
+        self.M = Bijection({})  # don't inherit membrane from parent blocks (think more about this later)
 
         # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
         # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
@@ -68,26 +70,8 @@ class SolvedBlock(Block):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    # TODO: Deprecated methods, to be removed!
-    def ss(self, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(kwargs)
-
-    def td(self, ss, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
-                      DeprecationWarning)
-        return self.impulse_nonlinear(ss, **kwargs)
-
-    def jac(self, ss, T=None, shock_list=None, **kwargs):
-        if shock_list is None:
-            shock_list = []
-        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
-                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
-                      DeprecationWarning)
-        return self.jacobian(ss, shock_list, T, **kwargs)
-
-    def steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
-                     consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
+    def _steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
+                      consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:
@@ -105,18 +89,18 @@ class SolvedBlock(Block):
         return super().solve_steady_state(calibration, unknowns, self.targets, solver=solver,
                                           consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
 
-    def impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
+    def _impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
         return super().solve_impulse_nonlinear(ss, exogenous=exogenous,
                                                unknowns=list(self.unknowns.keys()), Js=Js,
                                                targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                                monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         return super().solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
                                             targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                             T=T, Js=Js)
 
-    def jacobian(self, ss, exogenous=None, T=300, outputs=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=300, outputs=None, Js=None):
         if exogenous is None:
             exogenous = list(self.inputs)
         if outputs is None:

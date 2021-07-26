@@ -173,3 +173,40 @@ def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
             return False
 
     return True
+
+
+'''Tools for taste shocks used in discrete choice problems'''
+
+
+def choice_prob(vfun, lam):
+    """
+    Logit choice probability of choosing along first axis.
+
+    Parameters
+    ----------
+    vfun : array(Ns, Nz, Na): discrete choice specific value function
+    lam  : float, scale of taste shock
+
+    Returns
+    -------
+    prob : array (Ns, Nz, nA): choice probability
+    """
+    # rescale values for numeric robustness
+    vmax = np.max(vfun, axis=0)
+    vfun_norm = vfun - vmax
+
+    # apply formula (could be njitted in separate function)
+    P = np.exp(vfun_norm / lam) / np.sum(np.exp(vfun_norm / lam), axis=0)
+    return P
+
+
+def logsum(vfun, lam):
+    """Logsum formula for expected continuation value."""
+
+    # rescale values for numeric robustness
+    vmax = np.max(vfun, axis=0)
+    vfun_norm = vfun - vmax
+
+    # apply formula (could be njitted in separate function)
+    VE = vmax + lam * np.log(np.sum(np.exp(vfun_norm / lam), axis=0))
+    return VE

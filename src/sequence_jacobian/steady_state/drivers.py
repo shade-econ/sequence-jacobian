@@ -145,20 +145,25 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
 def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **kwargs):
     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
     if toplevel_unknowns is None:
-        toplevel_unknowns = {}
-    block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
+        toplevel_unknowns = []
+    if dissolve is None:
+        dissolve = []
 
     # Add the block's internal variables as inputs, if the block has an internal attribute
-    input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
+    if isinstance(calibration, dict):
+        input_arg_dict = deepcopy(calibration)
+    else:
+        input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
 
     # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
     # at the provided set of unknowns if included in dissolve.
-    valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
+    valid_input_kwargs = misc.input_kwarg_list(block._steady_state)
+    block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
     if block in dissolve and "solver" in valid_input_kwargs:
         input_kwarg_dict["solver"] = "solved"
         input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
-    elif block.name not in dissolve and block_unknowns_in_toplevel_unknowns:
+    elif block not in dissolve and block_unknowns_in_toplevel_unknowns:
         raise RuntimeError(f"The block '{block.name}' is not in the kwarg `dissolve` but its unknowns,"
                            f" {set(block.unknowns.keys())} are a subset of the top-level unknowns,"
                            f" {set(toplevel_unknowns)}.\n"

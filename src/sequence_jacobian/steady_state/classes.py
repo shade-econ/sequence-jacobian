@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from ..utilities.misc import dict_diff
+from ..blocks.support.bijection import Bijection
 
 
 class SteadyStateDict:
@@ -31,6 +32,18 @@ class SteadyStateDict:
 
     def __setitem__(self, k, v):
         self.toplevel[k] = v
+
+    def __matmul__(self, x):
+        # remap keys in toplevel
+        if isinstance(x, Bijection):
+            new = deepcopy(self)
+            new.toplevel = x @ self.toplevel
+            return new
+        else:
+            NotImplemented
+
+    def __rmatmul__(self, x):
+        return self.__matmul__(x)
 
     def keys(self):
         return self.toplevel.keys()

@@ -35,3 +35,9 @@ def test_two_asset_steady_state(two_asset_hank_dag):
     assert set(ss.keys()) == set(ss_ref.keys())
     for k in ss.keys():
         assert np.all(np.isclose(ss[k], ss_ref[k]))
+
+
+def test_remap_steady_state(ks_remapped_dag):
+    _, _, _, _, ss = ks_remapped_dag
+    assert ss['beta_impatient'] < ss['beta_patient']
+    assert ss['A_impatient'] < ss['A_patient']

@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .support.impulse import ImpulseDict
+from .support.bijection import Bijection
 from ..primitives import Block
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
@@ -40,35 +41,18 @@ class SimpleBlock(Block):
         self.output_list = misc.output_list(f)
         self.inputs = set(self.input_list)
         self.outputs = set(self.output_list)
+        self.M = Bijection({})
 
     def __repr__(self):
-        return f"<SimpleBlock '{self.f.__name__}'>"
+        return f"<SimpleBlock '{self.name}'>"
 
-    # TODO: Deprecated methods, to be removed!
-    def ss(self, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .steady_state", DeprecationWarning)
-        return self.steady_state(kwargs)
-
-    def td(self, ss, **kwargs):
-        warnings.warn("This method has been deprecated. Please invoke by calling .impulse_nonlinear",
-                      DeprecationWarning)
-        return self.impulse_nonlinear(ss, exogenous=kwargs)
-
-    def jac(self, ss, T=None, shock_list=None):
-        if shock_list is None:
-            shock_list = []
-        warnings.warn("This method has been deprecated. Please invoke by calling .jacobian.\n"
-                      "Also, note that the kwarg `shock_list` in .jacobian has been renamed to `shocked_vars`",
-                      DeprecationWarning)
-        return self.jacobian(ss, exogenous=shock_list, T=T)
-
-    def steady_state(self, calibration):
+    def _steady_state(self, calibration):
         input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}
         output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [
             misc.numeric_primitive(self.f(**input_args))]
         return SteadyStateDict({**calibration, **dict(zip(self.output_list, output_vars))})
 
-    def impulse_nonlinear(self, ss, exogenous):
+    def _impulse_nonlinear(self, ss, exogenous):
         input_args = {}
         for k, v in exogenous.items():
             if np.isscalar(v):
@@ -81,10 +65,10 @@ class SimpleBlock(Block):
 
         return ImpulseDict(make_impulse_uniform_length(self.f(**input_args), self.output_list)) - ss
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
 
-    def jacobian(self, ss, exogenous=None, T=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=None, Js=None):
         """Assemble nested dict of Jacobians
 
         Parameters

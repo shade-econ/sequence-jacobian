@@ -359,26 +359,27 @@ def two_asset_ss(beta_guess=0.976, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10
     rb = r - omega
 
     # figure out initializer
-    z_grid = income(e_grid, tax, w, 1)
-    Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
-    Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
+    calibration = {'Pi': Pi, 'a_grid': a_grid, 'b_grid': b_grid, 'e_grid': e_grid, 'k_grid': k_grid,
+                   'N': 1.0, 'tax': tax, 'w': w, 'eis': eis, 'rb': rb, 'ra': ra, 'chi0': chi0, 'chi2': chi2}
 
     # residual function
     def res(x):
         beta_loc, chi1_loc = x
+
         if beta_loc > 0.999 / (1 + r) or chi1_loc < 0.5:
             raise ValueError('Clearly invalid inputs')
-        out = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
-                           k_grid=k_grid, beta=beta_loc, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1_loc, chi2=chi2)
+
+        calibration['beta'], calibration['chi1'] = beta_loc, chi1_loc
+        out = household.steady_state(calibration)
         asset_mkt = out['A'] + out['B'] - p - Bg
         return np.array([asset_mkt, out['B'] - Bh])
 
     # solve for beta, vphi, omega
     (beta, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, chi1_guess]), verbose=verbose)
+    calibration['beta'], calibration['chi1'] = beta, chi1
 
-    # extra evaluation to report variables
-    ss = household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid, N=1, tax=tax, w=w, e_grid=e_grid,
-                      k_grid=k_grid, beta=beta, eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+    # extra evaluation for reporting
+    ss = household.steady_state(calibration)
 
     # other things of interest
     vphi = (1 - tax) * w * ss['U'] / muw

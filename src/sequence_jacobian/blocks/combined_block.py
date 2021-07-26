@@ -9,6 +9,8 @@ from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
+from ..steady_state.classes import SteadyStateDict
+from .support.bijection import Bijection
 
 
 def combine(blocks, name="", model_alias=False):
@@ -33,6 +35,7 @@ class CombinedBlock(Block):
         self._sorted_indices = utils.graph.block_sort(blocks)
         self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks)
         self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices]
+        self.M = Bijection({})
 
         if not name:
             self.name = f"{self.blocks[0].name}_to_{self.blocks[-1].name}_combined"
@@ -55,7 +58,7 @@ class CombinedBlock(Block):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def steady_state(self, calibration, helper_blocks=None, **kwargs):
+    def _steady_state(self, calibration, helper_blocks=None, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         if helper_blocks is None:
             helper_blocks = []
@@ -63,12 +66,17 @@ class CombinedBlock(Block):
         topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
         blocks_all = self.blocks + helper_blocks
 
-        ss_partial_eq = deepcopy(calibration)
+        ss_partial_eq_toplevel = deepcopy(calibration)
+        ss_partial_eq_internal = {}
         for i in topsorted:
-            ss_partial_eq.update(eval_block_ss(blocks_all[i], ss_partial_eq, **kwargs))
-        return ss_partial_eq
+            outputs = eval_block_ss(blocks_all[i], ss_partial_eq_toplevel, **kwargs)
+            ss_partial_eq_toplevel.update(outputs.toplevel)
+            if outputs.internal:
+                ss_partial_eq_internal.update(outputs.internal)
+        ss_partial_eq_internal = {self.name: ss_partial_eq_internal} if ss_partial_eq_internal else {}
+        return SteadyStateDict(ss_partial_eq_toplevel, internal=ss_partial_eq_internal)
 
-    def impulse_nonlinear(self, ss, exogenous, **kwargs):
+    def _impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
         a steady state, `ss`"""
         irf_nonlin_partial_eq = deepcopy(exogenous)
@@ -80,7 +88,7 @@ class CombinedBlock(Block):
 
         return ImpulseDict(irf_nonlin_partial_eq)
 
-    def impulse_linear(self, ss, exogenous, T=None, Js=None):
+    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
         a steady_state, `ss`"""
         irf_lin_partial_eq = deepcopy(exogenous)
@@ -92,7 +100,7 @@ class CombinedBlock(Block):
 
         return ImpulseDict(irf_lin_partial_eq)
 
-    def jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):
         """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
         a steady state, `ss`"""
         if exogenous is None:
@@ -102,7 +110,7 @@ class CombinedBlock(Block):
         kwargs = {"exogenous": exogenous, "T": T, "outputs": outputs, "Js": Js}
 
         for i, block in enumerate(self.blocks):
-            curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block.jacobian) if k in kwargs}).complete()
+            curlyJ = block._jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block._jacobian) if k in kwargs}).complete()
 
             # If we want specific list of outputs, restrict curlyJ to that before continuing
             curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]
