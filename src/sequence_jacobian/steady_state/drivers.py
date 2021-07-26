@@ -157,7 +157,7 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
 
     # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
     # at the provided set of unknowns if included in dissolve.
-    valid_input_kwargs = misc.input_kwarg_list(block.steady_state)
+    valid_input_kwargs = misc.input_kwarg_list(block._steady_state)
     block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
     if block in dissolve and "solver" in valid_input_kwargs:
@@ -170,7 +170,7 @@ def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **k
                            f"If the user provides a set of top-level unknowns that subsume block-level unknowns,"
                            f" it must be explicitly declared in `dissolve`.")
 
-    return block.M @ block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
+    return block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
 
 
 def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, residual_kwargs=None,
