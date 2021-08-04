@@ -1,6 +1,7 @@
 """CombinedBlock class and the combine function to generate it"""
 
 from copy import deepcopy
+import numpy as np
 
 from .support.impulse import ImpulseDict
 from ..primitives import Block
@@ -100,26 +101,56 @@ class CombinedBlock(Block):
 
         return ImpulseDict(irf_lin_partial_eq)
 
+    def partial_jacobians(self, ss, inputs=None, T=None, Js=None):
+        """Calculate partial Jacobians (i.e. without forward accumulation) wrt `inputs` and outputs of other blocks."""
+        if inputs is None:
+            inputs = self.inputs
+
+        # Add intermediate inputs; remove vector-valued inputs
+        shocks = set(inputs) | self._required
+        shocks -= set([k for k, v in ss.items() if np.size(v) > 1])
+
+        # Compute Jacobians along the DAG
+        curlyJs = {}
+        kwargs = {"exogenous": shocks, "T": T, "Js": Js}
+        for block in self.blocks:
+            # Don't remap here
+            curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block._jacobian)
+                                           if k in kwargs})
+
+            # Don't return empty Jacobians
+            if curlyJ.outputs:
+                curlyJs[block.name] = curlyJ
+
+        return curlyJs
+
     def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):
         """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
         a steady state, `ss`"""
-        if exogenous is None:
-            exogenous = list(self.inputs)
-        if outputs is None:
-            outputs = self.outputs
-        kwargs = {"exogenous": exogenous, "T": T, "outputs": outputs, "Js": Js}
+        if outputs is not None:
+            # if list of outputs provided, we need to obtain these and 'required' along the way
+            alloutputs = set(outputs) | self._required
+        else:
+            # otherwise, set to None, implies default behavior of obtaining all outputs in curlyJs
+            alloutputs = None
 
-        for i, block in enumerate(self.blocks):
-            curlyJ = block._jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block._jacobian) if k in kwargs}).complete()
+        # Compute all partial Jacobians
+        curlyJs = self.partial_jacobians(ss, inputs=exogenous, T=T, Js=Js)
 
-            # If we want specific list of outputs, restrict curlyJ to that before continuing
-            curlyJ = curlyJ[[k for k in curlyJ.outputs if k in outputs or k in self._required]]
-            if i == 0:
-                J_partial_eq = curlyJ.compose(JacobianDict.identity(exogenous))
-            else:
-                J_partial_eq.update(curlyJ.compose(J_partial_eq))
+        # Forward accumulate partial Jacobians
+        out = JacobianDict.identity(exogenous)
+        for curlyJ in curlyJs.values():
+            if alloutputs is not None:
+                # don't accumulate derivatives we don't need or care about
+                curlyJ = curlyJ[[k for k in alloutputs if k in curlyJ.outputs]]
+            out.update(curlyJ.compose(out))
 
-        return J_partial_eq
+        if outputs is not None:
+            # don't return derivatives that we don't care about (even if required them above)
+            return out[[k for k in outputs if k in out.outputs]]
+        else:
+            return out
+
 
     def solve_steady_state(self, calibration, unknowns, targets, solver=None, helper_blocks=None,
                            sort_blocks=False, **kwargs):

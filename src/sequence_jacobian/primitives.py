@@ -87,7 +87,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
     def jacobian(self, ss: SteadyStateDict,
-                 exogenous: Dict[str, Array],
+                 exogenous: List[str],
                  T: Optional[int] = None, **kwargs) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `exogenous` shocks at a steady state `ss`."""
         return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, T=T, **kwargs)
