@@ -271,7 +271,7 @@ class HetBlock(Block):
         T = shock_lengths[0]
 
         # copy from ss info
-        Pi_T = ss[self.exogenous].T.copy()
+        Pi_T = ss.internal[self.name][self.exogenous].T.copy()
         D = ss.internal[self.name]['D']
 
         # construct grids for policy variables either from the steady state grid if the grid is meant to be
@@ -736,7 +736,7 @@ class HetBlock(Block):
         """
         # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
         ssin_dict = self.make_inputs(ss)
-        Pi = ss[self.exogenous]
+        Pi = ss.internal[self.name][self.exogenous]
         grid = {k: ss[k+'_grid'] for k in self.policy}
         ssout_list = self.back_step_fun(**ssin_dict)
 
