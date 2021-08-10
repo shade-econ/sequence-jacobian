@@ -1,6 +1,6 @@
 import numpy as np
 import sequence_jacobian as sj
-from sequence_jacobian import het, simple, hetoutput, combine, create_model, get_H_U
+from sequence_jacobian import het, simple, hetoutput, combine, solved, create_model, get_H_U
 from sequence_jacobian.jacobian.classes import JacobianDict, ZeroMatrix
 
 
@@ -134,10 +134,25 @@ dag = sj.create_model([hh, interest_rates, fiscal, mkt_clearing], name='HANK')
 calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 11,
                'amin': 0.0, 'amax': 1000, 'nA': 500, 'Gamma': 0.0, 'transfer': 0.143}
 
-ss = dag.solve_steady_state(calibration, solver='hybr',
+ss0 = dag.solve_steady_state(calibration, solver='hybr',
                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
                             targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
 
+@solved(unknowns={'B': (0.0, 10.0)}, targets=['B_rule'], solver='brentq')
+def fiscal_solved(B, G, rb, Y, transfer, rho_B):
+    B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
+    rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
+    tau = rev / Y
+    return B_rule, rev, tau
+
+dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
+calibration['rho_B'] = 0.8
+
+ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
+                            unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
+                            targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+
+assert all(np.allclose(ss0[k], ss[k]) for k in ss0)
 
 # Partial Jacobians
 # J_ir = interest_rates.jacobian(ss, ['r', 'tau'])

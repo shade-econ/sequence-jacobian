@@ -22,7 +22,7 @@ def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name
     else:
         # call as decorator, return function of function
         def singleton_solved_block(f):
-            return SolvedBlock([simple(f)], f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
+            return SolvedBlock([simple(f).rename(f.__name__ + '_inner')], f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
         return singleton_solved_block
 
 
@@ -73,8 +73,12 @@ class SolvedBlock(Block, Parent):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, unknowns=None, helper_blocks=None, solver=None,
+    def _steady_state(self, calibration, dissolve=[], unknowns=None, helper_blocks=None, solver=None,
                       consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
+        if self.name in dissolve:
+            solver = "solved"
+            unknowns = {k: v for k, v in calibration.items() if k in unknowns}
+
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
         if self._sorted_indices_w_helpers is None:

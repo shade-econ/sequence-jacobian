@@ -61,7 +61,7 @@ class CombinedBlock(Block, Parent):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, helper_blocks=None, **kwargs):
+    def _steady_state(self, calibration, dissolve=[], helper_blocks=None, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         if helper_blocks is None:
             helper_blocks = []
@@ -72,7 +72,9 @@ class CombinedBlock(Block, Parent):
         ss_partial_eq_toplevel = deepcopy(calibration)
         ss_partial_eq_internal = {}
         for i in topsorted:
-            outputs = blocks_all[i].steady_state(ss_partial_eq_toplevel, **kwargs)
+            # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
+            inner_dissolve = [k for k in dissolve if self.descendants[k] == blocks_all[i].name]
+            outputs = blocks_all[i].steady_state(ss_partial_eq_toplevel, dissolve=inner_dissolve, **kwargs)
             ss_partial_eq_toplevel.update(outputs.toplevel)
             if outputs.internal:
                 ss_partial_eq_internal.update(outputs.internal)

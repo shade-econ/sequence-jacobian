@@ -10,6 +10,7 @@ from .support import compute_target_values, extract_multivariate_initial_values_
     subset_helper_block_unknowns, instantiate_steady_state_mutable_kwargs
 from .classes import SteadyStateDict
 from ..utilities import solvers, graph, misc
+from ..blocks.parent import Parent
 
 
 # Find the steady state solution
@@ -101,8 +102,10 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
         for i in topsorted:
             if not include_helpers and blocks_all[i] in helper_blocks:
                 continue
+            # TODO: this is duplicate of CombinedBlock inner_dissolve, should offload to that
+            inner_dissolve = [k for k in dissolve if isinstance(blocks_all[i], Parent) and k in blocks_all[i].descendants]
             outputs = blocks_all[i].steady_state(ss_values, hetoutput=True, 
-                                    dissolve=dissolve, verbose=verbose, **block_kwargs)
+                                    dissolve=inner_dissolve, verbose=verbose, **block_kwargs)
             if include_helpers and blocks_all[i] in helper_blocks:
                 helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
                 ss_values.update(outputs)
