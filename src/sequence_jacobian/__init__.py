@@ -2,7 +2,7 @@
 
 from . import estimation, jacobian, nonlinear, utilities, devtools
 
-#from .models import rbc, krusell_smith, hank, two_asset
+from .models import rbc, krusell_smith, hank, two_asset
 
 from .blocks.simple_block import simple
 from .blocks.het_block import het, hetoutput
