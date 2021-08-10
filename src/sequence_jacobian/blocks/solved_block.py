@@ -2,8 +2,8 @@ import warnings
 
 from ..primitives import Block
 from ..blocks.simple_block import simple
+from ..blocks.parent import Parent
 from ..utilities import graph
-from .support.bijection import Bijection
 
 from ..jacobian.classes import JacobianDict
 
@@ -26,7 +26,7 @@ def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name
         return singleton_solved_block
 
 
-class SolvedBlock(Block):
+class SolvedBlock(Block, Parent):
     """SolvedBlocks are mini SHADE models embedded as blocks inside larger SHADE models.
 
     When creating them, we need to provide the basic ingredients of a SHADE model: the list of
@@ -42,7 +42,7 @@ class SolvedBlock(Block):
     def __init__(self, blocks, name, unknowns, targets, solver=None, solver_kwargs={}):
         # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
         self._blocks_unsorted = blocks
-        self.M = Bijection({})  # don't inherit membrane from parent blocks (think more about this later)
+        super().__init__()
 
         # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
         # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
@@ -62,6 +62,9 @@ class SolvedBlock(Block):
         self.targets = targets
         self.solver = solver
         self.solver_kwargs = solver_kwargs
+
+        # initialize as parent
+        Parent.__init__(self, self.blocks)
 
         # need to have inputs and outputs!!!
         self.outputs = (set.union(*(b.outputs for b in blocks)) | set(list(self.unknowns.keys()))) - set(self.targets)

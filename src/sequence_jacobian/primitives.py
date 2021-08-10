@@ -58,9 +58,9 @@ class ABCMeta(NativeABCMeta):
 class Block(abc.ABC, metaclass=ABCMeta):
     """The abstract base class for all `Block` objects."""
 
-    @abc.abstractmethod
+    #@abc.abstractmethod
     def __init__(self):
-        pass
+        self.M = Bijection({})
 
     @abstract_attribute
     def inputs(self):

@@ -35,13 +35,13 @@ class SimpleBlock(Block):
     """
 
     def __init__(self, f):
+        super().__init__()
         self.f = f
         self.name = f.__name__
         self.input_list = misc.input_list(f)
         self.output_list = misc.output_list(f)
         self.inputs = set(self.input_list)
         self.outputs = set(self.output_list)
-        self.M = Bijection({})
 
     def __repr__(self):
         return f"<SimpleBlock '{self.name}'>"

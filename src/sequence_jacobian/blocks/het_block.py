@@ -57,7 +57,7 @@ class HetBlock(Block):
         Currently, we only support up to two policy variables.
         """
         self.name = back_step_fun.__name__
-        self.M = Bijection({})
+        super().__init__()
 
         # self.back_step_fun is one iteration of the backward step function pertaining to a given HetBlock.
         # i.e. the function pertaining to equation (14) in the paper: v_t = curlyV(v_{t+1}, X_t)
