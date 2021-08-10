@@ -58,3 +58,22 @@ class Parent:
             return list(reversed(p))
         else:
             return p
+
+    def get_attribute(self, k, attr):
+        """Gets attribute attr from descendant k, respecting any remapping
+        along the way (requires that attr is list, dict, set)"""
+        if k == self.name:
+            inner = getattr(self, attr)
+        else:
+            kid = self.kids[self.descendants[k]]
+            if isinstance(kid, Parent):
+                inner = kid.get_attribute(k, attr)
+            else:
+                inner = getattr(kid, attr)
+                if hasattr(kid, 'M'):
+                    inner = kid.M @ inner
+
+        if hasattr(self, 'M'):
+            return self.M @ inner
+        else:
+            return inner
