@@ -13,7 +13,7 @@ from ..utilities import solvers, graph, misc
 
 
 # Find the steady state solution
-def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
+def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
                  sort_blocks=True, helper_blocks=None, helper_targets=None,
                  consistency_check=True, ttol=2e-12, ctol=1e-9, fragile=False,
                  block_kwargs=None, verbose=False, solver=None, solver_kwargs=None,
@@ -101,7 +101,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
         for i in topsorted:
             if not include_helpers and blocks_all[i] in helper_blocks:
                 continue
-            outputs = eval_block_ss(blocks_all[i], ss_values, hetoutput=True, toplevel_unknowns=unknown_keys,
+            outputs = blocks_all[i].steady_state(ss_values, hetoutput=True, 
                                     dissolve=dissolve, verbose=verbose, **block_kwargs)
             if include_helpers and blocks_all[i] in helper_blocks:
                 helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
@@ -142,35 +142,35 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
     return ss_values
 
 
-def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **kwargs):
-    """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
-    if toplevel_unknowns is None:
-        toplevel_unknowns = []
-    if dissolve is None:
-        dissolve = []
+# def eval_block_ss(block, calibration, toplevel_unknowns=None, dissolve=None, **kwargs):
+#     """Evaluate the .ss method of a block, given a dictionary of potential arguments"""
+#     if toplevel_unknowns is None:
+#         toplevel_unknowns = []
+#     if dissolve is None:
+#         dissolve = []
 
-    # Add the block's internal variables as inputs, if the block has an internal attribute
-    if isinstance(calibration, dict):
-        input_arg_dict = deepcopy(calibration)
-    else:
-        input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
+#     # Add the block's internal variables as inputs, if the block has an internal attribute
+#     if isinstance(calibration, dict):
+#         input_arg_dict = deepcopy(calibration)
+#     else:
+#         input_arg_dict = {**calibration.toplevel, **calibration.internal[block.name]} if block.name in calibration.internal else calibration.toplevel
 
-    # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
-    # at the provided set of unknowns if included in dissolve.
-    valid_input_kwargs = misc.input_kwarg_list(block._steady_state)
-    block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
-    input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
-    if block in dissolve and "solver" in valid_input_kwargs:
-        input_kwarg_dict["solver"] = "solved"
-        input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
-    elif block not in dissolve and block_unknowns_in_toplevel_unknowns:
-        raise RuntimeError(f"The block '{block.name}' is not in the kwarg `dissolve` but its unknowns,"
-                           f" {set(block.unknowns.keys())} are a subset of the top-level unknowns,"
-                           f" {set(toplevel_unknowns)}.\n"
-                           f"If the user provides a set of top-level unknowns that subsume block-level unknowns,"
-                           f" it must be explicitly declared in `dissolve`.")
+#     # Bypass the behavior for SolvedBlocks to numerically solve for their unknowns and simply evaluate them
+#     # at the provided set of unknowns if included in dissolve.
+#     valid_input_kwargs = misc.input_kwarg_list(block._steady_state)
+#     block_unknowns_in_toplevel_unknowns = set(block.unknowns.keys()).issubset(set(toplevel_unknowns)) if hasattr(block, "unknowns") else False
+#     input_kwarg_dict = {k: v for k, v in kwargs.items() if k in valid_input_kwargs}
+#     if block in dissolve and "solver" in valid_input_kwargs:
+#         input_kwarg_dict["solver"] = "solved"
+#         input_kwarg_dict["unknowns"] = {k: v for k, v in calibration.items() if k in block.unknowns}
+#     elif block not in dissolve and block_unknowns_in_toplevel_unknowns:
+#         raise RuntimeError(f"The block '{block.name}' is not in the kwarg `dissolve` but its unknowns,"
+#                            f" {set(block.unknowns.keys())} are a subset of the top-level unknowns,"
+#                            f" {set(toplevel_unknowns)}.\n"
+#                            f"If the user provides a set of top-level unknowns that subsume block-level unknowns,"
+#                            f" it must be explicitly declared in `dissolve`.")
 
-    return block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
+#     return block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
 
 
 def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, residual_kwargs=None,

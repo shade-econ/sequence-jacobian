@@ -10,10 +10,12 @@ from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
-from .steady_state.classes import SteadyStateDict
+from .steady_state.classes import SteadyStateDict, UserProvidedSS, make_steadystatedict
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
 from .blocks.support.bijection import Bijection
+from .blocks.parent import Parent
+from .utilities import misc
 
 # Basic types
 Array = Any
@@ -61,6 +63,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     #@abc.abstractmethod
     def __init__(self):
         self.M = Bijection({})
+        self.ss_valid_input_kwargs = misc.input_kwarg_list(self._steady_state)
 
     @abstract_attribute
     def inputs(self):
@@ -70,9 +73,18 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def outputs(self):
         pass
 
-    def steady_state(self, calibration: SteadyStateDict, **kwargs) -> SteadyStateDict:
+    def steady_state(self, calibration: Union[SteadyStateDict, UserProvidedSS], 
+                     dissolve: Optional[List[str]] = [], **kwargs) -> SteadyStateDict:
         """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
-        return self.M @ self._steady_state(self.M.inv @ calibration, **kwargs)
+        # special handling: add all unknowns of dissolved blocks to inputs
+        inputs = self.inputs.copy()
+        if isinstance(self, Parent):
+            for k in dissolve:
+                inputs |= self.get_attribute(k, 'unknowns').keys()
+
+        calibration = make_steadystatedict(calibration)[inputs]
+
+        return self.M @ self._steady_state(self.M.inv @ calibration, **{k: v for k, v in kwargs.items() if k in self.ss_valid_input_kwargs})
 
     def impulse_nonlinear(self, ss: SteadyStateDict,
                           exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:

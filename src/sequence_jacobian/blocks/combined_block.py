@@ -8,7 +8,6 @@ from ..primitives import Block
 from .. import utilities as utils
 from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..blocks.parent import Parent
-from ..steady_state.drivers import eval_block_ss
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
 from ..steady_state.classes import SteadyStateDict
@@ -73,11 +72,10 @@ class CombinedBlock(Block, Parent):
         ss_partial_eq_toplevel = deepcopy(calibration)
         ss_partial_eq_internal = {}
         for i in topsorted:
-            outputs = eval_block_ss(blocks_all[i], ss_partial_eq_toplevel, **kwargs)
+            outputs = blocks_all[i].steady_state(ss_partial_eq_toplevel, **kwargs)
             ss_partial_eq_toplevel.update(outputs.toplevel)
             if outputs.internal:
                 ss_partial_eq_internal.update(outputs.internal)
-        ss_partial_eq_internal = {self.name: ss_partial_eq_internal} if ss_partial_eq_internal else {}
         return SteadyStateDict(ss_partial_eq_toplevel, internal=ss_partial_eq_internal)
 
     def _impulse_nonlinear(self, ss, exogenous, **kwargs):

@@ -1,4 +1,6 @@
 class Parent:
+    # see tests in test_parent_block.py
+    
     def __init__(self, blocks, name=None):
         # dict from names to immediate kid blocks themselves
         # dict from descendants to the names of kid blocks through which to access them

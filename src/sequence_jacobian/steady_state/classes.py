@@ -5,6 +5,9 @@ from copy import deepcopy
 from ..utilities.misc import dict_diff
 from ..blocks.support.bijection import Bijection
 
+from numbers import Real
+from typing import Any, Dict, Union
+Array = Any
 
 class SteadyStateDict:
     def __init__(self, data, internal=None):
@@ -77,3 +80,11 @@ class SteadyStateDict:
 
     def difference(self, data_to_remove):
         return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), internal=deepcopy(self.internal))
+
+UserProvidedSS = Dict[str, Union[Real, Array]]
+
+def make_steadystatedict(ss: Union[SteadyStateDict, UserProvidedSS]) -> SteadyStateDict:
+    if not isinstance(ss, SteadyStateDict):
+        return SteadyStateDict(ss)
+    else:
+        return ss

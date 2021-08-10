@@ -34,6 +34,7 @@ class SimpleBlock(Block):
     Key methods are .ss, .td, and .jac, like HetBlock.
     """
 
+    # TODO: get rid of .input_list because it serves no function
     def __init__(self, f):
         super().__init__()
         self.f = f
