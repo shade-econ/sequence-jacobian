@@ -28,16 +28,11 @@ def test_jacobian_dict_block_impulses(rbc_dag):
 
 
 def test_jacobian_dict_block_combine(rbc_dag):
-    rbc_model, exogenous, unknowns, _, ss = rbc_dag
+    _, exogenous, _, _, ss = rbc_dag
 
     J_firm = rbc.firm.jacobian(ss, exogenous=exogenous)
     blocks_w_jdict = [rbc.household, J_firm, rbc.mkt_clearing]
     cblock_w_jdict = combine(blocks_w_jdict)
 
-    blocks_w_ndict = [rbc.household, J_firm.nesteddict, rbc.mkt_clearing]
-    cblock_w_ndict = combine(blocks_w_ndict)
-
-    # Ensure that the JacobianDict and the raw nested dict were properly converted to JacobianDictBlocks after
-    # the use of combine
+    # Using `combine` converts JacobianDicts to JacobianDictBlocks
     assert isinstance(cblock_w_jdict._blocks_unsorted[1], JacobianDictBlock)
-    assert isinstance(cblock_w_ndict._blocks_unsorted[1], JacobianDictBlock)
