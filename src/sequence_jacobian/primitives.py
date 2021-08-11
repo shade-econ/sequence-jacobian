@@ -85,11 +85,6 @@ class Block(abc.ABC, metaclass=ABCMeta):
         calibration = make_steadystatedict(calibration)[inputs]
         kwargs['dissolve'] = dissolve
 
-        # TODO: does this respect remapping?
-        if self.name in dissolve and "solver" in self.ss_valid_input_kwargs:
-            kwargs["solver"] = "solved"
-            kwargs["unknowns"] = {k: v for k, v in calibration.items() if k in self.unknowns}
-
         return self.M @ self._steady_state(self.M.inv @ calibration, **{k: v for k, v in kwargs.items() if k in self.ss_valid_input_kwargs})
 
     def impulse_nonlinear(self, ss: SteadyStateDict,
