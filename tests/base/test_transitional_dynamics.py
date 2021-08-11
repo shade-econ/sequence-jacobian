@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from sequence_jacobian import two_asset, combine, get_H_U
-from sequence_jacobian import utilities as utils
+from sequence_jacobian import combine
+from sequence_jacobian.models import two_asset
 
 
 # TODO: Figure out a more robust way to check similarity of the linear and non-linear solution.
