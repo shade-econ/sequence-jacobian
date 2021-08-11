@@ -48,7 +48,8 @@ class SolvedBlock(Block, Parent):
         # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
         # Hence, we will cache that info upon first invocation of the steady_state
         self._sorted_indices_w_o_helpers = graph.block_sort(blocks)
-        self._sorted_indices_w_helpers = None  # These indices are cached the first time steady state is evaluated
+        # These indices are cached the first time steady state is evaluated
+        self._sorted_indices_w_helpers = None
         self._required = graph.find_outputs_that_are_intermediate_inputs(blocks)
 
         # User-facing attributes for accessing blocks
@@ -77,7 +78,7 @@ class SolvedBlock(Block, Parent):
                       consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
         if self.name in dissolve:
             solver = "solved"
-            unknowns = {k: v for k, v in calibration.items() if k in unknowns}
+            unknowns = {k: v for k, v in calibration.items() if k in self.unknowns}
 
         # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
         # accounting for HelperBlocks
