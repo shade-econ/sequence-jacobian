@@ -113,8 +113,11 @@ class Block(abc.ABC, metaclass=ABCMeta):
             jac = self.jacobian(ss, inputs, T)
             return {self.name: jac} if jac else {}
 
-        # otherwise call child method with remapping (but not for Js, which are not remapped to top level)
-        return self.M @ self._partial_jacobians(self.M.inv @ ss, self.M.inv @ inputs, T, Js)
+        # otherwise call child method with remapping (and remap your own but none of the child Js)
+        partial = self._partial_jacobians(self.M.inv @ ss, self.M.inv @ inputs, T, Js)
+        if self.name in partial:
+            partial[self.name] = self.M @ partial[self.name]
+        return partial
 
     def jacobian(self, ss: SteadyStateDict,
                  exogenous: List[str],

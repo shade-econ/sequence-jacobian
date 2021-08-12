@@ -5,7 +5,7 @@ from ..blocks.simple_block import simple
 from ..blocks.parent import Parent
 from ..utilities import graph
 
-from ..jacobian.classes import JacobianDict
+from ..jacobian.classes import JacobianDict, FactoredJacobianDict
 
 
 def solved(unknowns, targets, solver=None, solver_kwargs={}, name=""):
@@ -95,3 +95,13 @@ class SolvedBlock(Block, Parent):
                                           T=T, outputs=outputs, Js=Js)
         else:
             return JacobianDict({})
+
+    def _partial_jacobians(self, ss, inputs=None, T=None, Js={}):
+        # call it on the child first
+        inner_Js = self.block.partial_jacobians(ss, inputs=(self.unknowns.keys() | inputs), T=T, Js=Js)
+
+        # with these inner Js, also compute H_U and factorize
+        H_U = self.block.jacobian(ss, inputs=self.unknowns.keys(), T=T, outputs=self.targets.keys(), Js=inner_Js)
+        H_U_factored = FactoredJacobianDict(H_U, T)
+
+        return {**inner_Js, self.name: H_U_factored}
