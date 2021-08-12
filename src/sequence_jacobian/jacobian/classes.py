@@ -7,6 +7,7 @@ import numpy as np
 from . import support
 from ..blocks.support.bijection import Bijection
 
+from scipy.linalg import lu_factor, lu_solve
 
 class Jacobian(metaclass=ABCMeta):
     """An abstract base class encompassing all valid types representing Jacobians, which include
@@ -453,6 +454,27 @@ class JacobianDict(NestedDict):
             for iI, I in enumerate(inputs):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
         return JacobianDict(jacdict, outputs, inputs)
+
+
+class FactoredJacobianDict(JacobianDict):
+    def __init__(self, jacobian_dict: JacobianDict, T):
+        H_U = jacobian_dict.pack(T)
+        self.targets = jacobian_dict.outputs
+        self.unknowns = jacobian_dict.inputs
+        if len(self.targets) != len(self.unknowns):
+            raise ValueError('Trying to factor Jacobian Dict unequal number of inputs (unknowns)'
+                            f' {self.unknowns} and outputs (targets) {self.targets}')
+        self.H_U_factored = lu_factor(H_U)
+
+    def compose(self, J):
+        # take intersection of J outputs with self.targets
+        # then pack that reduced J into a matrix, then apply lu_solve, then unpack
+        pass
+
+    def apply(self, x):
+        # take intersection of x entries with self.targets
+        # then pack (should be ImpulseDict?) into a vector, then apply lu_solve, then unpack
+        pass
 
 
 def ensure_valid_jacobiandict(d):
