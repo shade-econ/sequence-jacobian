@@ -104,27 +104,23 @@ class CombinedBlock(Block, Parent):
 
         return ImpulseDict(irf_lin_partial_eq)
 
-    def partial_jacobians(self, ss, inputs=None, T=None, Js=None):
+    def _partial_jacobians(self, ss, inputs=None, T=None, Js={}):
         """Calculate partial Jacobians (i.e. without forward accumulation) wrt `inputs` and outputs of other blocks."""
-        if inputs is None:
-            inputs = self.inputs
-
         # Add intermediate inputs; remove vector-valued inputs
         shocks = set(inputs) | self._required
         shocks -= set([k for k, v in ss.items() if np.size(v) > 1])
 
         # Compute Jacobians along the DAG
         curlyJs = {}
-        kwargs = {"exogenous": shocks, "T": T, "Js": Js}
         for block in self.blocks:
+            descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
+            Js_block = {k: v for k, v in Js.items() if k in descendants}
+
             # Don't remap here
-            curlyJ = block.jacobian(ss, **{k: kwargs[k] for k in utils.misc.input_kwarg_list(block._jacobian)
-                                           if k in kwargs})
+            curlyJ = block.partial_jacobians(ss, shocks & block.inputs, T, Js_block)
 
-            # Don't return empty Jacobians
-            if curlyJ.outputs:
-                curlyJs[block.name] = curlyJ
-
+            curlyJs.update(curlyJ)
+            
         return curlyJs
 
     def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):

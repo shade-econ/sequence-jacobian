@@ -138,21 +138,23 @@ ss0 = dag.solve_steady_state(calibration, solver='hybr',
                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
                             targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
 
-@solved(unknowns={'B': (0.0, 10.0)}, targets=['B_rule'], solver='brentq')
-def fiscal_solved(B, G, rb, Y, transfer, rho_B):
-    B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
-    rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
-    tau = rev / Y
-    return B_rule, rev, tau
+Js = dag.partial_jacobians(ss0, inputs=['Y', 'r'], T=10)
 
-dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
-calibration['rho_B'] = 0.8
+# @solved(unknowns={'B': (0.0, 10.0)}, targets=['B_rule'], solver='brentq')
+# def fiscal_solved(B, G, rb, Y, transfer, rho_B):
+#     B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
+#     rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
+#     tau = rev / Y
+#     return B_rule, rev, tau
 
-ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
-                            unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-                            targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+# dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
+# calibration['rho_B'] = 0.8
 
-assert all(np.allclose(ss0[k], ss[k]) for k in ss0)
+# ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
+#                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
+#                             targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+
+# assert all(np.allclose(ss0[k], ss[k]) for k in ss0)
 
 # Partial Jacobians
 # J_ir = interest_rates.jacobian(ss, ['r', 'tau'])

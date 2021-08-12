@@ -99,6 +99,23 @@ class Block(abc.ABC, metaclass=ABCMeta):
         from a steady state `ss`."""
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
+    def partial_jacobians(self, ss, inputs=None, T=None, Js={}):
+        # TODO: annotate signature
+        if inputs is None:
+            inputs = self.inputs
+        
+        # if you have a J for this block that already has everything you need, use it
+        if (self.name in Js) and (inputs <= Js[self.name].inputs) and (self.outputs == Js[self.name].outputs):
+            return Js[self.name][:, inputs]
+
+        # if it's a leaf, just call Jacobian method, include if nonzero
+        if not isinstance(self, Parent):
+            jac = self.jacobian(ss, inputs, T)
+            return {self.name: jac} if jac else {}
+
+        # otherwise call child method with remapping (but not for Js, which are not remapped to top level)
+        return self.M @ self._partial_jacobians(self.M.inv @ ss, self.M.inv @ inputs, T, Js)
+
     def jacobian(self, ss: SteadyStateDict,
                  exogenous: List[str],
                  T: Optional[int] = None, **kwargs) -> JacobianDict:
@@ -158,6 +175,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def remap(self, map):
         other = deepcopy(self)
         other.M = self.M @ Bijection(map)
+        # TODO: maybe we want to have an ._inputs and ._outputs that never changes, so that it can be used internally?
         other.inputs = other.M @ self.inputs
         other.outputs = other.M @ self.outputs
         if hasattr(self, 'input_list'):
