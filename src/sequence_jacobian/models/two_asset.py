@@ -7,6 +7,7 @@ from ..blocks.simple_block import simple
 from ..blocks.het_block import het, hetoutput
 from ..blocks.solved_block import solved
 from ..blocks.support.simple_displacement import apply_function
+from ..blocks.combined_block import combine
 
 '''Part 1: HA block'''
 
@@ -420,5 +421,5 @@ def arbitrage_solved(div, p, r):
     return equity
 
 
-production_solved = solved(block_list=[labor, investment], unknowns={'Q': 1., 'K': 10.},
-                           targets=['inv', 'val'], solver="broyden_custom")
+production = combine([labor, investment])
+production_solved = production.solved(unknowns={'Q': 1., 'K': 10.}, targets=['inv', 'val'], solver="broyden_custom")

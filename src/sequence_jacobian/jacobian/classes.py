@@ -472,9 +472,8 @@ class FactoredJacobianDict(JacobianDict):
     def compose(self, J: JacobianDict, T):
         # take intersection of J outputs with self.targets
         # then pack that reduced J into a matrix, then apply lu_solve, then unpack
-        outputs = set(self.targets).intersection(set(J.outputs))
-        B = J[[o for o in outputs]].pack(T)
-        X = -factored_solve(self.H_U_factored, B) 
+        Jsub = J[[o for o in self.targets if o in J.outputs]].pack(T)
+        X = -factored_solve(self.H_U_factored, Jsub) 
         return JacobianDict.unpack(X, self.unknowns, J.inputs, T)
 
     def apply(self, x):

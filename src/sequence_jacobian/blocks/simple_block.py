@@ -9,7 +9,7 @@ from .support.impulse import ImpulseDict
 from .support.bijection import Bijection
 from ..primitives import Block
 from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
+from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix, verify_saved_jacobian
 from ..utilities import misc
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
@@ -69,7 +69,7 @@ class SimpleBlock(Block):
     def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
 
-    def _jacobian(self, ss, exogenous=None, T=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=None, Js={}):
         """Assemble nested dict of Jacobians
 
         Parameters
@@ -97,8 +97,8 @@ class SimpleBlock(Block):
         relevant_shocks = [i for i in self.inputs if i in exogenous]
 
         # if we supply Jacobians, use them if possible, warn if they cannot be used
-        if Js is not None:
-            if misc.verify_saved_jacobian(self.name, Js, self.outputs, relevant_shocks, T):
+        if Js:
+            if verify_saved_jacobian(self.name, Js, self.outputs, relevant_shocks, T):
                 return Js[self.name]
 
         # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks

@@ -123,7 +123,7 @@ class CombinedBlock(Block, Parent):
             
         return curlyJs
 
-    def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js=None):
+    def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js={}):
         """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
         a steady state, `ss`"""
         if outputs is not None:
