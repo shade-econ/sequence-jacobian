@@ -7,10 +7,9 @@ from .support.bijection import Bijection
 from ..primitives import Block
 from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict
+from ..jacobian.classes import JacobianDict, verify_saved_jacobian
 from .support.bijection import Bijection
 from ..devtools.deprecate import rename_output_list_to_outputs
-from ..utilities.misc import verify_saved_jacobian
 
 
 def het(exogenous, policy, backward, backward_init=None):

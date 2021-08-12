@@ -2,12 +2,13 @@
 
 from abc import ABCMeta
 import copy
+import warnings
 import numpy as np
 
 from . import support
+from ..utilities.misc import factor, factored_solve
 from ..blocks.support.bijection import Bijection
 
-from scipy.linalg import lu_factor, lu_solve
 
 class Jacobian(metaclass=ABCMeta):
     """An abstract base class encompassing all valid types representing Jacobians, which include
@@ -455,21 +456,26 @@ class JacobianDict(NestedDict):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
         return JacobianDict(jacdict, outputs, inputs)
 
-
 class FactoredJacobianDict(JacobianDict):
     def __init__(self, jacobian_dict: JacobianDict, T):
         H_U = jacobian_dict.pack(T)
         self.targets = jacobian_dict.outputs
         self.unknowns = jacobian_dict.inputs
         if len(self.targets) != len(self.unknowns):
-            raise ValueError('Trying to factor Jacobian Dict unequal number of inputs (unknowns)'
+            raise ValueError('Trying to factor JacobianDict unequal number of inputs (unknowns)'
                             f' {self.unknowns} and outputs (targets) {self.targets}')
-        self.H_U_factored = lu_factor(H_U)
+        self.H_U_factored = factor(H_U)
 
-    def compose(self, J):
+    def __repr__(self):
+        return f'<{type(self).__name__} unknowns={self.unknowns}, targets={self.targets}>'
+
+    def compose(self, J: JacobianDict, T):
         # take intersection of J outputs with self.targets
         # then pack that reduced J into a matrix, then apply lu_solve, then unpack
-        pass
+        outputs = set(self.targets).intersection(set(J.outputs))
+        B = J[[o for o in outputs]].pack(T)
+        X = -factored_solve(self.H_U_factored, B) 
+        return JacobianDict.unpack(X, self.unknowns, J.inputs, T)
 
     def apply(self, x):
         # take intersection of x entries with self.targets
@@ -501,3 +507,35 @@ def ensure_valid_jacobiandict(d):
         else:
             raise ValueError(f"The argument {d} must be of type `dict`, with keys of type `str` and"
                              f" values of type `Jacobian`.")
+
+
+def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
+    """Verify that pre-computed Jacobian has all the right outputs, inputs, and length."""
+    if block_name not in Js.keys():
+        # don't throw warning, this will happen often for simple blocks
+        return False
+    J = Js[block_name]
+
+    if not isinstance(J, JacobianDict):
+        warnings.warn(f'Js[{block_name}] is not a JacobianDict.')
+        return False
+
+    if not set(outputs).issubset(set(J.outputs)):
+        missing = set(outputs).difference(set(J.outputs))
+        warnings.warn(f'Js[{block_name}] misses required outputs {missing}.')
+        return False
+
+    if not set(inputs).issubset(set(J.inputs)):
+        missing = set(inputs).difference(set(J.inputs))
+        warnings.warn(f'Js[{block_name}] misses required inputs {missing}.')
+        return False
+
+    # Jacobian of simple blocks may have a sparse representation
+    if T is not None:
+        Tsaved = J[J.outputs[0]][J.inputs[0]].shape[-1]
+        if T != Tsaved:
+            warnings.warn(f'Js[{block_name} has length {Tsaved}, but you asked for {T}')
+            return False
+
+    return True
+

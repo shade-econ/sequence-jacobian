@@ -4,8 +4,6 @@ import numpy as np
 import scipy.linalg
 import re
 import inspect
-import warnings
-from ..jacobian.classes import JacobianDict
 
 
 def make_tuple(x):
@@ -142,38 +140,6 @@ def smart_zeros(n):
         return np.zeros(n)
     else:
         return 0.
-
-
-def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
-    """Verify that pre-computed Jacobian has all the right outputs, inputs, and length."""
-    if block_name not in Js.keys():
-        # don't throw warning, this will happen often for simple blocks
-        return False
-    J = Js[block_name]
-
-    if not isinstance(J, JacobianDict):
-        warnings.warn(f'Js[{block_name}] is not a JacobianDict.')
-        return False
-
-    if not set(outputs).issubset(set(J.outputs)):
-        missing = set(outputs).difference(set(J.outputs))
-        warnings.warn(f'Js[{block_name}] misses required outputs {missing}.')
-        return False
-
-    if not set(inputs).issubset(set(J.inputs)):
-        missing = set(inputs).difference(set(J.inputs))
-        warnings.warn(f'Js[{block_name}] misses required inputs {missing}.')
-        return False
-
-    # Jacobian of simple blocks may have a sparse representation
-    if T is not None:
-        Tsaved = J[J.outputs[0]][J.inputs[0]].shape[-1]
-        if T != Tsaved:
-            warnings.warn(f'Js[{block_name} has length {Tsaved}, but you asked for {T}')
-            return False
-
-    return True
-
 
 '''Tools for taste shocks used in discrete choice problems'''
 
