@@ -172,6 +172,12 @@ class Block(abc.ABC, metaclass=ABCMeta):
         blocks = self.blocks if hasattr(self, "blocks") else [self]
         return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
 
+    def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
+        if name is None:
+            name = self.name + "_solved"
+        from .blocks.solved_block import SolvedBlock
+        return SolvedBlock(self, name, unknowns, targets, solver, solver_kwargs)
+
     def remap(self, map):
         other = deepcopy(self)
         other.M = self.M @ Bijection(map)

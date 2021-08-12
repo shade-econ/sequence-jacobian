@@ -8,22 +8,12 @@ from ..utilities import graph
 from ..jacobian.classes import JacobianDict
 
 
-def solved(unknowns, targets, block_list=[], solver=None, solver_kwargs={}, name=""):
-    """Creates SolvedBlocks. Can be applied in two ways, both of which return a SolvedBlock:
-        - as @solved(unknowns=..., targets=...) decorator on a single SimpleBlock
-        - as function solved(blocklist=..., unknowns=..., targets=...) where blocklist
-            can be any list of blocks
-    """
-    if block_list:
-        if not name:
-            name = f"{block_list[0].name}_to_{block_list[-1].name}_solved"
-        # ordinary call, not as decorator
-        return SolvedBlock(block_list, name, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
-    else:
-        # call as decorator, return function of function
-        def singleton_solved_block(f):
-            return SolvedBlock([simple(f).rename(f.__name__ + '_inner')], f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
-        return singleton_solved_block
+def solved(unknowns, targets, solver=None, solver_kwargs={}, name=""):
+    """Convenience @solved(unknowns=..., targets=...) decorator on a single SimpleBlock"""
+    # call as decorator, return function of function
+    def singleton_solved_block(f):
+        return SolvedBlock(simple(f).rename(f.__name__ + '_inner'), f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
+    return singleton_solved_block
 
 
 class SolvedBlock(Block, Parent):
@@ -39,53 +29,37 @@ class SolvedBlock(Block, Parent):
     nonlinear transition path such that all internal targets of the mini SHADE model are zero.
     """
 
-    def __init__(self, blocks, name, unknowns, targets, solver=None, solver_kwargs={}):
-        # Store the actual blocks in ._blocks_unsorted, and use .blocks_w_helpers and .blocks to index from there.
-        self._blocks_unsorted = blocks
+    def __init__(self, block, name, unknowns, targets, solver=None, solver_kwargs={}):
         super().__init__()
 
-        # Upon instantiation, we only have enough information to conduct a sort ignoring HelperBlocks
-        # since we need a `calibration` to resolve cyclic dependencies when including HelperBlocks in a topological sort
-        # Hence, we will cache that info upon first invocation of the steady_state
-        self._sorted_indices_w_o_helpers = graph.block_sort(blocks)
-        # These indices are cached the first time steady state is evaluated
-        self._sorted_indices_w_helpers = None
-        self._required = graph.find_outputs_that_are_intermediate_inputs(blocks)
-
-        # User-facing attributes for accessing blocks
-        # .blocks_w_helpers meant to only interface with steady_state functionality
-        # .blocks meant to interface with dynamic functionality (impulses and jacobian calculations)
-        self.blocks_w_helpers = None
-        self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices_w_o_helpers]
-
+        self.block = block
         self.name = name
         self.unknowns = unknowns
         self.targets = targets
         self.solver = solver
         self.solver_kwargs = solver_kwargs
 
-        # initialize as parent
-        Parent.__init__(self, self.blocks)
+        Parent.__init__(self, [self.block])
 
-        # need to have inputs and outputs!!!
-        self.outputs = (set.union(*(b.outputs for b in blocks)) | set(list(self.unknowns.keys()))) - set(self.targets)
-        self.inputs = set.union(*(b.inputs for b in blocks)) - self.outputs
+        # validate unknowns and targets
+        if not len(unknowns) == len(targets):
+            raise ValueError(f'Unknowns {set(unknowns)} and targets {set(targets)} different sizes in SolvedBlock {name}')
+        if not set(unknowns) <= block.inputs:
+            raise ValueError(f'Unknowns has element {set(unknowns) - block.inputs} not in inputs in SolvedBlock {name}')
+        if not set(targets) <= block.outputs:
+            raise ValueError(f'Targets has element {set(targets) - block.outputs} not in outputs in SolvedBlock {name}')
+
+        # what are overall outputs and inputs?
+        self.outputs = block.outputs | set(unknowns)
+        self.inputs = block.inputs - set(unknowns)
 
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], unknowns=None, helper_blocks=None, solver=None,
-                      consistency_check=False, ttol=1e-9, ctol=1e-9, verbose=False):
+    def _steady_state(self, calibration, dissolve=[], unknowns=None, solver=None, ttol=1e-9, ctol=1e-9, verbose=False):
         if self.name in dissolve:
             solver = "solved"
             unknowns = {k: v for k, v in calibration.items() if k in self.unknowns}
-
-        # If this is the first time invoking steady_state/solve_steady_state, cache the sorted indices
-        # accounting for HelperBlocks
-        if self._sorted_indices_w_helpers is None:
-            self._sorted_indices_w_helpers = graph.block_sort(self._blocks_unsorted, helper_blocks=helper_blocks,
-                                                              calibration=calibration)
-            self.blocks_w_helpers = [self._blocks_unsorted[i] for i in self._sorted_indices_w_helpers]
 
         # Allow override of unknowns/solver, if one wants to evaluate the SolvedBlock at a particular set of
         # unknown values akin to the steady_state method of Block
@@ -94,17 +68,17 @@ class SolvedBlock(Block, Parent):
         if solver is None:
             solver = self.solver
 
-        return super().solve_steady_state(calibration, unknowns, self.targets, solver=solver,
-                                          consistency_check=consistency_check, ttol=ttol, ctol=ctol, verbose=verbose)
+        return self.block.solve_steady_state(calibration, unknowns, self.targets, solver=solver,
+                                          ttol=ttol, ctol=ctol, verbose=verbose)
 
     def _impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
-        return super().solve_impulse_nonlinear(ss, exogenous=exogenous,
+        return self.block.solve_impulse_nonlinear(ss, exogenous=exogenous,
                                                unknowns=list(self.unknowns.keys()), Js=Js,
                                                targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                                monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
     def _impulse_linear(self, ss, exogenous, T=None, Js=None):
-        return super().solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
+        return self.block.solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
                                             targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                             T=T, Js=Js)
 
@@ -116,7 +90,7 @@ class SolvedBlock(Block, Parent):
         relevant_shocks = [i for i in self.inputs if i in exogenous]
 
         if relevant_shocks:
-            return super().solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
+            return self.block.solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
                                           targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                           T=T, outputs=outputs, Js=Js)
         else:
