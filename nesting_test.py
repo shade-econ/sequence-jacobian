@@ -131,8 +131,8 @@ def mkt_clearing(A, B, C, Y, G):
 hh = combine([household, income_state_vars, asset_state_vars], name='HH')
 dag = sj.create_model([hh, interest_rates, fiscal, mkt_clearing], name='HANK')
 
-calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 11,
-               'amin': 0.0, 'amax': 1000, 'nA': 500, 'Gamma': 0.0, 'transfer': 0.143}
+calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
+               'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143}
 
 ss0 = dag.solve_steady_state(calibration, solver='hybr',
                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},

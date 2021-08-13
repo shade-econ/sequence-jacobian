@@ -29,7 +29,7 @@ class SolvedBlock(Block, Parent):
     nonlinear transition path such that all internal targets of the mini SHADE model are zero.
     """
 
-    def __init__(self, block, name, unknowns, targets, solver=None, solver_kwargs={}):
+    def __init__(self, block: Block, name, unknowns, targets, solver=None, solver_kwargs={}):
         super().__init__()
 
         self.block = block
@@ -82,26 +82,16 @@ class SolvedBlock(Block, Parent):
                                             targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                             T=T, Js=Js)
 
-    def _jacobian(self, ss, exogenous=None, T=300, outputs=None, Js=None):
-        if exogenous is None:
-            exogenous = list(self.inputs)
-        if outputs is None:
-            outputs = list(self.outputs)
-        relevant_shocks = [i for i in self.inputs if i in exogenous]
+    def _jacobian(self, ss, inputs, outputs, T, Js):
+        return self.block.solve_jacobian(ss, set(self.unknowns), set(self.targets), inputs, outputs, T, Js)
 
-        if relevant_shocks:
-            return self.block.solve_jacobian(ss, relevant_shocks, unknowns=list(self.unknowns.keys()),
-                                          targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                          T=T, outputs=outputs, Js=Js)
-        else:
-            return JacobianDict({})
-
-    def _partial_jacobians(self, ss, inputs=None, T=None, Js={}):
+    def _partial_jacobians(self, ss, inputs, outputs, T, Js={}):
         # call it on the child first
-        inner_Js = self.block.partial_jacobians(ss, inputs=(self.unknowns.keys() | inputs), T=T, Js=Js)
+        inner_Js = self.block.partial_jacobians(ss, inputs=(self.unknowns.keys() | inputs),
+                                                outputs=(self.targets.keys() | outputs), T=T, Js=Js)
 
         # with these inner Js, also compute H_U and factorize
-        H_U = self.block.jacobian(ss, inputs=self.unknowns.keys(), T=T, outputs=self.targets.keys(), Js=inner_Js)
+        H_U = self.block.jacobian(ss, inputs=self.unknowns.keys(), outputs=self.targets.keys(), T=T, Js=inner_Js)
         H_U_factored = FactoredJacobianDict(H_U, T)
 
         return {**inner_Js, self.name: H_U_factored}

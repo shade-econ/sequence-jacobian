@@ -129,7 +129,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
                                               constrained_method=constrained_method,
                                               constrained_kwargs=constrained_kwargs,
                                               tol=ttol, verbose=verbose, fragile=fragile)
-
+                            
     # Check that the solution is consistent with what would come out of the DAG without the helper blocks
     if consistency_check and helper_blocks:
         # Add the unknowns not handled by helpers into the DAG to be checked.

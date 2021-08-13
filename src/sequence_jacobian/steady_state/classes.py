@@ -10,10 +10,18 @@ from typing import Any, Dict, Union
 Array = Any
 
 class SteadyStateDict:
+    # TODO: should this just subclass dict so we can avoid a lot of boilerplate?
+    # Really this is just a top-level dict (with all the usual functionality) with "internal" bolted on
+
     def __init__(self, data, internal=None):
-        self.toplevel = {}
-        self.internal = {}
-        self.update(data, internal_namespaces=internal)
+        if isinstance(data, SteadyStateDict):
+            if internal is not None:
+                raise ValueError('Supplying SteadyStateDict and also internal to constructor not allowed')
+            self.toplevel = data
+            self.internal = {}
+        
+        self.toplevel: dict = data
+        self.internal: dict = {} if internal is None else internal
 
     def __repr__(self):
         if self.internal:
@@ -29,7 +37,7 @@ class SteadyStateDict:
             return self.toplevel[k]
         else:
             try:
-                return {ki: self.toplevel[ki] for ki in k}
+                return SteadyStateDict({ki: self.toplevel[ki] for ki in k})
             except TypeError:
                 raise TypeError(f'Key {k} needs to be a string or an iterable (list, set, etc) of strings')
 
@@ -43,10 +51,13 @@ class SteadyStateDict:
             new.toplevel = x @ self.toplevel
             return new
         else:
-            NotImplemented
+            return NotImplemented
 
     def __rmatmul__(self, x):
         return self.__matmul__(x)
+
+    def __len__(self):
+        return len(self.toplevel)
 
     def keys(self):
         return self.toplevel.keys()
@@ -57,34 +68,14 @@ class SteadyStateDict:
     def items(self):
         return self.toplevel.items()
 
-    def update(self, data, internal_namespaces=None):
-        if isinstance(data, SteadyStateDict):
-            self.internal.update(deepcopy(data.internal))
-            self.toplevel.update(deepcopy(data.toplevel))
+    def update(self, ssdict):
+        if isinstance(ssdict, SteadyStateDict):
+            self.toplevel.update(ssdict.toplevel)
+            self.internal.update(ssdict.internal)
         else:
-            toplevel = deepcopy(data)
-            if internal_namespaces is not None:
-                # Construct the internal namespace from the Block object, if a Block is provided
-                if hasattr(internal_namespaces, "internal"):
-                    internal_namespaces = {internal_namespaces.name: {k: v for k, v in deepcopy(data).items() if k in
-                                                                      internal_namespaces.internal}}
-
-                # Remove the internal data from `data` if it's there
-                for internal_dict in internal_namespaces.values():
-                    toplevel = dict_diff(toplevel, internal_dict)
-
-                self.toplevel.update(toplevel)
-                self.internal.update(internal_namespaces)
-            else:
-                self.toplevel.update(toplevel)
+            self.toplevel.update(dict(ssdict))
 
     def difference(self, data_to_remove):
-        return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), internal=deepcopy(self.internal))
+        return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), deepcopy(self.internal))
 
 UserProvidedSS = Dict[str, Union[Real, Array]]
-
-def make_steadystatedict(ss: Union[SteadyStateDict, UserProvidedSS]) -> SteadyStateDict:
-    if not isinstance(ss, SteadyStateDict):
-        return SteadyStateDict(ss)
-    else:
-        return ss

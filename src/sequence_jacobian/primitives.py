@@ -1,6 +1,7 @@
 """Primitives to provide clarity and structure on blocks/models work"""
 
 import abc
+import numpy as np
 from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
@@ -10,7 +11,7 @@ from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
 from .jacobian.drivers import get_impulse, get_G
-from .steady_state.classes import SteadyStateDict, UserProvidedSS, make_steadystatedict
+from .steady_state.classes import SteadyStateDict, UserProvidedSS
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
 from .blocks.support.bijection import Bijection
@@ -82,7 +83,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
             for k in dissolve:
                 inputs |= self.get_attribute(k, 'unknowns').keys()
 
-        calibration = make_steadystatedict(calibration)[inputs]
+        calibration = SteadyStateDict(calibration)[inputs]
         kwargs['dissolve'] = dissolve
 
         return self.M @ self._steady_state(self.M.inv @ calibration, **{k: v for k, v in kwargs.items() if k in self.ss_valid_input_kwargs})
@@ -99,31 +100,47 @@ class Block(abc.ABC, metaclass=ABCMeta):
         from a steady state `ss`."""
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def partial_jacobians(self, ss, inputs=None, T=None, Js={}):
+    def partial_jacobians(self, ss, inputs=None, outputs=None, T=None, Js={}):
         # TODO: annotate signature
         if inputs is None:
             inputs = self.inputs
+        if outputs is None:
+            outputs = self.outputs
+        inputs, outputs = set(inputs), set(outputs)
         
         # if you have a J for this block that already has everything you need, use it
-        if (self.name in Js) and (inputs <= Js[self.name].inputs) and (self.outputs == Js[self.name].outputs):
-            return Js[self.name][:, inputs]
+        # TODO: add check for T,  maybe look at verify_saved_jacobian for ideas?
+        if (self.name in Js) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
+            return Js[self.name][outputs, inputs]
 
         # if it's a leaf, just call Jacobian method, include if nonzero
         if not isinstance(self, Parent):
-            jac = self.jacobian(ss, inputs, T)
+            jac = self.jacobian(ss, inputs, outputs, T)
             return {self.name: jac} if jac else {}
 
         # otherwise call child method with remapping (and remap your own but none of the child Js)
-        partial = self._partial_jacobians(self.M.inv @ ss, self.M.inv @ inputs, T, Js)
+        partial = self._partial_jacobians(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, T, Js)
         if self.name in partial:
             partial[self.name] = self.M @ partial[self.name]
         return partial
 
-    def jacobian(self, ss: SteadyStateDict,
-                 exogenous: List[str],
-                 T: Optional[int] = None, **kwargs) -> JacobianDict:
-        """Calculate a partial equilibrium Jacobian to a set of `exogenous` shocks at a steady state `ss`."""
-        return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ exogenous, T=T, **kwargs)
+    def jacobian(self, ss: SteadyStateDict, inputs: List[str], outputs: Optional[List[str]] = None,
+                 T: Optional[int] = None, Js={}) -> JacobianDict:
+        """Calculate a partial equilibrium Jacobian to a set of `input` shocks at a steady state `ss`."""
+        inputs, outputs = self.default_inputs_outputs(inputs, outputs)
+        inputs, outputs = set(inputs), set(outputs)
+
+        # if you have a J for this block that has everything you need, use it
+        if (self.name in Js) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
+            return Js[self.name][outputs, inputs]
+        
+        # if it's a leaf, call Jacobian method, don't supply Js
+        if not isinstance(self, Parent):
+            return self._jacobian(ss, inputs, outputs, T)
+        
+        # otherwise remap own J (currently needed for SolvedBlock only)
+        Js = {**{k: v for k, v in Js.items() if k != self.name}, self.name: self.M.inv @ Js[self.name]}
+        return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, T=T, Js=Js)
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
@@ -163,17 +180,29 @@ class Block(abc.ABC, metaclass=ABCMeta):
         irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
         return ImpulseDict(irf_lin_gen_eq)
 
-    def solve_jacobian(self, ss: Dict[str, Union[Real, Array]],
-                       exogenous: List[str],
-                       unknowns: List[str], targets: List[str],
-                       T: Optional[int] = None,
+    def solve_jacobian(self, ss: Dict[str, Union[Real, Array]], unknowns: List[str], targets: List[str],
+                       inputs: List[str], outputs: Optional[List[str]] = None, T: Optional[int] = None,
                        Js: Optional[Dict[str, JacobianDict]] = None,
                        **kwargs) -> JacobianDict:
         """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
         at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
-        blocks = self.blocks if hasattr(self, "blocks") else [self]
-        return get_G(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
+        # TODO: do we really want this? is T just optional because we want it to come after outputs in docstring?
+        if T is None:
+            T = 300
+
+        inputs, outputs = self.default_inputs_outputs(inputs, outputs)
+        inputs, unknowns, targets = list(inputs), list(unknowns), list(targets)
+
+        Js = self.partial_jacobians(ss, inputs | set(unknowns), outputs | set(targets), T, Js)
+        
+        H_U = self.jacobian(ss, unknowns, targets, T, Js).pack(T)
+        H_Z = self.jacobian(ss, inputs, targets, T, Js).pack(T)
+        U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, inputs, T)
+
+        from . import combine
+        self_with_unknowns = combine(U_Z, self)
+        return self_with_unknowns.jacobian(ss, inputs, outputs, T, Js)
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:
@@ -199,3 +228,10 @@ class Block(abc.ABC, metaclass=ABCMeta):
         renamed = deepcopy(self)
         renamed.name = name
         return renamed
+
+    def default_inputs_outputs(self, inputs, outputs):
+        if inputs is None:
+            inputs = self.inputs
+        if outputs is None:
+            outputs = self.outputs
+        return inputs, outputs

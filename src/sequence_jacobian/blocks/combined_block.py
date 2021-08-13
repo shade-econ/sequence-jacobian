@@ -69,16 +69,14 @@ class CombinedBlock(Block, Parent):
         topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
         blocks_all = self.blocks + helper_blocks
 
-        ss_partial_eq_toplevel = deepcopy(calibration)
-        ss_partial_eq_internal = {}
+        ss = deepcopy(calibration)
         for i in topsorted:
             # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
             inner_dissolve = [k for k in dissolve if self.descendants[k] == blocks_all[i].name]
-            outputs = blocks_all[i].steady_state(ss_partial_eq_toplevel, dissolve=inner_dissolve, **kwargs)
-            ss_partial_eq_toplevel.update(outputs.toplevel)
-            if outputs.internal:
-                ss_partial_eq_internal.update(outputs.internal)
-        return SteadyStateDict(ss_partial_eq_toplevel, internal=ss_partial_eq_internal)
+            outputs = blocks_all[i].steady_state(ss, dissolve=inner_dissolve, **kwargs)
+            ss.update(outputs)
+
+        return ss
 
     def _impulse_nonlinear(self, ss, exogenous, **kwargs):
         """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
@@ -104,11 +102,12 @@ class CombinedBlock(Block, Parent):
 
         return ImpulseDict(irf_lin_partial_eq)
 
-    def _partial_jacobians(self, ss, inputs=None, T=None, Js={}):
+    def _partial_jacobians(self, ss, inputs, outputs, T, Js):
         """Calculate partial Jacobians (i.e. without forward accumulation) wrt `inputs` and outputs of other blocks."""
         # Add intermediate inputs; remove vector-valued inputs
-        shocks = set(inputs) | self._required
-        shocks -= set([k for k, v in ss.items() if np.size(v) > 1])
+        vector_valued = set([k for k, v in ss.items() if np.size(v) > 1])
+        inputs = (inputs | self._required) - vector_valued
+        outputs = (outputs | self._required) - vector_valued
 
         # Compute Jacobians along the DAG
         curlyJs = {}
@@ -116,40 +115,25 @@ class CombinedBlock(Block, Parent):
             descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
             Js_block = {k: v for k, v in Js.items() if k in descendants}
 
-            # Don't remap here
-            curlyJ = block.partial_jacobians(ss, shocks & block.inputs, T, Js_block)
-
+            curlyJ = block.partial_jacobians(ss, inputs & block.inputs, outputs & block.outputs, T, Js_block)
             curlyJs.update(curlyJ)
             
         return curlyJs
 
-    def _jacobian(self, ss, exogenous=None, T=None, outputs=None, Js={}):
+    def _jacobian(self, ss, inputs, outputs, T, Js={}):
         """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
         a steady state, `ss`"""
-        if outputs is not None:
-            # if list of outputs provided, we need to obtain these and 'required' along the way
-            alloutputs = set(outputs) | self._required
-        else:
-            # otherwise, set to None, implies default behavior of obtaining all outputs in curlyJs
-            alloutputs = None
-
-        # Compute all partial Jacobians
-        curlyJs = self.partial_jacobians(ss, inputs=exogenous, T=T, Js=Js)
+        # _partial_jacobians should calculate partial jacobians with exactly the inputs and outputs we want 
+        Js = self._partial_jacobians(ss, inputs, outputs, T=T, Js=Js)
 
         # Forward accumulate partial Jacobians
-        out = JacobianDict.identity(exogenous)
-        for curlyJ in curlyJs.values():
-            if alloutputs is not None:
-                # don't accumulate derivatives we don't need or care about
-                curlyJ = curlyJ[[k for k in alloutputs if k in curlyJ.outputs]]
-            out.update(curlyJ.compose(out))
+        total_Js = JacobianDict.identity(inputs)
+        for block in self.blocks:
+            if block.name in Js:
+                J = Js[block.name]
+                total_Js.update(J @ total_Js)
 
-        if outputs is not None:
-            # don't return derivatives that we don't care about (even if required them above)
-            return out[[k for k in outputs if k in out.outputs]]
-        else:
-            return out
-
+        return total_Js[outputs, :]
 
     def solve_steady_state(self, calibration, unknowns, targets, solver=None, helper_blocks=None,
                            sort_blocks=False, **kwargs):

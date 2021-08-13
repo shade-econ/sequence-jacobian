@@ -34,14 +34,12 @@ class SimpleBlock(Block):
     Key methods are .ss, .td, and .jac, like HetBlock.
     """
 
-    # TODO: get rid of .input_list because it serves no function
     def __init__(self, f):
         super().__init__()
         self.f = f
         self.name = f.__name__
-        self.input_list = misc.input_list(f)
         self.output_list = misc.output_list(f)
-        self.inputs = set(self.input_list)
+        self.inputs = set(misc.input_list(f))
         self.outputs = set(self.output_list)
 
     def __repr__(self):
@@ -69,78 +67,39 @@ class SimpleBlock(Block):
     def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
 
-    def _jacobian(self, ss, exogenous=None, T=None, Js={}):
-        """Assemble nested dict of Jacobians
+    def _jacobian(self, ss, inputs, outputs, T):
+        invertedJ = {i: {} for i in inputs}
 
-        Parameters
-        ----------
-        ss : dict,
-            steady state values
-        exogenous : list of str, optional
-            names of input variables to differentiate wrt; if omitted, assume all inputs
-        T : int, optional
-            number of time periods for explicit T*T Jacobian
-            if omitted, more efficient SimpleSparse objects returned
-        Js : dict of {str: JacobianDict}, optional
-            pre-computed Jacobians
+        # Loop over all inputs/shocks which we want to differentiate with respect to
+        for i in inputs:
+            invertedJ[i] = self.compute_single_shock_J(ss, i)
 
-        Returns
-        -------
-        J : dict of {str: dict of {str: array(T,T)}}
-            J[o][i] for output o and input i gives Jacobian of o with respect to i
-            This Jacobian is a SimpleSparse object or, if T specific, a T*T matrix, omitted by convention if zero
-        """
+        # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
+        # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
+        # the Jacobian curlyJ^{o,i}.
+        J = {o: {} for o in self.outputs}
+        for o in self.outputs:
+            for i in inputs:
+                # Keep zeros, so we can inspect supplied Jacobians for completeness
+                if not invertedJ[i][o] or invertedJ[i][o].iszero:
+                    J[o][i] = ZeroMatrix()
+                else:
+                    J[o][i] = invertedJ[i][o]
 
-        if exogenous is None:
-            exogenous = list(self.inputs)
+        print(J)
 
-        relevant_shocks = [i for i in self.inputs if i in exogenous]
+        return JacobianDict(J, name=self.name)[outputs, :]
 
-        # if we supply Jacobians, use them if possible, warn if they cannot be used
-        if Js:
-            if verify_saved_jacobian(self.name, Js, self.outputs, relevant_shocks, T):
-                return Js[self.name]
+    def compute_single_shock_J(self, ss, i):
+        input_args = {i: ignore(ss[i]) for i in self.inputs}
+        input_args[i] = AccumulatedDerivative(f_value=ss[i])
 
-        # If none of the shocks passed in shock_list are relevant to this block (i.e. none of the shocks
-        # are an input into the block), then return an empty dict
-        if not relevant_shocks:
-            return JacobianDict({})
-        else:
-            invertedJ = {shock_name: {} for shock_name in relevant_shocks}
+        J = {o: {} for o in self.output_list}
+        for o, o_name in zip(misc.make_tuple(self.f(**input_args)), self.output_list):
+            if isinstance(o, AccumulatedDerivative):
+                J[o_name] = SimpleSparse(o.elements)
 
-            # Loop over all inputs/shocks which we want to differentiate with respect to
-            for shock in relevant_shocks:
-                invertedJ[shock] = compute_single_shock_curlyJ(self.f, ss, shock)
-
-            # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
-            # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
-            # the Jacobian curlyJ^{o,i}.
-            J = {o: {} for o in self.output_list}
-            for o in self.output_list:
-                for i in relevant_shocks:
-                    # Keep zeros, so we can inspect supplied Jacobians for completeness
-                    if not invertedJ[i][o] or invertedJ[i][o].iszero:
-                        J[o][i] = ZeroMatrix()
-                    else:
-                        if T is not None:
-                            J[o][i] = invertedJ[i][o].matrix(T)
-                        else:
-                            J[o][i] = invertedJ[i][o]
-
-            return JacobianDict(J, name=self.name)
-
-
-def compute_single_shock_curlyJ(f, steady_state_dict, shock_name):
-    """Find the Jacobian of the function `f` with respect to a single shocked argument, `shock_name`"""
-    input_args = {i: ignore(steady_state_dict[i]) for i in misc.input_list(f)}
-    input_args[shock_name] = AccumulatedDerivative(f_value=steady_state_dict[shock_name])
-
-    J = {o: {} for o in misc.output_list(f)}
-    for o, o_name in zip(misc.make_tuple(f(**input_args)), misc.output_list(f)):
-        if isinstance(o, AccumulatedDerivative):
-            J[o_name] = SimpleSparse(o.elements)
-
-    return J
+        return J
 
 
 def make_impulse_uniform_length(out, output_list):

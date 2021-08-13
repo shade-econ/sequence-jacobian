@@ -203,16 +203,16 @@ class HetBlock(Block):
             - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
         """
 
-        ss = copy.deepcopy(calibration)
+        ss = copy.deepcopy(calibration.toplevel)
 
         # extract information from calibration
-        Pi = calibration[self.exogenous]
-        grid = {k: calibration[k+'_grid'] for k in self.policy}
-        D_seed = calibration.get('D', None)
-        pi_seed = calibration.get(self.exogenous + '_seed', None)
+        Pi = ss[self.exogenous]
+        grid = {k: ss[k+'_grid'] for k in self.policy}
+        D_seed = ss.get('D', None)
+        pi_seed = ss.get(self.exogenous + '_seed', None)
 
         # run backward iteration
-        sspol = self.policy_ss(calibration, tol=backward_tol, maxit=backward_maxit)
+        sspol = self.policy_ss(ss, tol=backward_tol, maxit=backward_maxit)
         ss.update(sspol)
 
         # run forward iteration
@@ -231,7 +231,8 @@ class HetBlock(Block):
             aggregate_hetoutputs = {}
         ss.update({**hetoutputs, **aggregate_hetoutputs})
 
-        return SteadyStateDict(ss, internal=self)
+        return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
+                               {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
     def _impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
@@ -387,12 +388,6 @@ class HetBlock(Block):
             outputs = rename_output_list_to_outputs(outputs=outputs, output_list=output_list)
 
         relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
-
-        # if we supply Jacobians, use them if possible, warn if they cannot be used
-        if Js is not None:
-            outputs_cap = [o.capitalize() for o in outputs]
-            if verify_saved_jacobian(self.name, Js, outputs_cap, relevant_shocks, T):
-                return Js[self.name]
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)
