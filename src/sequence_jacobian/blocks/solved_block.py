@@ -87,8 +87,8 @@ class SolvedBlock(Block, Parent):
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js={}):
         # call it on the child first
-        inner_Js = self.block.partial_jacobians(ss, inputs=(self.unknowns.keys() | inputs),
-                                                outputs=(self.targets.keys() | outputs), T=T, Js=Js)
+        inner_Js = self.block.partial_jacobians(ss, inputs=(set(self.unknowns) | inputs),
+                                                outputs=(set(self.targets) | outputs), T=T, Js=Js)
 
         # with these inner Js, also compute H_U and factorize
         H_U = self.block.jacobian(ss, inputs=self.unknowns.keys(), outputs=self.targets.keys(), T=T, Js=inner_Js)

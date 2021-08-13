@@ -182,7 +182,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
     def solve_jacobian(self, ss: Dict[str, Union[Real, Array]], unknowns: List[str], targets: List[str],
                        inputs: List[str], outputs: Optional[List[str]] = None, T: Optional[int] = None,
-                       Js: Optional[Dict[str, JacobianDict]] = None,
+                       Js: Optional[Dict[str, JacobianDict]] = {},
                        **kwargs) -> JacobianDict:
         """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
         at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
@@ -194,7 +194,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         inputs, outputs = self.default_inputs_outputs(inputs, outputs)
         inputs, unknowns, targets = list(inputs), list(unknowns), list(targets)
 
-        Js = self.partial_jacobians(ss, inputs | set(unknowns), outputs | set(targets), T, Js)
+        Js = self.partial_jacobians(ss, set(inputs) | set(unknowns), set(outputs) | set(targets), T, Js)
         
         H_U = self.jacobian(ss, unknowns, targets, T, Js).pack(T)
         H_Z = self.jacobian(ss, inputs, targets, T, Js).pack(T)

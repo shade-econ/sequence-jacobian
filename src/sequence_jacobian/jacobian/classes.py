@@ -291,6 +291,10 @@ class NestedDict:
                     inputs.extend(list(v))
                 inputs = deduplicate(inputs)
 
+            if not outputs or not inputs:
+                outputs = []
+                inputs = []
+
             self.outputs = list(outputs)
             self.inputs = list(inputs)
             if name is None:
@@ -487,22 +491,23 @@ def ensure_valid_jacobiandict(d):
     Jacobian of type Jacobian mapping sequences of `i` to sequences of `o`. The null type for `d` is assumed
     to be {}, which is permitted the empty version of a valid nested dict."""
 
-    if d != {} and not isinstance(d, JacobianDict):
+    if d and not isinstance(d, JacobianDict):
         # Assume it's sufficient to just check one of the keys
         if not isinstance(next(iter(d.keys())), str):
             raise ValueError(f"The dict argument {d} must have keys with type `str` to indicate `output` names.")
 
         jac_o_dict = next(iter(d.values()))
         if isinstance(jac_o_dict, dict):
-            if not isinstance(next(iter(jac_o_dict.keys())), str):
-                raise ValueError(f"The values of the dict argument {d} must be dicts with keys of type `str` to indicate"
-                                 f" `input` names.")
-            jac_o_i = next(iter(jac_o_dict.values()))
-            if not isinstance(jac_o_i, Jacobian):
-                raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `Jacobian`.")
-            else:
-                if isinstance(jac_o_i, np.ndarray) and np.shape(jac_o_i)[0] != np.shape(jac_o_i)[1]:
-                    raise ValueError(f"The Jacobians in {d} must be square matrices of type `Jacobian`.")
+            if jac_o_dict:
+                if not isinstance(next(iter(jac_o_dict.keys())), str):
+                    raise ValueError(f"The values of the dict argument {d} must be dicts with keys of type `str` to indicate"
+                                    f" `input` names.")
+                jac_o_i = next(iter(jac_o_dict.values()))
+                if not isinstance(jac_o_i, Jacobian):
+                    raise ValueError(f"The dict argument {d}'s values must be dicts with values of type `Jacobian`.")
+                else:
+                    if isinstance(jac_o_i, np.ndarray) and np.shape(jac_o_i)[0] != np.shape(jac_o_i)[1]:
+                        raise ValueError(f"The Jacobians in {d} must be square matrices of type `Jacobian`.")
         else:
             raise ValueError(f"The argument {d} must be of type `dict`, with keys of type `str` and"
                              f" values of type `Jacobian`.")

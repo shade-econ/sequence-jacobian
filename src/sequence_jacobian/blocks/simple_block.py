@@ -87,6 +87,7 @@ class SimpleBlock(Block):
                     J[o][i] = invertedJ[i][o]
 
         print(J)
+        print(JacobianDict(J, name=self.name))
 
         return JacobianDict(J, name=self.name)[outputs, :]
 

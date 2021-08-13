@@ -87,7 +87,9 @@ class HetBlock(Block):
         # self.outputs and self.inputs are the *aggregate* outputs and inputs of this HetBlock, which are used
         # in utils.graph.block_sort to topologically sort blocks along the DAG
         # according to their aggregate outputs and inputs.
+        # TODO: go back from capitalize to upper!!! (ask Michael first)
         self.outputs = {o.capitalize() for o in self.non_back_iter_outputs}
+        self.M_outputs = Bijection({o: o.capitalize() for o in self.non_back_iter_outputs})
         self.inputs = self.back_step_inputs - {k + '_p' for k in self.back_iter_vars}
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
@@ -354,7 +356,8 @@ class HetBlock(Block):
 
         return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
 
-    def _jacobian(self, ss, exogenous=None, T=300, outputs=None, output_list=None, Js=None, h=1E-4):
+    def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
+        # TODO: h is unusable for now, figure out how to suggest options
         """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
 
         Parameters
@@ -378,16 +381,15 @@ class HetBlock(Block):
         J : dict of {str: dict of {str: array(T,T)}}
             J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
-        # The default set of outputs are all outputs of the backward iteration function
-        # except for the backward iteration variables themselves
-        if exogenous is None:
-            exogenous = list(self.inputs)
-        if outputs is None or output_list is None:
-            outputs = self.non_back_iter_outputs
-        else:
-            outputs = rename_output_list_to_outputs(outputs=outputs, output_list=output_list)
+        outputs = self.M_outputs.inv @ outputs # horrible
+        print('HERE ARE THE OUTPUTS')
+        print(outputs)
 
-        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
+        print(self.M_outputs)
+
+        # TODO: this is one instance of us letting people supply inputs that aren't actually inputs
+        # This behavior should lead to an error instead (probably should be handled at top level)
+        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in inputs]
 
         # step 0: preliminary processing of steady state
         (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)
@@ -422,6 +424,7 @@ class HetBlock(Block):
         return JacobianDict(J, name=self.name)
 
     def add_hetinput(self, hetinput, overwrite=False, verbose=True):
+        # TODO: serious violation, this is mutating the block
         """Add a hetinput to this HetBlock. Any call to self.back_step_fun will first process
          inputs through the hetinput function.
 
@@ -487,6 +490,7 @@ class HetBlock(Block):
             self.inputs |= (self.hetoutput_inputs - self.hetinput_outputs - self.back_step_outputs - self.hetoutput_outputs - set("D"))
             # Modify the HetBlock's outputs to include the aggregated hetoutputs
             self.outputs |= set([o.capitalize() for o in self.hetoutput_outputs])
+            self.M_outputs = Bijection({o: o.capitalize() for o in self.hetoutput_outputs}) @ self.M_outputs
 
             self.internal |= self.hetoutput_outputs
 
