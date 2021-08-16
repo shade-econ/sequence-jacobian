@@ -111,7 +111,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         # if you have a J for this block that already has everything you need, use it
         # TODO: add check for T,  maybe look at verify_saved_jacobian for ideas?
         if (self.name in Js) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
-            return Js[self.name][outputs, inputs]
+            return {self.name: Js[self.name][outputs, inputs]}
 
         # if it's a leaf, just call Jacobian method, include if nonzero
         if not isinstance(self, Parent):
@@ -139,7 +139,9 @@ class Block(abc.ABC, metaclass=ABCMeta):
             return self._jacobian(ss, inputs, outputs, T)
         
         # otherwise remap own J (currently needed for SolvedBlock only)
-        Js = {**{k: v for k, v in Js.items() if k != self.name}, self.name: self.M.inv @ Js[self.name]}
+        Js = Js.copy()
+        if self.name in Js:
+            Js[self.name] = self.M.inv @ Js[self.name]
         return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, T=T, Js=Js)
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
@@ -201,7 +203,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, inputs, T)
 
         from . import combine
-        self_with_unknowns = combine(U_Z, self)
+        self_with_unknowns = combine([U_Z, self])
         return self_with_unknowns.jacobian(ss, inputs, outputs, T, Js)
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):

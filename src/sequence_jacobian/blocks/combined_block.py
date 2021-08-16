@@ -126,14 +126,23 @@ class CombinedBlock(Block, Parent):
         # _partial_jacobians should calculate partial jacobians with exactly the inputs and outputs we want 
         Js = self._partial_jacobians(ss, inputs, outputs, T=T, Js=Js)
 
-        # Forward accumulate partial Jacobians
+        original_outputs = outputs
         total_Js = JacobianDict.identity(inputs)
-        for block in self.blocks:
-            if block.name in Js:
-                J = Js[block.name]
-                total_Js.update(J @ total_Js)
 
-        return total_Js[outputs, :]
+        # horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
+        vector_valued = set([k for k, v in ss.items() if np.size(v) > 1])
+        inputs = (inputs | self._required) - vector_valued
+        outputs = (outputs | self._required) - vector_valued
+
+        # Forward accumulate individual Jacobians
+        # ANNOYINGLY PARALLEL TO PARTIAL_JACOBIANS!
+        for block in self.blocks:
+            descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
+            Js_block = {k: v for k, v in Js.items() if k in descendants}
+            J = block.jacobian(ss, inputs & block.inputs, outputs & block.outputs, T, Js_block)
+            total_Js.update(J @ total_Js)
+
+        return total_Js[original_outputs, :]
 
     def solve_steady_state(self, calibration, unknowns, targets, solver=None, helper_blocks=None,
                            sort_blocks=False, **kwargs):

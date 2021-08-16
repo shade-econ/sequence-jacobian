@@ -86,9 +86,10 @@ class SimpleBlock(Block):
                 else:
                     J[o][i] = invertedJ[i][o]
 
-        print(J)
-        print(JacobianDict(J, name=self.name))
 
+        if not isinstance(JacobianDict(J, name=self.name)[outputs, :], JacobianDict):
+            print('THIS IS THE WORST THING I HAVE EVER SEEN')
+            print(JacobianDict(J, name=self.name)[outputs, :])
         return JacobianDict(J, name=self.name)[outputs, :]
 
     def compute_single_shock_J(self, ss, i):

@@ -1,3 +1,5 @@
+from ...utilities.ordered_set import OrderedSet
+
 class Bijection:
     def __init__(self, map):
         # identity always implicit, remove if there explicitly
@@ -42,6 +44,8 @@ class Bijection:
             return {self[k] for k in x}
         elif isinstance(x, tuple):
             return tuple(self[k] for k in x)
+        elif isinstance(x, OrderedSet):
+            return OrderedSet([self[k] for k in x])
         else:
             return NotImplemented
 

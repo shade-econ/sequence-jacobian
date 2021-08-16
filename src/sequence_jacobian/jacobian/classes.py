@@ -7,6 +7,7 @@ import numpy as np
 
 from . import support
 from ..utilities.misc import factor, factored_solve
+from ..utilities.ordered_set import OrderedSet
 from ..blocks.support.bijection import Bijection
 
 
@@ -275,28 +276,27 @@ class SimpleSparse(Jacobian):
 
 
 class NestedDict:
-    def __init__(self, nesteddict, outputs=None, inputs=None, name=None):
+    def __init__(self, nesteddict, outputs: OrderedSet=None, inputs: OrderedSet=None, name: str=None):
         if isinstance(nesteddict, NestedDict):
             self.nesteddict = nesteddict.nesteddict
-            self.outputs = nesteddict.outputs
-            self.inputs = nesteddict.inputs
-            self.name = nesteddict.name
+            self.outputs: OrderedSet = nesteddict.outputs
+            self.inputs: OrderedSet = nesteddict.inputs
+            self.name: str = nesteddict.name
         else:
             self.nesteddict = nesteddict
             if outputs is None:
-                outputs = list(nesteddict.keys())
+                outputs = OrderedSet(nesteddict.keys())
             if inputs is None:
-                inputs = []
+                inputs = OrderedSet([])
                 for v in nesteddict.values():
-                    inputs.extend(list(v))
-                inputs = deduplicate(inputs)
+                    inputs |= v
 
             if not outputs or not inputs:
-                outputs = []
-                inputs = []
+                outputs = OrderedSet([])
+                inputs = OrderedSet([])
 
-            self.outputs = list(outputs)
-            self.inputs = list(inputs)
+            self.outputs = OrderedSet(outputs)
+            self.inputs = OrderedSet(inputs)
             if name is None:
                 # TODO: Figure out better default naming scheme for NestedDicts
                 self.name = "NestedDict"
@@ -346,13 +346,15 @@ class NestedDict:
         return self.nesteddict.get(*args, **kwargs)
 
     def update(self, J):
+        if not J.outputs or not J.inputs:
+            return
         if set(self.inputs) != set(J.inputs):
             raise ValueError \
                 (f'Cannot merge {type(self).__name__}s with non-overlapping inputs {set(self.inputs) ^ set(J.inputs)}')
         if not set(self.outputs).isdisjoint(J.outputs):
             raise ValueError \
                 (f'Cannot merge {type(self).__name__}s with overlapping outputs {set(self.outputs) & set(J.outputs)}')
-        self.outputs = self.outputs + J.outputs
+        self.outputs = self.outputs | J.outputs
         self.nesteddict = {**self.nesteddict, **J.nesteddict}
 
     # Ensure that every output in self has either a Jacobian or filler value for each input,

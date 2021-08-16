@@ -106,11 +106,18 @@ def interest_rates(r):
     return rpost, rb
 
 
+# @simple
+# def fiscal(B, G, rb, Y, transfer):
+#     rev = rb * B + G + transfer   # revenue to be raised
+#     tau = rev / Y
+#     return rev, tau
+
 @simple
-def fiscal(B, G, rb, Y, transfer):
-    rev = rb * B + G + transfer   # revenue to be raised
+def fiscal(B, G, rb, Y, transfer, rho_B):
+    B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
+    rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
     tau = rev / Y
-    return rev, tau
+    return B_rule, rev, tau
 
 
 @simple
@@ -133,6 +140,7 @@ dag = sj.create_model([hh, interest_rates, fiscal, mkt_clearing], name='HANK')
 
 calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
                'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143}
+calibration['rho_B'] = 0.8
 
 ss0 = dag.solve_steady_state(calibration, solver='hybr',
                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
@@ -148,7 +156,6 @@ ss0 = dag.solve_steady_state(calibration, solver='hybr',
 #     return B_rule, rev, tau
 
 # dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
-# calibration['rho_B'] = 0.8
 
 # ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
 #                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
@@ -191,7 +198,7 @@ T = 5
 # J_all2 = J_int.compose(J_hh)
 
 
-G = dag.solve_jacobian(ss0, inputs=['r'], outputs=['A', 'Y'], unknowns=['Y', 'B'], targets=['asset_mkt', 'B_rule'], T=300)
+G = dag.solve_jacobian(ss0, inputs=['r'], outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'], unknowns=['Y', 'B'], targets=['asset_mkt', 'B_rule'], T=300)
 
 # td_lin = dag.solve_impulse_linear(ss, {'r': 0.001*0.9**np.arange(300)},
 #                                   unknowns=['B', 'Y'], targets=['asset_mkt', 'B_rule'])

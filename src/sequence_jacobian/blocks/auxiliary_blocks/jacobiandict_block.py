@@ -19,8 +19,10 @@ class JacobianDictBlock(JacobianDict, Block):
                        exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
         return self.jacobian(list(exogenous.keys())).apply(exogenous)
 
-    def jacobian(self, exogenous: List[str] = None, **kwargs) -> JacobianDict:
-        if exogenous is None:
-            return JacobianDict(self.nesteddict)
-        else:
-            return self[:, exogenous]
+    def _jacobian(self, ss, inputs, outputs, T) -> JacobianDict:
+        # TODO: T should be an attribute of JacobianDict
+        if not inputs <= self.inputs:
+            raise KeyError(f'Asking JacobianDictBlock for {inputs - self.inputs}, which are among its inputs {self.inputs}')
+        if not outputs <= self.outputs:
+            raise KeyError(f'Asking JacobianDictBlock for {outputs - self.outputs}, which are among its outputs {self.outputs}')
+        return self[outputs, inputs]
