@@ -71,3 +71,14 @@ class ExtendedFunction:
         input_dict = {k: v for k, v in input_dict.items() if k in self.inputs}
         return self.outputs.dict_from(make_tuple(self.f(**input_dict)))
 
+    def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
+        if preprocess is not None:
+            input_dict = {k: preprocess(v) for k, v in input_dict.items() if k in self.inputs}
+        else:
+            input_dict = {k: v for k, v in input_dict.items() if k in self.inputs}
+
+        output_dict = self.outputs.dict_from(make_tuple(self.f(**input_dict)))
+        if postprocess is not None:
+            output_dict = {k: postprocess(v) for k, v in output_dict.items()}
+        
+        return output_dict

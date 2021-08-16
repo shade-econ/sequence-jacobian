@@ -11,6 +11,7 @@ from ..primitives import Block
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix, verify_saved_jacobian
 from ..utilities import misc
+from ..utilities.function import ExtendedFunction
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
@@ -36,20 +37,18 @@ class SimpleBlock(Block):
 
     def __init__(self, f):
         super().__init__()
-        self.f = f
-        self.name = f.__name__
-        self.output_list = misc.output_list(f)
-        self.inputs = set(misc.input_list(f))
-        self.outputs = set(self.output_list)
+        self.f = ExtendedFunction(f)
+        self.name = self.f.name
+        # TODO: if we do OrderedSet here instead of set, things break!
+        self.inputs = set(self.f.inputs)
+        self.outputs = set(self.f.outputs)
 
     def __repr__(self):
         return f"<SimpleBlock '{self.name}'>"
 
-    def _steady_state(self, calibration):
-        input_args = {k: ignore(v) for k, v in calibration.items() if k in misc.input_list(self.f)}
-        output_vars = [misc.numeric_primitive(o) for o in self.f(**input_args)] if len(self.output_list) > 1 else [
-            misc.numeric_primitive(self.f(**input_args))]
-        return SteadyStateDict({**calibration, **dict(zip(self.output_list, output_vars))})
+    def _steady_state(self, ss):
+        outputs = self.f.wrapped_call(ss, preprocess=ignore, postprocess=misc.numeric_primitive)
+        return SteadyStateDict({**ss, **outputs})
 
     def _impulse_nonlinear(self, ss, exogenous):
         input_args = {}
@@ -86,18 +85,15 @@ class SimpleBlock(Block):
                 else:
                     J[o][i] = invertedJ[i][o]
 
-
-        if not isinstance(JacobianDict(J, name=self.name)[outputs, :], JacobianDict):
-            print('THIS IS THE WORST THING I HAVE EVER SEEN')
-            print(JacobianDict(J, name=self.name)[outputs, :])
+        to_return = JacobianDict(J, name=self.name)[outputs, :]
         return JacobianDict(J, name=self.name)[outputs, :]
 
     def compute_single_shock_J(self, ss, i):
         input_args = {i: ignore(ss[i]) for i in self.inputs}
         input_args[i] = AccumulatedDerivative(f_value=ss[i])
 
-        J = {o: {} for o in self.output_list}
-        for o, o_name in zip(misc.make_tuple(self.f(**input_args)), self.output_list):
+        J = {o: {} for o in self.outputs}
+        for o_name, o in self.f(input_args).items():
             if isinstance(o, AccumulatedDerivative):
                 J[o_name] = SimpleSparse(o.elements)
 
