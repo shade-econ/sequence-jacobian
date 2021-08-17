@@ -20,11 +20,11 @@ class SteadyStateDict:
         if isinstance(data, SteadyStateDict):
             if internal is not None:
                 raise ValueError('Supplying SteadyStateDict and also internal to constructor not allowed')
-            self.toplevel = data
-            self.internal = {}
+            self.toplevel = data.toplevel.copy()
+            self.internal = data.internal.copy()
         
-        self.toplevel: dict = data
-        self.internal: dict = {} if internal is None else internal
+        self.toplevel: dict = data.copy()
+        self.internal: dict = {} if internal is None else internal.copy()
 
     def __repr__(self):
         if self.internal:
@@ -80,6 +80,9 @@ class SteadyStateDict:
 
     def difference(self, data_to_remove):
         return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), deepcopy(self.internal))
+
+    def copy(self):
+        return SteadyStateDict(self)
 
     def _vector_valued(self):
         return OrderedSet([k for k, v in self.toplevel.items() if np.size(v) > 1])
