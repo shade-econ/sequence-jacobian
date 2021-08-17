@@ -335,7 +335,7 @@ class NestedDict:
                 # case 2c: multiple outputs, one or more inputs, return NestedDict with outputs o and inputs i
                 i = (i,) if isinstance(i, str) else i
                 return type(self)({oo: {ii: self.nesteddict[oo][ii] for ii in i} for oo in o}, o, i)
-        elif isinstance(x, list) or isinstance(x, set):
+        elif isinstance(x, OrderedSet) or isinstance(x, list) or isinstance(x, set):
             # case 3: assume that list or set refers just to outputs, get all of those
             return type(self)({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
         else:

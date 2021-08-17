@@ -7,6 +7,8 @@ from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 from copy import deepcopy
 
+from sequence_jacobian.utilities.ordered_set import OrderedSet
+
 from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
 from .nonlinear import td_solve
@@ -128,7 +130,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
                  T: Optional[int] = None, Js={}) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `input` shocks at a steady state `ss`."""
         inputs, outputs = self.default_inputs_outputs(inputs, outputs)
-        inputs, outputs = set(inputs), set(outputs)
+        inputs, outputs = OrderedSet(inputs), OrderedSet(outputs)
 
         # if you have a J for this block that has everything you need, use it
         if (self.name in Js) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):

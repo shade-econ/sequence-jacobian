@@ -40,8 +40,10 @@ class SimpleBlock(Block):
         self.f = ExtendedFunction(f)
         self.name = self.f.name
         # TODO: if we do OrderedSet here instead of set, things break!
-        self.inputs = set(self.f.inputs)
-        self.outputs = set(self.f.outputs)
+        #self.inputs = set(self.f.inputs)
+        #self.outputs = set(self.f.outputs)
+        self.inputs = self.f.inputs
+        self.outputs = self.f.outputs
 
     def __repr__(self):
         return f"<SimpleBlock '{self.name}'>"
