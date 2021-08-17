@@ -105,7 +105,7 @@ class CombinedBlock(Block, Parent):
     def _partial_jacobians(self, ss, inputs, outputs, T, Js):
         """Calculate partial Jacobians (i.e. without forward accumulation) wrt `inputs` and outputs of other blocks."""
         # Add intermediate inputs; remove vector-valued inputs
-        vector_valued = set([k for k, v in ss.items() if np.size(v) > 1])
+        vector_valued = ss._vector_valued()
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
 
@@ -130,7 +130,7 @@ class CombinedBlock(Block, Parent):
         total_Js = JacobianDict.identity(inputs)
 
         # horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
-        vector_valued = set([k for k, v in ss.items() if np.size(v) > 1])
+        vector_valued = ss._vector_valued()
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
 

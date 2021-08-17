@@ -5,16 +5,17 @@ import numpy as np
 from sequence_jacobian import combine
 from sequence_jacobian.models import rbc
 from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
+from sequence_jacobian.steady_state.classes import SteadyStateDict
 
 
 def test_jacobian_dict_block_impulses(rbc_dag):
     rbc_model, exogenous, unknowns, _, ss = rbc_dag
 
     T = 10
-    J_pe = rbc_model.jacobian(ss, exogenous=unknowns + exogenous, T=10)
+    J_pe = rbc_model.jacobian(ss, inputs=unknowns + exogenous, T=10)
     J_block = JacobianDictBlock(J_pe)
 
-    J_block_Z = J_block.jacobian(["Z"])
+    J_block_Z = J_block.jacobian(SteadyStateDict({}), ["Z"])
     for o in J_block_Z.outputs:
         assert np.all(J_block[o]["Z"] == J_block_Z[o]["Z"])
 
@@ -30,7 +31,7 @@ def test_jacobian_dict_block_impulses(rbc_dag):
 def test_jacobian_dict_block_combine(rbc_dag):
     _, exogenous, _, _, ss = rbc_dag
 
-    J_firm = rbc.firm.jacobian(ss, exogenous=exogenous)
+    J_firm = rbc.firm.jacobian(ss, inputs=exogenous)
     blocks_w_jdict = [rbc.household, J_firm, rbc.mkt_clearing]
     cblock_w_jdict = combine(blocks_w_jdict)
 

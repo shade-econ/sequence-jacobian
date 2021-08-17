@@ -16,7 +16,7 @@ from ..utilities import misc, graph
 '''
 
 
-def get_H_U(blocks, unknowns, targets, T, ss=None, Js=None):
+def get_H_U(blocks, unknowns, targets, T, ss=None, Js={}):
     """Get T*n_u by T*n_u matrix H_U, Jacobian mapping all unknowns to all targets.
 
     Parameters
@@ -48,7 +48,7 @@ def get_H_U(blocks, unknowns, targets, T, ss=None, Js=None):
     return H_U_unpacked[targets, unknowns].pack(T)
 
 
-def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None, Js=None):
+def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None, Js={}):
     """Get a single general equilibrium impulse response.
 
     Extremely fast when H_U_factored = utils.misc.factor(get_HU(...)) has already been computed
@@ -102,7 +102,7 @@ def get_impulse(blocks, dZ, unknowns, targets, T=None, ss=None, outputs=None, Js
     return {**dZ, **{o: J_curlyZ_dZ.get(o, np.zeros(T)) + J_curlyU_dU.get(o, np.zeros(T)) for o in outputs}}
 
 
-def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None, Js=None):
+def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None, Js={}):
     """Compute Jacobians G that fully characterize general equilibrium outputs in response
     to all exogenous shocks in 'exogenous'
 
@@ -149,7 +149,7 @@ def get_G(blocks, exogenous, unknowns, targets, T=300, ss=None, outputs=None, Js
     return forward_accumulate(curlyJs, exogenous, outputs, required | set(unknowns))
 
 
-def curlyJ_sorted(blocks, inputs, ss=None, T=None, Js=None):
+def curlyJ_sorted(blocks, inputs, ss=None, T=None, Js={}):
     """
     Sort blocks along DAG and calculate their Jacobians (if not already provided) with respect to inputs
     and with respect to outputs of other blocks
@@ -183,7 +183,7 @@ def curlyJ_sorted(blocks, inputs, ss=None, T=None, Js=None):
     shocks = set(inputs) | required
     for num in topsorted:
         block = blocks[num]
-        jac = block.jacobian(ss, exogenous=list(shocks), Js=Js, **{k: v for k, v in {"T": T}.items()
+        jac = block.jacobian(ss, inputs=list(shocks), Js=Js, **{k: v for k, v in {"T": T}.items()
                                                                    if k in misc.input_kwarg_list(block.jacobian)})
 
         # If the returned Jacobian is empty (i.e. the shocks do not affect any outputs from the block)

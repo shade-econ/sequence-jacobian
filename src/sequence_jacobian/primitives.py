@@ -129,7 +129,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def jacobian(self, ss: SteadyStateDict, inputs: List[str], outputs: Optional[List[str]] = None,
                  T: Optional[int] = None, Js={}) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `input` shocks at a steady state `ss`."""
-        inputs, outputs = self.default_inputs_outputs(inputs, outputs)
+        inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
         inputs, outputs = OrderedSet(inputs), OrderedSet(outputs)
 
         # if you have a J for this block that has everything you need, use it
@@ -138,6 +138,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         
         # if it's a leaf, call Jacobian method, don't supply Js
         if not isinstance(self, Parent):
+            # TODO should this be remapped?
             return self._jacobian(ss, inputs, outputs, T)
         
         # otherwise remap own J (currently needed for SolvedBlock only)
@@ -160,7 +161,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
                                 exogenous: Dict[str, Array],
                                 unknowns: List[str], targets: List[str],
-                                Js: Optional[Dict[str, JacobianDict]] = None,
+                                Js: Optional[Dict[str, JacobianDict]] = {},
                                 **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
@@ -175,7 +176,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
                              exogenous: Dict[str, Array],
                              unknowns: List[str], targets: List[str],
                              T: Optional[int] = None,
-                             Js: Optional[Dict[str, JacobianDict]] = None,
+                             Js: Optional[Dict[str, JacobianDict]] = {},
                              **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
@@ -195,10 +196,10 @@ class Block(abc.ABC, metaclass=ABCMeta):
         if T is None:
             T = 300
 
-        inputs, outputs = self.default_inputs_outputs(inputs, outputs)
+        inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
         inputs, unknowns, targets = list(inputs), list(unknowns), list(targets)
 
-        Js = self.partial_jacobians(ss, set(inputs) | set(unknowns), set(outputs) | set(targets), T, Js)
+        Js = self.partial_jacobians(ss, set(inputs) | set(unknowns), (set(outputs) | set(targets)) - set(unknowns), T, Js)
         
         H_U = self.jacobian(ss, unknowns, targets, T, Js).pack(T)
         H_Z = self.jacobian(ss, inputs, targets, T, Js).pack(T)
@@ -206,7 +207,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
         from . import combine
         self_with_unknowns = combine([U_Z, self])
-        return self_with_unknowns.jacobian(ss, inputs, outputs, T, Js)
+        return self_with_unknowns.jacobian(ss, inputs, set(unknowns) | set(outputs), T, Js)
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:
@@ -233,9 +234,11 @@ class Block(abc.ABC, metaclass=ABCMeta):
         renamed.name = name
         return renamed
 
-    def default_inputs_outputs(self, inputs, outputs):
+    def default_inputs_outputs(self, ss: SteadyStateDict, inputs, outputs):
+        # TODO: there should be checks to make sure you don't ask for multidimensional stuff for Jacobians?
+        # should you be allowed to ask for it (even if not default) for impulses?
         if inputs is None:
             inputs = self.inputs
         if outputs is None:
-            outputs = self.outputs
+            outputs = self.outputs - ss._vector_valued()
         return inputs, outputs

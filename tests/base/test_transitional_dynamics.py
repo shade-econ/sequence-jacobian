@@ -12,7 +12,7 @@ def test_rbc_td(rbc_dag):
     rbc_model, exogenous, unknowns, targets, ss = rbc_dag
 
     T, impact, rho, news = 30, 0.01, 0.8, 10
-    G = rbc_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
+    G = rbc_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
 
     dZ = np.empty((T, 2))
     dZ[:, 0] = impact * ss['Z'] * rho**np.arange(T)
@@ -33,7 +33,7 @@ def test_ks_td(krusell_smith_dag):
     ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
 
     T = 30
-    G = ks_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
+    G = ks_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
 
     for shock_size, tol in [(0.01, 7e-3), (0.1, 0.6)]:
         dZ = shock_size * 0.8 ** np.arange(T)
@@ -51,8 +51,8 @@ def test_hank_td(one_asset_hank_dag):
 
     T = 30
     household = hank_model._blocks_unsorted[0]
-    J_ha = household.jacobian(ss=ss, T=T, exogenous=['Div', 'Tax', 'r', 'w'])
-    G = hank_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T, Js={'household': J_ha})
+    J_ha = household.jacobian(ss=ss, T=T, inputs=['Div', 'Tax', 'r', 'w'])
+    G = hank_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
 
     rho_r, sig_r = 0.61, -0.01/4
     drstar = sig_r * rho_r ** (np.arange(T))
@@ -70,8 +70,8 @@ def test_two_asset_td(two_asset_hank_dag):
 
     T = 30
     household = two_asset_model._blocks_unsorted[0]
-    J_ha = household.jacobian(ss=ss, T=T, exogenous=['N', 'r', 'ra', 'rb', 'tax', 'w'])
-    G = two_asset_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T, Js={'household': J_ha})
+    J_ha = household.jacobian(ss=ss, T=T, inputs=['N', 'r', 'ra', 'rb', 'tax', 'w'])
+    G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
 
     for shock_size, tol in [(0.1, 3e-4), (1, 2e-2)]:
         drstar = shock_size * -0.0025 * 0.6 ** np.arange(T)
@@ -98,9 +98,9 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
 
     T = 30
     household = two_asset_model._blocks_unsorted[0]
-    J_ha = household.jacobian(ss=ss, T=T, exogenous=['N', 'r', 'ra', 'rb', 'tax', 'w'])
-    G = two_asset_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T, Js={'household': J_ha})
-    G_simple = two_asset_model_simple.solve_jacobian(ss, exogenous, unknowns_simple, targets_simple, T=T,
+    J_ha = household.jacobian(ss=ss, T=T, inputs=['N', 'r', 'ra', 'rb', 'tax', 'w'])
+    G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
+    G_simple = two_asset_model_simple.solve_jacobian(ss, unknowns_simple, targets_simple, exogenous, T=T,
                                                      Js={'household': J_ha})
 
     drstar = -0.0025 * 0.6 ** np.arange(T)

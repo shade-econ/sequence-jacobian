@@ -7,7 +7,7 @@ from .jacobian.drivers import get_H_U
 from .jacobian.support import pack_vectors, unpack_vectors
 
 
-def td_solve(block_list, ss, exogenous, unknowns, targets, Js=None, monotonic=False,
+def td_solve(block_list, ss, exogenous, unknowns, targets, Js={}, monotonic=False,
              returnindividual=False, tol=1E-8, maxit=30, verbose=True, grid_paths=None):
     """Solves for GE nonlinear perfect foresight paths for SHADE model, given shocks in kwargs.
 

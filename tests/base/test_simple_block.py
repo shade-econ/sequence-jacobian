@@ -46,14 +46,14 @@ def test_block_consistency(block, ss):
         assert np.all(v == 0)
 
     # now get the Jacobian
-    J = block.jacobian(ss, exogenous=block.input_list)
+    J = block.jacobian(ss, inputs=block.inputs)
 
     # now perturb the steady state by small random vectors
     # and verify that the second-order numerical derivative implied by .td
     # is equivalent to what we get from jac
 
     h = 1E-5
-    all_shocks = {i: np.random.rand(10) for i in block.input_list}
+    all_shocks = {i: np.random.rand(10) for i in block.inputs}
     td_up = block.impulse_nonlinear(ss_results, exogenous={i: h*shock for i, shock in all_shocks.items()})
     td_dn = block.impulse_nonlinear(ss_results, exogenous={i: -h*shock for i, shock in all_shocks.items()})
     

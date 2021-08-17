@@ -19,12 +19,12 @@ def myblock_solved(u, i):
 ss = SteadyStateDict({'u': 5, 'i': 10, 'res': 0.0})
 
 # Compute jacobian of myblock_solved from scratch
-J1 = myblock_solved.jacobian(ss, exogenous=['i'], T=20)
+J1 = myblock_solved.jacobian(ss, inputs=['i'], T=20)
 
 # Compute jacobian of SolvedBlock using a pre-computed FactoredJacobian
-J_u = myblock.jacobian(ss, exogenous=['u'], T=20)  # square jac of underlying simple block 
+J_u = myblock.jacobian(ss, inputs=['u'], T=20)  # square jac of underlying simple block 
 J_factored = FactoredJacobianDict(J_u, T=20)       
-J_i = myblock.jacobian(ss, exogenous=['i'], T=20)  # jac of underlying simple block wrt inputs that are NOT unknowns 
-J2 = J_factored.compose(J_i, T=20)                 # obtain jac of unknown wrt to non-unknown inputs using factored jac
+J_i = myblock.jacobian(ss, inputs=['i'], T=20)  # jac of underlying simple block wrt inputs that are NOT unknowns 
+J2 = J_factored.compose(J_i, T=20)              # obtain jac of unknown wrt to non-unknown inputs using factored jac
 
 assert np.allclose(J1['u']['i'], J2['u']['i'])

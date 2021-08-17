@@ -59,11 +59,11 @@ class SimpleBlock(Block):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
             input_args[k] = Displace(v + ss[k], ss=ss[k], name=k)
 
-        for k in self.input_list:
+        for k in self.inputs:
             if k not in input_args:
                 input_args[k] = ignore(ss[k])
 
-        return ImpulseDict(make_impulse_uniform_length(self.f(**input_args), self.output_list)) - ss
+        return ImpulseDict(make_impulse_uniform_length(self.f(input_args))) - ss
 
     def _impulse_linear(self, ss, exogenous, T=None, Js=None):
         return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
@@ -102,13 +102,7 @@ class SimpleBlock(Block):
         return J
 
 
-def make_impulse_uniform_length(out, output_list):
-    # If the function has multiple outputs
-    if isinstance(out, tuple):
-        # Because we know at least one of the outputs in `out` must be of length T
-        T = np.max([np.size(o) for o in out])
-        out_unif_dim = [np.full(T, misc.numeric_primitive(o)) if np.isscalar(o) else
-                        misc.numeric_primitive(o) for o in out]
-        return dict(zip(output_list, misc.make_tuple(out_unif_dim)))
-    else:
-        return dict(zip(output_list, misc.make_tuple(misc.numeric_primitive(out))))
+def make_impulse_uniform_length(out):
+    T = np.max([np.size(v) for v in out.values()])
+    return {k: (np.full(T, misc.numeric_primitive(v)) if np.isscalar(v) else misc.numeric_primitive(v))
+                                                        for k, v in out.items()}

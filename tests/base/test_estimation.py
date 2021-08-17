@@ -13,7 +13,7 @@ def test_krusell_smith_estimation(krusell_smith_dag):
 
     np.random.seed(41234)
     T = 50
-    G = ks_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
+    G = ks_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
 
     # Step 1: Stacked impulse responses
     rho = 0.9

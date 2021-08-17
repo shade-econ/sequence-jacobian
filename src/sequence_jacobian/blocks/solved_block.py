@@ -83,7 +83,7 @@ class SolvedBlock(Block, Parent):
                                             T=T, Js=Js)
 
     def _jacobian(self, ss, inputs, outputs, T, Js):
-        return self.block.solve_jacobian(ss, set(self.unknowns), set(self.targets), inputs, outputs, T, Js)
+        return self.block.solve_jacobian(ss, set(self.unknowns), set(self.targets), inputs, outputs, T, Js)[outputs]
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js={}):
         # call it on the child first
