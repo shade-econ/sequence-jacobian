@@ -22,9 +22,9 @@ class SteadyStateDict:
                 raise ValueError('Supplying SteadyStateDict and also internal to constructor not allowed')
             self.toplevel = data.toplevel.copy()
             self.internal = data.internal.copy()
-        
-        self.toplevel: dict = data.copy()
-        self.internal: dict = {} if internal is None else internal.copy()
+        else:
+            self.toplevel: dict = data.copy()
+            self.internal: dict = {} if internal is None else internal.copy()
 
     def __repr__(self):
         if self.internal:
