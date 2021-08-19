@@ -347,14 +347,10 @@ class HetBlock(Block):
         else:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs}) - ss
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
-        # infer T from exogenous, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in exogenous.values()]
-        if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-        T = shock_lengths[0]
 
-        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
+
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
         # TODO: h is unusable for now, figure out how to suggest options

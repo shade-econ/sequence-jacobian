@@ -11,8 +11,8 @@ from sequence_jacobian.utilities.ordered_set import OrderedSet
 
 from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
-from .nonlinear import td_solve
-from .jacobian.drivers import get_impulse, get_G
+# from .nonlinear import td_solve
+# from .jacobian.drivers import get_impulse, get_G
 from .steady_state.classes import SteadyStateDict, UserProvidedSS
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
@@ -96,10 +96,13 @@ class Block(abc.ABC, metaclass=ABCMeta):
         from a steady state `ss`."""
         return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def impulse_linear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None, Js={}) -> ImpulseDict:
-        """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks
-        from a steady state `ss`."""
-        return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
+    def impulse_linear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict],
+                       outputs: Optional[List[str]] = None, Js={}) -> ImpulseDict:
+        """Calculate a partial equilibrium, linear impulse response of `outputs` to a set of shocks in `inputs`
+        around a steady state `ss`."""
+        inputs = ImpulseDict(inputs)
+        _, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
+        return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js)
 
     def partial_jacobians(self, ss, inputs=None, outputs=None, T=None, Js={}):
         # TODO: annotate signature
@@ -107,11 +110,11 @@ class Block(abc.ABC, metaclass=ABCMeta):
             inputs = self.inputs
         if outputs is None:
             outputs = self.outputs
-        inputs, outputs = set(inputs), set(outputs)
+        inputs, outputs = inputs, outputs
         
         # if you have a J for this block that already has everything you need, use it
         # TODO: add check for T,  maybe look at verify_saved_jacobian for ideas?
-        if (self.name in Js) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
+        if (self.name in Js) and isinstance(Js[self.name], JacobianDict) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
             return {self.name: Js[self.name][outputs, inputs]}
 
         # if it's a leaf, just call Jacobian method, include if nonzero
@@ -129,10 +132,9 @@ class Block(abc.ABC, metaclass=ABCMeta):
                  T: Optional[int] = None, Js={}) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `input` shocks at a steady state `ss`."""
         inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
-        inputs, outputs = OrderedSet(inputs), OrderedSet(outputs)
 
         # if you have a J for this block that has everything you need, use it
-        if (self.name in Js) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
+        if (self.name in Js) and isinstance(Js[self.name], JacobianDict) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
             return Js[self.name][outputs, inputs]
         
         # if it's a leaf, call Jacobian method, don't supply Js
@@ -171,23 +173,27 @@ class Block(abc.ABC, metaclass=ABCMeta):
                                      unknowns=unknowns, targets=targets, Js=Js, **kwargs)
         return ImpulseDict(irf_nonlin_gen_eq)
 
-    def solve_impulse_linear(self, ss: Dict[str, Union[Real, Array]],
-                             exogenous: Dict[str, Array],
-                             unknowns: List[str], targets: List[str],
-                             T: Optional[int] = None,
-                             Js: Optional[Dict[str, JacobianDict]] = {},
-                             **kwargs) -> ImpulseDict:
-        """Calculate a general equilibrium, linear impulse response to a set of `exogenous` shocks
-        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+    def solve_impulse_linear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
+                             inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]],
+                             Js: Optional[Dict[str, JacobianDict]] = {}) -> ImpulseDict:
+        """Calculate a general equilibrium, linear impulse response to a set of shocks in `inputs` around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
-        blocks = self.blocks if hasattr(self, "blocks") else [self]
-        irf_lin_gen_eq = get_impulse(blocks, exogenous, unknowns, targets, T=T, ss=ss, Js=Js, **kwargs)
-        return ImpulseDict(irf_lin_gen_eq)
+        inputs = ImpulseDict(inputs)
+        input_names, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
+        unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
 
-    def solve_jacobian(self, ss: Dict[str, Union[Real, Array]], unknowns: List[str], targets: List[str],
+        Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, inputs.T, Js)
+
+        H_U = self.jacobian(ss, unknowns, targets, inputs.T, Js).pack(inputs.T)
+        dH = self.impulse_linear(ss, inputs, targets, Js).pack()
+        dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, inputs.T)
+
+        return self.impulse_linear(ss, dU | inputs, outputs - unknowns, Js)
+
+
+    def solve_jacobian(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                        inputs: List[str], outputs: Optional[List[str]] = None, T: Optional[int] = None,
-                       Js: Optional[Dict[str, JacobianDict]] = {},
-                       **kwargs) -> JacobianDict:
+                       Js: Optional[Dict[str, JacobianDict]] = {}) -> JacobianDict:
         """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
         at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
@@ -196,9 +202,9 @@ class Block(abc.ABC, metaclass=ABCMeta):
             T = 300
 
         inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
-        inputs, unknowns, targets = list(inputs), list(unknowns), list(targets)
+        unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
 
-        Js = self.partial_jacobians(ss, set(inputs) | set(unknowns), (set(outputs) | set(targets)) - set(unknowns), T, Js)
+        Js = self.partial_jacobians(ss, inputs | unknowns, (outputs | targets) - unknowns, T, Js)
         
         H_U = self.jacobian(ss, unknowns, targets, T, Js).pack(T)
         H_Z = self.jacobian(ss, inputs, targets, T, Js).pack(T)
@@ -206,7 +212,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
         from . import combine
         self_with_unknowns = combine([U_Z, self])
-        return self_with_unknowns.jacobian(ss, inputs, set(unknowns) | set(outputs), T, Js)
+        return self_with_unknowns.jacobian(ss, inputs, unknowns | outputs, T, Js)
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:
@@ -240,4 +246,4 @@ class Block(abc.ABC, metaclass=ABCMeta):
             inputs = self.inputs
         if outputs is None:
             outputs = self.outputs - ss._vector_valued()
-        return inputs, outputs
+        return OrderedSet(inputs), OrderedSet(outputs)

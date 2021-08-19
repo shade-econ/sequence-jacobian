@@ -60,3 +60,6 @@ class Bijection:
             return tuple(self[k] for k in x)
         else:
             return NotImplemented
+
+    def __bool__(self):
+        return bool(self.map)

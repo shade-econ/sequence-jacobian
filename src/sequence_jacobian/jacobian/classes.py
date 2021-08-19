@@ -5,14 +5,15 @@ import copy
 import warnings
 import numpy as np
 
-from sequence_jacobian.primitives import Array
-
 from . import support
 from ..utilities.misc import factor, factored_solve
 from ..utilities.ordered_set import OrderedSet
 from ..blocks.support.bijection import Bijection
 from ..blocks.support.impulse import ImpulseDict
-from typing import Dict, Union
+from typing import Any, Dict, Union
+
+# Basic types
+Array = Any
 
 
 class Jacobian(metaclass=ABCMeta):
@@ -401,16 +402,21 @@ class JacobianDict(NestedDict):
         if isinstance(x, JacobianDict):
             return self.compose(x)
         elif isinstance(x, Bijection):
-            nesteddict = x @ self.nesteddict
-            for o in nesteddict.keys():
-                nesteddict[o] = x @ nesteddict[o]
-            return JacobianDict(nesteddict, inputs=x @ self.inputs, outputs=x @ self.outputs)
+            return self.remap(x)
         else:
             return self.apply(x)
 
     def __rmatmul__(self, x):
         if isinstance(x, Bijection):
-            return JacobianDict(x @ self.nesteddict, inputs=x @ self.inputs, outputs=x @ self.outputs)
+            return self.remap(x)
+
+    def remap(self, x: Bijection):
+        if not x:
+            return self
+        nesteddict = x @ self.nesteddict
+        for o in nesteddict.keys():
+            nesteddict[o] = x @ nesteddict[o]
+        return JacobianDict(nesteddict, inputs=x @ self.inputs, outputs=x @ self.outputs)
 
     def __bool__(self):
         return bool(self.outputs) and bool(self.inputs)
@@ -479,7 +485,7 @@ class JacobianDict(NestedDict):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
         return JacobianDict(jacdict, outputs, inputs, T=T)
 
-class FactoredJacobianDict(JacobianDict):
+class FactoredJacobianDict:
     def __init__(self, jacobian_dict: JacobianDict, T=None):
         if jacobian_dict.T is None:
             if T is None:
@@ -498,6 +504,30 @@ class FactoredJacobianDict(JacobianDict):
 
     def __repr__(self):
         return f'<{type(self).__name__} unknowns={self.unknowns}, targets={self.targets}>'
+
+    # TODO: test this
+    def to_jacobian_dict(self):
+        return JacobianDict.unpack(-factored_solve(self.H_U_factored, np.eye(self.T*len(self.unknowns))), self.unknowns, self.targets, self.T)
+
+    def __matmul__(self, x):
+        if isinstance(x, JacobianDict):
+            return self.compose(x)
+        elif isinstance(x, Bijection):
+            return self.remap(x)
+        else:
+            return self.apply(x)
+
+    def __rmatmul__(self, x):
+        if isinstance(x, Bijection):
+            return self.remap(x)
+
+    def remap(self, x: Bijection):
+        if not x:
+            return self
+        newself = copy.copy(self)
+        newself.unknowns = x @ self.unknowns
+        newself.targets = x @ self.targets
+        return newself
 
     def compose(self, J: JacobianDict):
         # take intersection of J outputs with self.targets
@@ -580,4 +610,3 @@ def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
             return False
 
     return True
-

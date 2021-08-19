@@ -62,7 +62,6 @@ class CombinedBlock(Block, Parent):
             return f"<CombinedBlock '{self.name}'>"
 
     def _steady_state(self, calibration, dissolve=[], helper_blocks=None, **kwargs):
-        """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
         if helper_blocks is None:
             helper_blocks = []
 
@@ -79,8 +78,6 @@ class CombinedBlock(Block, Parent):
         return ss
 
     def _impulse_nonlinear(self, ss, exogenous, **kwargs):
-        """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks from
-        a steady state, `ss`"""
         irf_nonlin_partial_eq = deepcopy(exogenous)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
@@ -90,20 +87,17 @@ class CombinedBlock(Block, Parent):
 
         return ImpulseDict(irf_nonlin_partial_eq)
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
-        """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks from
-        a steady_state, `ss`"""
-        irf_lin_partial_eq = deepcopy(exogenous)
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        irf_lin_partial_eq = deepcopy(inputs)
         for block in self.blocks:
-            input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs}
+            input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs} 
 
             if input_args:  # If this block is actually perturbed
-                irf_lin_partial_eq.update({k: v for k, v in block.impulse_linear(ss, input_args, T=T, Js=Js)})
+                irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, block.outputs, Js))
 
         return ImpulseDict(irf_lin_partial_eq)
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js):
-        """Calculate partial Jacobians (i.e. without forward accumulation) wrt `inputs` and outputs of other blocks."""
         # Add intermediate inputs; remove vector-valued inputs
         vector_valued = ss._vector_valued()
         inputs = (inputs | self._required) - vector_valued
@@ -121,13 +115,11 @@ class CombinedBlock(Block, Parent):
         return curlyJs
 
     def _jacobian(self, ss, inputs, outputs, T, Js={}):
-        """Calculate a partial equilibrium Jacobian with respect to a set of `exogenous` shocks at
-        a steady state, `ss`"""
         # _partial_jacobians should calculate partial jacobians with exactly the inputs and outputs we want 
         Js = self._partial_jacobians(ss, inputs, outputs, T=T, Js=Js)
 
         original_outputs = outputs
-        total_Js = JacobianDict.identity(inputs, T=T)
+        total_Js = JacobianDict.identity(inputs)
 
         # horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
         vector_valued = ss._vector_valued()
@@ -146,9 +138,6 @@ class CombinedBlock(Block, Parent):
 
     def solve_steady_state(self, calibration, unknowns, targets, solver=None, helper_blocks=None,
                            sort_blocks=False, **kwargs):
-        """Evaluate a general equilibrium steady state of the CombinedBlock given a `calibration`
-        and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
-        the target conditions that must hold in general equilibrium"""
         if solver is None:
             solver = provide_solver_default(unknowns)
         if helper_blocks and sort_blocks is False:

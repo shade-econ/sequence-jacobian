@@ -2,6 +2,7 @@ import numpy as np
 import sequence_jacobian as sj
 from sequence_jacobian import het, simple, hetoutput, combine, solved, create_model, get_H_U
 from sequence_jacobian.jacobian.classes import JacobianDict, ZeroMatrix
+from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
 '''Part 1: Household block'''
@@ -142,24 +143,24 @@ calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 
                'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143}
 calibration['rho_B'] = 0.8
 
-ss0 = dag.solve_steady_state(calibration, solver='hybr',
-                            unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-                            targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+# ss0 = dag.solve_steady_state(calibration, solver='hybr',
+#                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
+#                             targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
 
 #Js = dag.partial_jacobians(ss0, inputs=['Y', 'r'], T=10)
 
-# @solved(unknowns={'B': (0.0, 10.0)}, targets=['B_rule'], solver='brentq')
-# def fiscal_solved(B, G, rb, Y, transfer, rho_B):
-#     B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
-#     rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
-#     tau = rev / Y
-#     return B_rule, rev, tau
+@solved(unknowns={'B': (0.0, 10.0)}, targets=['B_rule'], solver='brentq')
+def fiscal_solved(B, G, rb, Y, transfer, rho_B):
+    B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
+    rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
+    tau = rev / Y
+    return B_rule, rev, tau
 
-# dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
+dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
 
-# ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
-#                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-#                             targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
+                            unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
+                            targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
 
 # assert all(np.allclose(ss0[k], ss[k]) for k in ss0)
 
@@ -198,10 +199,17 @@ T = 5
 # J_all2 = J_int.compose(J_hh)
 
 
-G = dag.solve_jacobian(ss0, inputs=['r'], outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'], unknowns=['Y', 'B'], targets=['asset_mkt', 'B_rule'], T=300)
+# G = dag.solve_jacobian(ss0, inputs=['r'], outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'], unknowns=['Y', 'B'], targets=['asset_mkt', 'B_rule'], T=300)
 
-# td_lin = dag.solve_impulse_linear(ss, {'r': 0.001*0.9**np.arange(300)},
-#                                   unknowns=['B', 'Y'], targets=['asset_mkt', 'B_rule'])
+G = dag.solve_jacobian(ss, inputs=['r'], outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'], unknowns=['Y'], targets=['asset_mkt'], T=300)
+
+shock = ImpulseDict({'r': 0.001*0.9**np.arange(300)})
+
+td1 = G @ shock 
+
+
+td_lin = dag.solve_impulse_linear(ss, unknowns=['Y'], targets=['asset_mkt'],
+                                  inputs=shock, outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'])
 
 # td_nonlin = dag.solve_impulse_nonlinear(ss, {'r': 0.001*0.9**np.arange(300)},
 #                                         unknowns=['B', 'Y'], targets=['asset_mkt', 'B_rule'])

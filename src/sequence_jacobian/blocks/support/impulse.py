@@ -20,21 +20,17 @@ class ImpulseDict:
                 T = self.infer_length()
             self.T = T
 
-    def keys(self):
-        return self.impulse.keys()
-
-    def pack(self):
-        T = self.T
-        bigv = np.empty(T*len(self.impulse))
-        for i, v in enumerate(self.impulse.values()):
-            bigv[i*T:(i+1)*T] = v
-        return bigv
-
     def __repr__(self):
         return f'<ImpulseDict: {list(self.impulse.keys())}>'
 
     def __iter__(self):
         return iter(self.impulse)
+
+    def items(self):
+        return self.impulse.items()
+
+    def update(self, other):
+        return self.impulse.update(other.impulse)
 
     def __or__(self, other):
         if not isinstance(other, ImpulseDict):
@@ -108,9 +104,26 @@ class ImpulseDict:
     def __rmatmul__(self, x):
         return self.__matmul__(x)
 
+    def keys(self):
+        return self.impulse.keys()
+
+    def pack(self):
+        T = self.T
+        bigv = np.empty(T*len(self.impulse))
+        for i, v in enumerate(self.impulse.values()):
+            bigv[i*T:(i+1)*T] = v
+        return bigv
+
+    @staticmethod
+    def unpack(bigv, outputs, T):
+        impulse = {}
+        for i, o in enumerate(outputs):
+            impulse[o] = bigv[i*T:(i+1)*T]
+        return ImpulseDict(impulse)
+
     def infer_length(self):
         lengths = [len(v) for v in self.impulse.values()]
         length = max(lengths)
-        if lengths != min(lengths):
+        if length != min(lengths):
             raise ValueError(f'Building ImpulseDict with inconsistent lengths {max(lengths)} and {min(lengths)}')
         return length

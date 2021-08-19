@@ -6,10 +6,9 @@ from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .support.impulse import ImpulseDict
-from .support.bijection import Bijection
 from ..primitives import Block
 from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix, verify_saved_jacobian
+from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
 
@@ -39,9 +38,6 @@ class SimpleBlock(Block):
         super().__init__()
         self.f = ExtendedFunction(f)
         self.name = self.f.name
-        # TODO: if we do OrderedSet here instead of set, things break!
-        #self.inputs = set(self.f.inputs)
-        #self.outputs = set(self.f.outputs)
         self.inputs = self.f.inputs
         self.outputs = self.f.outputs
 
@@ -65,8 +61,8 @@ class SimpleBlock(Block):
 
         return ImpulseDict(make_impulse_uniform_length(self.f(input_args))) - ss
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
-        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
 
     def _jacobian(self, ss, inputs, outputs, T):
         invertedJ = {i: {} for i in inputs}
@@ -87,8 +83,7 @@ class SimpleBlock(Block):
                 else:
                     J[o][i] = invertedJ[i][o]
 
-        to_return = JacobianDict(J, name=self.name)[outputs, :]
-        return JacobianDict(J, name=self.name)[outputs, :]
+        return JacobianDict(J, name=self.name, T=T)[outputs, :]
 
     def compute_single_shock_J(self, ss, i):
         input_args = {i: ignore(ss[i]) for i in self.inputs}

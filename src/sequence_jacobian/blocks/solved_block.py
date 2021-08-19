@@ -1,5 +1,7 @@
 import warnings
 
+from sequence_jacobian.utilities.ordered_set import OrderedSet
+
 from ..primitives import Block
 from ..blocks.simple_block import simple
 from ..blocks.parent import Parent
@@ -77,21 +79,22 @@ class SolvedBlock(Block, Parent):
                                                targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
                                                monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
-        return self.block.solve_impulse_linear(ss, exogenous=exogenous, unknowns=list(self.unknowns.keys()),
-                                            targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                            T=T, Js=Js)
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets), inputs, outputs, Js)
 
     def _jacobian(self, ss, inputs, outputs, T, Js):
-        return self.block.solve_jacobian(ss, set(self.unknowns), set(self.targets), inputs, outputs, T, Js)[outputs]
+        return self.block.solve_jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
+                                         inputs, outputs, T, Js)[outputs]
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js={}):
         # call it on the child first
-        inner_Js = self.block.partial_jacobians(ss, inputs=(set(self.unknowns) | inputs),
-                                                outputs=(set(self.targets) | outputs), T=T, Js=Js)
+        inner_Js = self.block.partial_jacobians(ss,
+                                                inputs=(OrderedSet(self.unknowns) | inputs),
+                                                outputs=(OrderedSet(self.targets) | outputs - self.unknowns.keys()),
+                                                T=T, Js=Js)
 
         # with these inner Js, also compute H_U and factorize
-        H_U = self.block.jacobian(ss, inputs=self.unknowns.keys(), outputs=self.targets.keys(), T=T, Js=inner_Js)
+        H_U = self.block.jacobian(ss, inputs=OrderedSet(self.unknowns), outputs=OrderedSet(self.targets), T=T, Js=inner_Js)
         H_U_factored = FactoredJacobianDict(H_U, T)
 
         return {**inner_Js, self.name: H_U_factored}
