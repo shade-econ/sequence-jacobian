@@ -95,6 +95,57 @@ def compute_target_values(targets, potential_args):
         return target_values
 
 
+def compare_steady_states(ss_ref, ss_comp, tol=1e-8, name_map=None, internal=True, check_same_keys=True, verbose=False):
+    """Check if two steady state dicts (can be flat dicts or SteadyStateDict objects) are the same up to a tolerance"""
+    if name_map is None:
+        name_map = {}
+
+    valid = True
+
+    # Compare the steady state values present in both ss_ref and ss_comp
+    if internal:
+        if not hasattr(ss_ref, "internal") or not hasattr(ss_comp, "internal"):
+            warnings.warn("The provided steady state dicts do not both have .internal attrs. Will only compare"
+                          " top-level values")
+            ds_to_check = [(ss_ref, ss_comp, "toplevel")]
+        else:
+            ds_to_check = [(ss_ref, ss_comp, "toplevel")] + [(ss_ref.internal[i], ss_comp.internal[i], i + "_internal") for i in ss_ref.internal]
+    else:
+        ds_to_check = [(ss_ref, ss_comp, "toplevel")]
+
+    for ds in ds_to_check:
+        d_ref, d_comp, level = ds
+        for key_ref in d_ref.keys():
+            if key_ref in d_comp.keys():
+                key_comp = key_ref
+            elif key_ref in name_map:
+                key_comp = name_map[key_ref]
+            else:
+                continue
+
+            if np.isscalar(d_ref[key_ref]):
+                resid = abs(d_ref[key_ref] - d_comp[key_comp])
+            else:
+                resid = np.linalg.norm(d_ref[key_ref].ravel() - d_comp[key_comp].ravel(), np.inf)
+            if verbose:
+                print(f"{key_ref} resid: {resid}")
+            else:
+                if not np.all(np.isclose(resid, 0., atol=tol)):
+                    valid = False
+
+        # Show the steady state values present in only one of d_ref or d_comp, i.e. if there are missing keys
+        if check_same_keys:
+            d_ref_incl_mapped = set(d_ref.keys()) - set(name_map.keys())
+            d_comp_incl_mapped = set(d_comp.keys()) - set(name_map.values())
+            diff_keys = d_ref_incl_mapped.symmetric_difference(d_comp_incl_mapped)
+            if diff_keys:
+                if verbose:
+                    print(f"At level '{level}', the keys present only one of the two steady state dicts are {diff_keys}")
+                valid = False
+
+    return valid
+
+
 def subset_helper_block_unknowns(unknowns_all, helper_blocks, helper_targets):
     """Find the set of unknowns that the `helper_blocks` solve for"""
     unknowns_handled_by_helpers = {}

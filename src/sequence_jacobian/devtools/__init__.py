@@ -1,3 +1,3 @@
 """Tools for debugging, developing, and deprecating code"""
 
-from . import analysis, debug, deprecate, upgrade
+from . import analysis, debug, deprecate
