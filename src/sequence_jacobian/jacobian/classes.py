@@ -5,10 +5,14 @@ import copy
 import warnings
 import numpy as np
 
+from sequence_jacobian.primitives import Array
+
 from . import support
 from ..utilities.misc import factor, factored_solve
 from ..utilities.ordered_set import OrderedSet
 from ..blocks.support.bijection import Bijection
+from ..blocks.support.impulse import ImpulseDict
+from typing import Dict, Union
 
 
 class Jacobian(metaclass=ABCMeta):
@@ -375,15 +379,17 @@ def deduplicate(mylist):
 
 
 class JacobianDict(NestedDict):
-    def __init__(self, nesteddict, outputs=None, inputs=None, name=None):
+    def __init__(self, nesteddict, outputs=None, inputs=None, name=None, T=None):
         ensure_valid_jacobiandict(nesteddict)
         super().__init__(nesteddict, outputs=outputs, inputs=inputs, name=name)
+        self.T = T
 
     @staticmethod
     def identity(ks):
         return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks).complete()
 
     def complete(self):
+        # TODO: think about when and whether we want to use this
         return super().complete(ZeroMatrix())
 
     def addinputs(self):
@@ -410,6 +416,9 @@ class JacobianDict(NestedDict):
         return bool(self.outputs) and bool(self.inputs)
 
     def compose(self, J):
+        if self.T is not None and J.T is not None and self.T != J.T:
+            raise ValueError(f'Trying to multiply JacobianDicts with inconsistent dimensions {self.T} and {J.T}')
+
         o_list = self.outputs
         m_list = tuple(set(self.inputs) & set(J.outputs))
         i_list = J.inputs
@@ -430,22 +439,30 @@ class JacobianDict(NestedDict):
 
         return JacobianDict(J_oi, o_list, i_list)
 
-    def apply(self, x):
-        # assume that all entries in x have some length T, and infer it
-        T = len(next(iter(x.values())))
+    def apply(self, x: Union[ImpulseDict, Dict[str, Array]]):
+        x = ImpulseDict(x)
 
         inputs = x.keys() & set(self.inputs)
         J_oi = self.complete().nesteddict
         y = {}
 
         for o in self.outputs:
-            y[o] = np.zeros(T)
+            y[o] = np.zeros(x.T)
             for i in inputs:
                 y[o] += J_oi[o][i] @ x[i]
 
-        return y
+        return ImpulseDict(y, T=x.T)
 
-    def pack(self, T):
+    def pack(self, T=None):
+        if T is None:
+            if self.T is not None:
+                T = self.T
+            else:
+                raise ValueError('Trying to pack {self} into matrix, but do not know {T}')
+        else:
+            if self.T is not None and T != self.T:
+                raise ValueError('{self} has dimension {self.T}, but trying to pack it with alternate dimension {T}')
+
         J = np.empty((len(self.outputs) * T, len(self.inputs) * T))
         for iO, O in enumerate(self.outputs):
             for iI, I in enumerate(self.inputs):
@@ -460,10 +477,17 @@ class JacobianDict(NestedDict):
             jacdict[O] = {}
             for iI, I in enumerate(inputs):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
-        return JacobianDict(jacdict, outputs, inputs)
+        return JacobianDict(jacdict, outputs, inputs, T=T)
 
 class FactoredJacobianDict(JacobianDict):
-    def __init__(self, jacobian_dict: JacobianDict, T):
+    def __init__(self, jacobian_dict: JacobianDict, T=None):
+        if jacobian_dict.T is None:
+            if T is None:
+                raise ValueError(f'Trying to factor (solve) {jacobian_dict} but do not know T')
+            self.T = T
+        else:
+            self.T = jacobian_dict.T
+
         H_U = jacobian_dict.pack(T)
         self.targets = jacobian_dict.outputs
         self.unknowns = jacobian_dict.inputs
@@ -475,14 +499,26 @@ class FactoredJacobianDict(JacobianDict):
     def __repr__(self):
         return f'<{type(self).__name__} unknowns={self.unknowns}, targets={self.targets}>'
 
-    def compose(self, J: JacobianDict, T):
+    def compose(self, J: JacobianDict):
         # take intersection of J outputs with self.targets
         # then pack that reduced J into a matrix, then apply lu_solve, then unpack
-        Jsub = J[[o for o in self.targets if o in J.outputs]].pack(T)
+        Jsub = J[[o for o in self.targets if o in J.outputs]].pack(self.T)
         X = -factored_solve(self.H_U_factored, Jsub) 
-        return JacobianDict.unpack(X, self.unknowns, J.inputs, T)
+        return JacobianDict.unpack(X, self.unknowns, J.inputs, self.T)
 
-    def apply(self, x):
+    def apply(self, x: Union[ImpulseDict, Dict[str, Array]]):
+        x = ImpulseDict(x)[self.targets]
+
+        inputs = x.keys() & set(self.targets)
+        #J_oi = self.complete().nesteddict
+        # y = {}
+
+        # for o in self.outputs:
+        #     y[o] = np.zeros(x.T)
+        #     for i in inputs:
+        #         y[o] += J_oi[o][i] @ x[i]
+
+        # return ImpulseDict(y, T=x.T)
         # take intersection of x entries with self.targets
         # then pack (should be ImpulseDict?) into a vector, then apply lu_solve, then unpack
         pass

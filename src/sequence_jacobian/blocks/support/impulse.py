@@ -8,19 +8,33 @@ from .bijection import Bijection
 
 
 class ImpulseDict:
-    def __init__(self, impulse):
+    def __init__(self, impulse, T=None):
         if isinstance(impulse, ImpulseDict):
             self.impulse = impulse.impulse
+            self.T = impulse.T
         else:
             if not isinstance(impulse, dict):
                 raise ValueError('ImpulseDicts are initialized with a `dict` of impulse responses.')
             self.impulse = impulse
+            if T is None:
+                T = self.infer_length()
+            self.T = T
+
+    def keys(self):
+        return self.impulse.keys()
+
+    def pack(self):
+        T = self.T
+        bigv = np.empty(T*len(self.impulse))
+        for i, v in enumerate(self.impulse.values()):
+            bigv[i*T:(i+1)*T] = v
+        return bigv
 
     def __repr__(self):
         return f'<ImpulseDict: {list(self.impulse.keys())}>'
 
     def __iter__(self):
-        return iter(self.impulse.items())
+        return iter(self.impulse)
 
     def __or__(self, other):
         if not isinstance(other, ImpulseDict):
@@ -93,3 +107,10 @@ class ImpulseDict:
 
     def __rmatmul__(self, x):
         return self.__matmul__(x)
+
+    def infer_length(self):
+        lengths = [len(v) for v in self.impulse.values()]
+        length = max(lengths)
+        if lengths != min(lengths):
+            raise ValueError(f'Building ImpulseDict with inconsistent lengths {max(lengths)} and {min(lengths)}')
+        return length

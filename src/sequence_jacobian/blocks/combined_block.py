@@ -127,7 +127,7 @@ class CombinedBlock(Block, Parent):
         Js = self._partial_jacobians(ss, inputs, outputs, T=T, Js=Js)
 
         original_outputs = outputs
-        total_Js = JacobianDict.identity(inputs)
+        total_Js = JacobianDict.identity(inputs, T=T)
 
         # horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
         vector_valued = ss._vector_valued()

@@ -96,8 +96,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         from a steady state `ss`."""
         return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
 
-    def impulse_linear(self, ss: SteadyStateDict,
-                       exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
+    def impulse_linear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None, Js={}) -> ImpulseDict:
         """Calculate a partial equilibrium, linear impulse response to a set of `exogenous` shocks
         from a steady state `ss`."""
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)

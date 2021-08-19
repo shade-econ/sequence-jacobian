@@ -382,10 +382,6 @@ class HetBlock(Block):
             J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
         outputs = self.M_outputs.inv @ outputs # horrible
-        print('HERE ARE THE OUTPUTS')
-        print(outputs)
-
-        print(self.M_outputs)
 
         # TODO: this is one instance of us letting people supply inputs that aren't actually inputs
         # This behavior should lead to an error instead (probably should be handled at top level)
@@ -421,7 +417,7 @@ class HetBlock(Block):
                 F[o.capitalize()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
 
-        return JacobianDict(J, name=self.name)
+        return JacobianDict(J, name=self.name, T=T)
 
     def add_hetinput(self, hetinput, overwrite=False, verbose=True):
         # TODO: serious violation, this is mutating the block
