@@ -14,9 +14,9 @@ from ..blocks.parent import Parent
 
 
 # Find the steady state solution
-def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
+def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
                  sort_blocks=True, helper_blocks=None, helper_targets=None,
-                 consistency_check=True, ttol=2e-12, ctol=1e-9, fragile=False,
+                 consistency_check=True, ttol=2e-12, ctol=1e-9,
                  block_kwargs=None, verbose=False, solver=None, solver_kwargs=None,
                  constrained_method="linear_continuation", constrained_kwargs=None):
     """
@@ -48,8 +48,6 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
     ctol: `float`
         The tolerance for the consistency check---how close the user wants the computed target values, without the
         use of helper blocks, to equal the desired values
-    fragile: `bool`
-        Throw errors instead of warnings when certain criteria are not met, i.e if the consistency_check fails
     block_kwargs: `dict`
         A dict of any kwargs that specify additional settings in order to evaluate block.steady_state for any
         potential Block object, e.g. HetBlocks have backward_tol and forward_tol settings that are specific to that
@@ -77,67 +75,71 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
                                                 block_kwargs, solver_kwargs, constrained_kwargs)
 
     # Initial setup of blocks, targets, and dictionary of steady state values to be returned
-    blocks_all = blocks + helper_blocks
+    # blocks_all = blocks + helper_blocks
+    blocks_all = blocks
     targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
 
-    helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
-    helper_targets = {t: targets[t] for t in targets if t in helper_targets}
-    helper_outputs = {}
+    # helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
+    # helper_targets = {t: targets[t] for t in targets if t in helper_targets}
+    # helper_outputs = {}
 
     ss_values = SteadyStateDict(calibration)
-    ss_values.update(helper_targets)
+    # ss_values.update(helper_targets)
 
-    if sort_blocks:
-        topsorted = graph.block_sort(blocks, helper_blocks=helper_blocks, calibration=ss_values)
-    else:
-        topsorted = range(len(blocks + helper_blocks))
+    # if sort_blocks:
+    #     topsorted = graph.block_sort(blocks, helper_blocks=helper_blocks, calibration=ss_values)
+    # else:
+    #     topsorted = range(len(blocks + helper_blocks))
 
-    def residual(targets_dict, unknown_keys, unknown_values, include_helpers=True, consistency_check=False):
+    def residual(targets_dict, unknown_keys, unknown_values, bypass_redirection=False):
         ss_values.update(misc.smart_zip(unknown_keys, unknown_values))
 
         # TODO: Later on optimize to not evaluating blocks in residual that are no longer needed due to helper
         #   block subsetting
         # Progress through the DAG computing the resulting steady state values based on the unknown_values
         # provided to the residual function
-        for i in topsorted:
-            if not include_helpers and blocks_all[i] in helper_blocks:
-                continue
+        for block in blocks_all:
+            # if not include_helpers and blocks_all[i] in helper_blocks:
+            #     continue
             # TODO: this is duplicate of CombinedBlock inner_dissolve, should offload to that
-            inner_dissolve = [k for k in dissolve if isinstance(blocks_all[i], Parent) and k in blocks_all[i].descendants]
-            outputs = blocks_all[i].steady_state(ss_values, hetoutput=True, 
-                                    dissolve=inner_dissolve, verbose=verbose, **block_kwargs)
-            if include_helpers and blocks_all[i] in helper_blocks:
-                helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
-                ss_values.update(outputs)
-            else:
-                # Don't overwrite entries in ss_values corresponding to what has already
-                # been solved for in helper_blocks so we can check for consistency after-the-fact
-                ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
+            inner_dissolve = [k for k in dissolve if isinstance(block, Parent) and k in block.descendants]
+            outputs = block.steady_state(ss_values, hetoutput=True, dissolve=inner_dissolve,
+                                         bypass_redirection=bypass_redirection, verbose=verbose, **block_kwargs)
+            # if include_helpers and blocks_all[i] in helper_blocks:
+            #     helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
+            #     ss_values.update(outputs)
+            # else:
+            #     # Don't overwrite entries in ss_values corresponding to what has already
+            #     # been solved for in helper_blocks so we can check for consistency after-the-fact
+            #     ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
+            ss_values.update(outputs)
 
         # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
         # dict of ss_values to compute the "unknown_solutions"
         return compute_target_values(targets_dict, ss_values)
 
-    if helper_blocks:
-        unknowns_solved = _solve_for_unknowns_w_helper_blocks(residual, unknowns, targets, helper_unknowns,
-                                                              helper_targets, solver, solver_kwargs,
-                                                              constrained_method=constrained_method,
-                                                              constrained_kwargs=constrained_kwargs,
-                                                              tol=ttol, verbose=verbose, fragile=fragile)
-    else:
-        unknowns_solved = _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs,
-                                              constrained_method=constrained_method,
-                                              constrained_kwargs=constrained_kwargs,
-                                              tol=ttol, verbose=verbose, fragile=fragile)
+    # if helper_blocks:
+    #     unknowns_solved = _solve_for_unknowns_w_helper_blocks(residual, unknowns, targets, helper_unknowns,
+    #                                                           helper_targets, solver, solver_kwargs,
+    #                                                           constrained_method=constrained_method,
+    #                                                           constrained_kwargs=constrained_kwargs,
+    #                                                           tol=ttol, verbose=verbose, fragile=fragile)
+    # else:
+    unknowns_solved = _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs,
+                                          constrained_method=constrained_method,
+                                          constrained_kwargs=constrained_kwargs,
+                                          tol=ttol, verbose=verbose)
                             
     # Check that the solution is consistent with what would come out of the DAG without the helper blocks
-    if consistency_check and helper_blocks:
+    if consistency_check:
         # Add the unknowns not handled by helpers into the DAG to be checked.
         unknowns_solved.update({k: ss_values[k] for k in unknowns if k not in unknowns_solved})
 
-        cresid = abs(np.max(residual(targets, unknowns_solved.keys(), unknowns_solved.values(),
-                                     include_helpers=False, consistency_check=True)))
-        run_consistency_check(cresid, ctol=ctol, fragile=fragile)
+        cresid = np.max(abs(residual(targets, unknowns_solved.keys(), unknowns_solved.values(),
+                                     bypass_redirection=True)))
+        if cresid > ctol:
+            raise RuntimeError(f"Target value residual {cresid} exceeds ctol specified for checking"
+                               f" the consistency of the DAG without redirection.")
 
     # Update to set the solutions for the steady state values of the unknowns
     ss_values.update(unknowns_solved)
@@ -178,7 +180,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=[],
 
 def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, residual_kwargs=None,
                         constrained_method="linear_continuation", constrained_kwargs=None,
-                        tol=2e-12, verbose=False, fragile=False):
+                        tol=2e-12, verbose=False):
     """
     Given a residual function (constructed within steady_state) and a set of bounds or initial values for
     the set of unknowns, solve for the root.
@@ -224,7 +226,7 @@ def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, resi
             raise ValueError(f"Steady-state solver, {solver}, did not converge.")
         unknown_solutions = result.root
     elif solver in scipy_optimize_multi_solvers:
-        initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns, fragile=fragile)
+        initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
         # If no bounds were provided
         if not bounds:
             result = opt.root(residual_f, initial_values,
@@ -278,37 +280,37 @@ def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, resi
     return dict(misc.smart_zip(unknowns.keys(), unknown_solutions))
 
 
-def _solve_for_unknowns_w_helper_blocks(residual, unknowns, targets, helper_unknowns, helper_targets,
-                                        solver, solver_kwargs, constrained_method="linear_continuation",
-                                        constrained_kwargs=None, tol=2e-12, verbose=False, fragile=False):
-    """Enhance the solver executed in _solve_for_unknowns by handling a subset of unknowns and targets
-    with helper blocks, reducing the number of unknowns that need to be numerically solved for."""
-    # Initial evaluation of the DAG at the initial values of the unknowns, including the helper blocks,
-    # to populate the `ss_values` dict with the unknown values that:
-    # a) are handled by helper blocks and b) are excludable from the main DAG
-    # and to populate `helper_outputs` with outputs handled by helpers that ought not be changed
-    unknowns_init_vals = [v if not isinstance(v, tuple) else (v[0] + v[1]) / 2 for v in unknowns.values()]
-    targets_init_vals = dict(misc.smart_zip(targets.keys(), residual(targets, unknowns.keys(), unknowns_init_vals)))
-
-    # Subset out the unknowns and targets that are not excludable from the main DAG loop
-    unknowns_non_excl = misc.dict_diff(unknowns, helper_unknowns)
-    targets_non_excl = misc.dict_diff(targets, helper_targets)
-
-    # If the `targets` that are handled by helpers and excludable from the main DAG evaluate to 0. at the set of
-    # `unknowns` initial values and the initial `calibration`, then those `targets` have been hit analytically and
-    # we can omit them and their corresponding `unknowns` in the main DAG.
-    if np.all(np.isclose([targets_init_vals[t] for t in helper_targets.keys()], 0.)):
-        unknown_solutions = _solve_for_unknowns(residual, unknowns_non_excl, targets_non_excl,
-                                                solver, solver_kwargs,
-                                                constrained_method=constrained_method,
-                                                constrained_kwargs=constrained_kwargs,
-                                                tol=tol, verbose=verbose, fragile=fragile)
-    # If targets handled by helpers and excludable from the main DAG are not satisfied then
-    # it is assumed that helper blocks merely aid in providing more accurate guesses for the DAG solution,
-    # and they remain a part of the main DAG when solving.
-    else:
-        unknown_solutions = _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs,
-                                                constrained_method=constrained_method,
-                                                constrained_kwargs=constrained_kwargs,
-                                                tol=tol, verbose=verbose, fragile=fragile)
-    return unknown_solutions
+# def _solve_for_unknowns_w_helper_blocks(residual, unknowns, targets, helper_unknowns, helper_targets,
+#                                         solver, solver_kwargs, constrained_method="linear_continuation",
+#                                         constrained_kwargs=None, tol=2e-12, verbose=False, fragile=False):
+#     """Enhance the solver executed in _solve_for_unknowns by handling a subset of unknowns and targets
+#     with helper blocks, reducing the number of unknowns that need to be numerically solved for."""
+#     # Initial evaluation of the DAG at the initial values of the unknowns, including the helper blocks,
+#     # to populate the `ss_values` dict with the unknown values that:
+#     # a) are handled by helper blocks and b) are excludable from the main DAG
+#     # and to populate `helper_outputs` with outputs handled by helpers that ought not be changed
+#     unknowns_init_vals = [v if not isinstance(v, tuple) else (v[0] + v[1]) / 2 for v in unknowns.values()]
+#     targets_init_vals = dict(misc.smart_zip(targets.keys(), residual(targets, unknowns.keys(), unknowns_init_vals)))
+#
+#     # Subset out the unknowns and targets that are not excludable from the main DAG loop
+#     unknowns_non_excl = misc.dict_diff(unknowns, helper_unknowns)
+#     targets_non_excl = misc.dict_diff(targets, helper_targets)
+#
+#     # If the `targets` that are handled by helpers and excludable from the main DAG evaluate to 0. at the set of
+#     # `unknowns` initial values and the initial `calibration`, then those `targets` have been hit analytically and
+#     # we can omit them and their corresponding `unknowns` in the main DAG.
+#     if np.all(np.isclose([targets_init_vals[t] for t in helper_targets.keys()], 0.)):
+#         unknown_solutions = _solve_for_unknowns(residual, unknowns_non_excl, targets_non_excl,
+#                                                 solver, solver_kwargs,
+#                                                 constrained_method=constrained_method,
+#                                                 constrained_kwargs=constrained_kwargs,
+#                                                 tol=tol, verbose=verbose, fragile=fragile)
+#     # If targets handled by helpers and excludable from the main DAG are not satisfied then
+#     # it is assumed that helper blocks merely aid in providing more accurate guesses for the DAG solution,
+#     # and they remain a part of the main DAG when solving.
+#     else:
+#         unknown_solutions = _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs,
+#                                                 constrained_method=constrained_method,
+#                                                 constrained_kwargs=constrained_kwargs,
+#                                                 tol=tol, verbose=verbose, fragile=fragile)
+#     return unknown_solutions

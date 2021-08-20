@@ -61,19 +61,14 @@ class CombinedBlock(Block, Parent):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], helper_blocks=None, **kwargs):
+    def _steady_state(self, calibration, dissolve=[], bypass_redirection=False, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
-        if helper_blocks is None:
-            helper_blocks = []
-
-        topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
-        blocks_all = self.blocks + helper_blocks
 
         ss = deepcopy(calibration)
-        for i in topsorted:
+        for block in self.blocks:
             # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
-            inner_dissolve = [k for k in dissolve if self.descendants[k] == blocks_all[i].name]
-            outputs = blocks_all[i].steady_state(ss, dissolve=inner_dissolve, **kwargs)
+            inner_dissolve = [k for k in dissolve if self.descendants[k] == block.name]
+            outputs = block.steady_state(ss, dissolve=inner_dissolve, bypass_redirection=bypass_redirection, **kwargs)
             ss.update(outputs)
 
         return ss
