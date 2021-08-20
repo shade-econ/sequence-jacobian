@@ -70,62 +70,31 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
         A dictionary containing all of the pre-specified values and computed values from the steady state computation
     """
 
-    dissolve, helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs =\
-        instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targets,
-                                                block_kwargs, solver_kwargs, constrained_kwargs)
+    dissolve, block_kwargs, solver_kwargs, constrained_kwargs =\
+        instantiate_steady_state_mutable_kwargs(dissolve, block_kwargs, solver_kwargs, constrained_kwargs)
 
     # Initial setup of blocks, targets, and dictionary of steady state values to be returned
-    # blocks_all = blocks + helper_blocks
     blocks_all = blocks
     targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
 
-    # helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
-    # helper_targets = {t: targets[t] for t in targets if t in helper_targets}
-    # helper_outputs = {}
-
     ss_values = SteadyStateDict(calibration)
-    # ss_values.update(helper_targets)
+    unknown_keys = unknowns.keys()
 
-    # if sort_blocks:
-    #     topsorted = graph.block_sort(blocks, helper_blocks=helper_blocks, calibration=ss_values)
-    # else:
-    #     topsorted = range(len(blocks + helper_blocks))
-
-    def residual(targets_dict, unknown_keys, unknown_values, bypass_redirection=False):
+    def residual(unknown_values, bypass_redirection=False):
         ss_values.update(misc.smart_zip(unknown_keys, unknown_values))
 
         # TODO: Later on optimize to not evaluating blocks in residual that are no longer needed due to helper
         #   block subsetting
-        # Progress through the DAG computing the resulting steady state values based on the unknown_values
-        # provided to the residual function
         for block in blocks_all:
-            # if not include_helpers and blocks_all[i] in helper_blocks:
-            #     continue
             # TODO: this is duplicate of CombinedBlock inner_dissolve, should offload to that
             inner_dissolve = [k for k in dissolve if isinstance(block, Parent) and k in block.descendants]
             outputs = block.steady_state(ss_values, hetoutput=True, dissolve=inner_dissolve,
                                          bypass_redirection=bypass_redirection, verbose=verbose, **block_kwargs)
-            # if include_helpers and blocks_all[i] in helper_blocks:
-            #     helper_outputs.update({k: v for k, v in outputs.toplevel.items() if k in blocks_all[i].outputs | set(helper_targets.keys())})
-            #     ss_values.update(outputs)
-            # else:
-            #     # Don't overwrite entries in ss_values corresponding to what has already
-            #     # been solved for in helper_blocks so we can check for consistency after-the-fact
-            #     ss_values.update(outputs) if consistency_check else ss_values.update(outputs.difference(helper_outputs))
             ss_values.update(outputs)
 
-        # Because in solve_for_unknowns, models that are fully "solved" (i.e. RBC) require the
-        # dict of ss_values to compute the "unknown_solutions"
-        return compute_target_values(targets_dict, ss_values)
+        return compute_target_values(targets, ss_values)
 
-    # if helper_blocks:
-    #     unknowns_solved = _solve_for_unknowns_w_helper_blocks(residual, unknowns, targets, helper_unknowns,
-    #                                                           helper_targets, solver, solver_kwargs,
-    #                                                           constrained_method=constrained_method,
-    #                                                           constrained_kwargs=constrained_kwargs,
-    #                                                           tol=ttol, verbose=verbose, fragile=fragile)
-    # else:
-    unknowns_solved = _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs,
+    unknowns_solved = _solve_for_unknowns(residual, unknowns, solver, solver_kwargs,
                                           constrained_method=constrained_method,
                                           constrained_kwargs=constrained_kwargs,
                                           tol=ttol, verbose=verbose)
@@ -135,8 +104,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
         # Add the unknowns not handled by helpers into the DAG to be checked.
         unknowns_solved.update({k: ss_values[k] for k in unknowns if k not in unknowns_solved})
 
-        cresid = np.max(abs(residual(targets, unknowns_solved.keys(), unknowns_solved.values(),
-                                     bypass_redirection=True)))
+        cresid = np.max(abs(residual(unknowns_solved.values(), bypass_redirection=True)))
         if cresid > ctol:
             raise RuntimeError(f"Target value residual {cresid} exceeds ctol specified for checking"
                                f" the consistency of the DAG without redirection.")
@@ -178,7 +146,7 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
 #     return block.steady_state({k: v for k, v in input_arg_dict.items() if k in block.inputs}, **input_kwarg_dict)
 
 
-def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, residual_kwargs=None,
+def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs, residual_kwargs=None,
                         constrained_method="linear_continuation", constrained_kwargs=None,
                         tol=2e-12, verbose=False):
     """
@@ -211,10 +179,8 @@ def _solve_for_unknowns(residual, unknowns, targets, solver, solver_kwargs, resi
     scipy_optimize_multi_solvers = ["hybr", "lm", "broyden1", "broyden2", "anderson", "linearmixing", "diagbroyden",
                                     "excitingmixing", "krylov", "df-sane"]
 
-    # Construct a reduced residual function, which contains addl context of unknowns, targets, and keyword arguments.
-    # This is to bypass issues with passing a residual function that requires contextual, positional arguments
-    # separate from the unknown values that need to be solved for into the multivariate solvers
-    residual_f = partial(residual, targets, unknowns.keys(), **residual_kwargs)
+    # Wrap kwargs into the residual function
+    residual_f = partial(residual, **residual_kwargs)
 
     if solver is None:
         raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")

@@ -5,20 +5,10 @@ from numbers import Real
 import numpy as np
 
 
-def instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targets,
-                                            block_kwargs, solver_kwargs, constrained_kwargs):
+def instantiate_steady_state_mutable_kwargs(dissolve, block_kwargs, solver_kwargs, constrained_kwargs):
     """Instantiate mutable types from `None` default values in the steady_state function"""
     if dissolve is None:
         dissolve = []
-    if helper_blocks is None and helper_targets is None:
-        helper_blocks = []
-        helper_targets = []
-    elif helper_blocks is not None and helper_targets is None:
-        raise ValueError("If the user has provided `helper_blocks`, the kwarg `helper_targets` must be specified"
-                         " indicating which target variables are handled by the `helper_blocks`.")
-    elif helper_blocks is None and helper_targets is not None:
-        raise ValueError("If the user has provided `helper_targets`, the kwarg `helper_blocks` must be specified"
-                         " indicating which helper blocks handle the `helper_targets`")
     if block_kwargs is None:
         block_kwargs = {}
     if solver_kwargs is None:
@@ -26,7 +16,7 @@ def instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targ
     if constrained_kwargs is None:
         constrained_kwargs = {}
 
-    return dissolve, helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
+    return dissolve, block_kwargs, solver_kwargs, constrained_kwargs
 
 
 def provide_solver_default(unknowns):
@@ -84,9 +74,6 @@ def compute_target_values(targets, potential_args):
             target_values[i] = potential_args[t] - potential_args[v]
         else:
             target_values[i] = potential_args[t] - v
-        # TODO: Implement feature to allow for an arbitrary explicit function expression as a potential target value
-        #   e.g. targets = {"goods_mkt": "Y - C - I"}, so long as the expression is only comprise of generic numerical
-        #   operators and variables solved for along the DAG prior to reaching the target.
 
     # Univariate solvers require float return values (and not lists)
     if len(targets) == 1:
