@@ -66,25 +66,8 @@ class RedirectedBlock(CombinedBlock):
 
     def _steady_state(self, calibration, dissolve=[], bypass_redirection=False, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
-        ss = calibration.copy()
-
-        if not bypass_redirection:
-            for block in self.blocks:
-                # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
-                inner_dissolve = [k for k in dissolve if self.descendants[k] == block.name]
-                outputs = block.steady_state(ss, dissolve=inner_dissolve, bypass_redirection=bypass_redirection, **kwargs)
-                ss.update(outputs)
+        if bypass_redirection:
+            kwargs['dissolve'], kwargs['bypass_redirection'] = dissolve, bypass_redirection
+            return self.directed._steady_state(calibration, **{k: v for k, v in kwargs.items() if k in self.directed.ss_valid_input_kwargs})
         else:
-            inner_dissolve = [k for k in dissolve if self.descendants[k] == self.directed.name]
-            outputs = self.directed.steady_state(ss, dissolve=inner_dissolve, bypass_redirection=bypass_redirection, **kwargs)
-            ss.update(outputs)
-
-        return ss
-
-    # TODO: May not even need this! Just pass in bypass_redirection at the top-level block.steady_state call
-    #   and check it against targets.
-    def validate_steady_state(self, calibration, targets, ctol=1e-8, **kwargs):
-        targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
-        ss_val = self.directed.steady_state(self.steady_state(calibration, **kwargs), bypass_redirection=True, **kwargs)
-        if not np.all([np.abs(ss_val[k] - targets[k]) < ctol for k in targets]):
-            raise RuntimeError(f"{self.directed.name}'s steady state does not hit the targets with the provided calibration")
+            return super()._steady_state(calibration, dissolve=dissolve, bypass_redirection=bypass_redirection, **kwargs)
