@@ -88,14 +88,17 @@ class CombinedBlock(Block, Parent):
         return ImpulseDict(irf_nonlin_partial_eq)
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
+        original_outputs = outputs
+        outputs = (outputs | self._required) - ss._vector_valued()
+        
         irf_lin_partial_eq = deepcopy(inputs)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs} 
 
             if input_args:  # If this block is actually perturbed
-                irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, block.outputs, Js))
+                irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, outputs & block.outputs, Js))
 
-        return ImpulseDict(irf_lin_partial_eq)
+        return ImpulseDict(irf_lin_partial_eq[original_outputs])
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js):
         # Add intermediate inputs; remove vector-valued inputs

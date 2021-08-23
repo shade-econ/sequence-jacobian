@@ -188,7 +188,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         dH = self.impulse_linear(ss, inputs, targets, Js).pack()
         dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, inputs.T)
 
-        return self.impulse_linear(ss, dU | inputs, outputs - unknowns, Js)
+        return self.impulse_linear(ss, dU | inputs, outputs, Js)
 
 
     def solve_jacobian(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],

@@ -3,6 +3,8 @@
 import numpy as np
 from copy import deepcopy
 
+from sequence_jacobian.utilities.ordered_set import OrderedSet
+
 from ...steady_state.classes import SteadyStateDict
 from .bijection import Bijection
 
@@ -45,7 +47,7 @@ class ImpulseDict:
         if isinstance(item, str):
             # Case 1: ImpulseDict['C'] returns array
             return self.impulse[item]
-        elif isinstance(item, list):
+        elif isinstance(item, list) or isinstance(item, OrderedSet):
             # Case 2: ImpulseDict[['C']] or ImpulseDict[['C', 'Y']] return smaller ImpulseDicts
             return type(self)({k: self.impulse[k] for k in item})
         else:

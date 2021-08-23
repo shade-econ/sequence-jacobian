@@ -201,7 +201,7 @@ T = 5
 
 # G = dag.solve_jacobian(ss0, inputs=['r'], outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'], unknowns=['Y', 'B'], targets=['asset_mkt', 'B_rule'], T=300)
 
-G = dag.solve_jacobian(ss, inputs=['r'], outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'], unknowns=['Y'], targets=['asset_mkt'], T=300)
+G = dag.solve_jacobian(ss, inputs=['r'], outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], unknowns=['Y'], targets=['asset_mkt'], T=300)
 
 shock = ImpulseDict({'r': 0.001*0.9**np.arange(300)})
 
@@ -209,7 +209,9 @@ td1 = G @ shock
 
 
 td_lin = dag.solve_impulse_linear(ss, unknowns=['Y'], targets=['asset_mkt'],
-                                  inputs=shock, outputs=['A', 'Y', 'asset_mkt', 'goods_mkt'])
+                                  inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'])
+
+assert all(np.allclose(td1[k], td_lin[k]) for k in td1)
 
 # td_nonlin = dag.solve_impulse_nonlinear(ss, {'r': 0.001*0.9**np.arange(300)},
 #                                         unknowns=['B', 'Y'], targets=['asset_mkt', 'B_rule'])

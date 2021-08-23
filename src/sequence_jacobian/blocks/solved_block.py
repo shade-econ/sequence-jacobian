@@ -80,7 +80,7 @@ class SolvedBlock(Block, Parent):
                                                monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
-        return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets), inputs, outputs, Js)
+        return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets), inputs, outputs - self.unknowns.keys(), Js)
 
     def _jacobian(self, ss, inputs, outputs, T, Js):
         return self.block.solve_jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
