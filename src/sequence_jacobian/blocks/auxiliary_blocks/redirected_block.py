@@ -39,6 +39,8 @@ class RedirectedBlock(CombinedBlock):
 
         # Calculate what are the inputs and outputs of the Block objects underlying `self`, without
         # any of the redirecting blocks.
+        # TODO: Think more carefully about evaluating a DAG with bypass_redirection, if the redirecting
+        #   blocks change the sort order of the DAG!!
         if not isinstance(self.directed, Parent):
             self.inputs_directed = self.directed.inputs
             self.outputs_directed = self.directed.outputs
@@ -65,7 +67,7 @@ class RedirectedBlock(CombinedBlock):
         return f"<RedirectedBlock '{self.name}'>"
 
     def _steady_state(self, calibration, dissolve=[], bypass_redirection=False, **kwargs):
-        """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
+        """Evaluate a partial equilibrium steady state of the RedirectedBlock given a `calibration`"""
         if bypass_redirection:
             kwargs['dissolve'], kwargs['bypass_redirection'] = dissolve, bypass_redirection
             return self.directed._steady_state(calibration, **{k: v for k, v in kwargs.items() if k in self.directed.ss_valid_input_kwargs})
