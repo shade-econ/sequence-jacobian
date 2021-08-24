@@ -241,8 +241,8 @@ class HetBlock(Block):
 
         CANNOT provide time-varying Markov transition matrix for now.
 
-        Special inputs
-        --------------
+        Block-specific inputs
+        ---------------------
         monotonic : [optional] bool
             flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
@@ -251,14 +251,7 @@ class HetBlock(Block):
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
         """
-        # # infer T from exogenous, check that all shocks have same length
-        # shock_lengths = [x.shape[0] for x in exogenous.values()]
-        # if shock_lengths[1:] != shock_lengths[:-1]:
-        #     raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-        # T = shock_lengths[0]
         T = inputs.T
-
-        # copy from ss info
         Pi_T = ss.internal[self.name][self.exogenous].T.copy()
         D = ss.internal[self.name]['D']
 
@@ -341,26 +334,11 @@ class HetBlock(Block):
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
         # TODO: h is unusable for now, figure out how to suggest options
-        """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
-
-        Parameters
-        ----------
-        ss : dict,
-            all steady-state info, intended to be from .steady_state()
-        T : [optional] int
-            number of time periods for T*T Jacobian
-        exogenous : list of str
-            names of input variables to differentiate wrt (main cost scales with # of inputs)
-        outputs : list of str
-            names of output variables to get derivatives of, if not provided assume all outputs of
-            self.back_step_fun except self.back_iter_vars
+        """
+        Block-specific inputs
+        ---------------------
         h : [optional] float
             h for numerical differentiation of backward iteration
-
-        Returns
-        -------
-        J : dict of {str: dict of {str: array(T,T)}}
-            J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
         outputs = self.M_outputs.inv @ outputs # horrible
 

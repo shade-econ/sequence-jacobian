@@ -3,7 +3,7 @@
 import pytest
 import numpy as np
 
-from sequence_jacobian import get_G, estimation
+from sequence_jacobian import estimation
 
 
 # See test_determinacy.py for the to-do describing this suppression

@@ -56,10 +56,10 @@ class ImpulseDict:
     def __add__(self, other):
         if isinstance(other, (float, int)):
             return type(self)({k: v + other for k, v in self.impulse.items()})
-        elif isinstance(other, SteadyStateDict):
+        elif isinstance(other, (SteadyStateDict, ImpulseDict)):
             return type(self)({k: v + other[k] for k, v in self.impulse.items()})
         else:
-            NotImplementedError('Only a number or a SteadyStateDict can be added from an ImpulseDict.')
+            return NotImplementedError('Only a number or a SteadyStateDict can be added from an ImpulseDict.')
 
     def __sub__(self, other):
         if isinstance(other, (float, int)):
@@ -67,15 +67,15 @@ class ImpulseDict:
         elif isinstance(other, (SteadyStateDict, ImpulseDict)):
             return type(self)({k: v - other[k] for k, v in self.impulse.items()})
         else:
-            NotImplementedError('Only a number or a SteadyStateDict can be subtracted from an ImpulseDict.')
+            return NotImplementedError('Only a number or a SteadyStateDict can be subtracted from an ImpulseDict.')
 
     def __mul__(self, other):
         if isinstance(other, (float, int)):
             return type(self)({k: v * other for k, v in self.impulse.items()})
-        elif isinstance(other, SteadyStateDict):
+        elif isinstance(other, (SteadyStateDict, ImpulseDict)):
             return type(self)({k: v * other[k] for k, v in self.impulse.items()})
         else:
-            NotImplementedError('An ImpulseDict can only be multiplied by a number or a SteadyStateDict.')
+            return NotImplementedError('An ImpulseDict can only be multiplied by a number or a SteadyStateDict.')
 
     def __rmul__(self, other):
         if isinstance(other, (float, int)):
@@ -83,7 +83,7 @@ class ImpulseDict:
         elif isinstance(other, SteadyStateDict):
             return type(self)({k: v * other[k] for k, v in self.impulse.items()})
         else:
-            NotImplementedError('An ImpulseDict can only be multiplied by a number or a SteadyStateDict.')
+            return NotImplementedError('An ImpulseDict can only be multiplied by a number or a SteadyStateDict.')
 
     def __truediv__(self, other):
         if isinstance(other, (float, int)):
@@ -92,7 +92,7 @@ class ImpulseDict:
         elif isinstance(other, SteadyStateDict):
             return type(self)({k: v / other[k] if not np.isclose(other[k], 0) else v for k, v in self.impulse.items()})
         else:
-            NotImplementedError('An ImpulseDict can only be divided by a number or a SteadyStateDict.')
+            return NotImplementedError('An ImpulseDict can only be divided by a number or a SteadyStateDict.')
 
     def __matmul__(self, x):
         # remap keys in toplevel
@@ -101,7 +101,7 @@ class ImpulseDict:
             new.impulse = x @ self.impulse
             return new
         else:
-            NotImplemented
+            return NotImplemented
 
     def __rmatmul__(self, x):
         return self.__matmul__(x)

@@ -116,7 +116,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         inputs, outputs = inputs, outputs
         
         # if you have a J for this block that already has everything you need, use it
-        # TODO: add check for T,  maybe look at verify_saved_jacobian for ideas?
+        # TODO: add check for T, maybe look at verify_saved_jacobian for ideas?
         if (self.name in Js) and isinstance(Js[self.name], JacobianDict) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
             return {self.name: Js[self.name][outputs, inputs]}
 
@@ -162,21 +162,8 @@ class Block(abc.ABC, metaclass=ABCMeta):
         solver = solver if solver else provide_solver_default(unknowns)
         return ss(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
-    # def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
-    #                             exogenous: Dict[str, Array],
-    #                             unknowns: List[str], targets: List[str],
-    #                             Js: Optional[Dict[str, JacobianDict]] = {},
-    #                             **kwargs) -> ImpulseDict:
-    #     """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
-    #     from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
-    #     variables to be solved for and the target conditions that must hold in general equilibrium"""
-    #     blocks = self.blocks if hasattr(self, "blocks") else [self]
-    #     irf_nonlin_gen_eq = td_solve(blocks, ss,
-    #                                  exogenous={k: v for k, v in exogenous.items()},
-    #                                  unknowns=unknowns, targets=targets, Js=Js, **kwargs)
-    #     return ImpulseDict(irf_nonlin_gen_eq)
     def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
-                                inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]],
+                                inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
                                 Js: Optional[Dict[str, JacobianDict]] = {},
                                 tol: Optional[Real] = 1E-8, maxit: Optional[int] = 30,
                                 verbose: Optional[bool] = True) -> ImpulseDict:
@@ -188,19 +175,13 @@ class Block(abc.ABC, metaclass=ABCMeta):
         unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
         T = inputs.T
 
-        # initialize guess for unknowns to steady state
-        U = ImpulseDict({k: np.zeros(T) for k in unknowns})
-
-        # obtain Jacobian of targets wrt to unknowns
         Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, T, Js)
         H_U = self.jacobian(ss, unknowns, targets, T, Js)
         H_U_factored = FactoredJacobianDict(H_U, T)
 
-        # iterate until convergence
+        # Newton's method
+        U = ImpulseDict({k: np.zeros(T) for k in unknowns})
         for it in range(maxit):
-            # results = td_map(block_list, ss, exogenous, unknown_paths, sort=sort,
-            #                 monotonic=monotonic, returnindividual=returnindividual,
-            #                 grid_paths=grid_paths)
             results = self.impulse_nonlinear(ss, inputs | U, outputs | targets, Js=Js)
             errors = {k: np.max(np.abs(results[k])) for k in targets}
             if verbose:
@@ -210,7 +191,6 @@ class Block(abc.ABC, metaclass=ABCMeta):
             if all(v < tol for v in errors.values()):
                 break
             else:
-                # update guess U by -H_U^(-1) times errors
                 U += H_U_factored.apply(results)
         else:
             raise ValueError(f'No convergence after {maxit} backward iterations!')

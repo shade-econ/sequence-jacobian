@@ -2,7 +2,6 @@
 
 import numpy as np
 
-from sequence_jacobian.jacobian.drivers import get_G, forward_accumulate, curlyJ_sorted
 from sequence_jacobian.jacobian.classes import JacobianDict
 
 
@@ -123,9 +122,9 @@ def test_fake_news_v_actual(one_asset_hank_dag):
 
 
 def test_fake_news_v_direct_method(one_asset_hank_dag):
-    hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
+    hank_model, _, _, _, ss = one_asset_hank_dag
 
-    household = hank_model._blocks_unsorted[0]
+    household = hank_model['household']
     T = 40
     exogenous = ['r']
     output_list = household.non_back_iter_outputs
@@ -138,15 +137,15 @@ def test_fake_news_v_direct_method(one_asset_hank_dag):
     # (better than subtracting by ss since ss not exact)
     # monotonic=True lets us know there is monotonicity of policy rule, makes TD run faster
     # .impulse_nonlinear requires at least one input 'shock', so we put in steady-state w
-    td_noshock = household.impulse_nonlinear(ss, exogenous={'w': np.zeros(T)}, monotonic=True)
+    td_noshock = household.impulse_nonlinear(ss, {'w': np.zeros(T)})
 
     for i in exogenous:
         # simulate with respect to a shock at each date up to T
         for t in range(T):
-            td_out = household.impulse_nonlinear(ss, exogenous={i: h * (np.arange(T) == t)})
+            td_out = household.impulse_nonlinear(ss, {i: h * (np.arange(T) == t)})
 
             # store results as column t of J[o][i] for each outcome o
             for o in output_list:
                 Js_direct[o.capitalize()][i][:, t] = (td_out[o.capitalize()] - td_noshock[o.capitalize()]) / h
 
-    assert np.linalg.norm(Js["C"]["r"] - Js_direct["C"]["r"], np.inf) < 3e-4
+    assert np.linalg.norm(Js['C']['r'] - Js_direct['C']['r'], np.inf) < 3e-4

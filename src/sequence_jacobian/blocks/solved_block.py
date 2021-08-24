@@ -70,11 +70,6 @@ class SolvedBlock(Block, Parent):
         return self.block.solve_steady_state(calibration, unknowns, self.targets, solver=solver,
                                           ttol=ttol, ctol=ctol, verbose=verbose)
 
-    # def _impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
-    #     return self.block.solve_impulse_nonlinear(ss, exogenous=exogenous,
-    #                                            unknowns=list(self.unknowns.keys()), Js=Js,
-    #                                            targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-    #                                            monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
     def _impulse_nonlinear(self, ss, inputs, outputs, Js):
         return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
                                                   inputs, outputs - self.unknowns.keys(), Js)

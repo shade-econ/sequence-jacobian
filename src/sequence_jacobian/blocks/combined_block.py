@@ -104,12 +104,10 @@ class CombinedBlock(Block, Parent):
         return irf_lin_partial_eq[original_outputs]
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js):
-        # Add intermediate inputs; remove vector-valued inputs
         vector_valued = ss._vector_valued()
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
 
-        # Compute Jacobians along the DAG
         curlyJs = {}
         for block in self.blocks:
             descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
@@ -121,19 +119,15 @@ class CombinedBlock(Block, Parent):
         return curlyJs
 
     def _jacobian(self, ss, inputs, outputs, T, Js={}):
-        # _partial_jacobians should calculate partial jacobians with exactly the inputs and outputs we want 
         Js = self._partial_jacobians(ss, inputs, outputs, T=T, Js=Js)
 
         original_outputs = outputs
         total_Js = JacobianDict.identity(inputs)
 
-        # horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
+        # TODO: horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
         vector_valued = ss._vector_valued()
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
-
-        # Forward accumulate individual Jacobians
-        # ANNOYINGLY PARALLEL TO PARTIAL_JACOBIANS!
         for block in self.blocks:
             descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
             Js_block = {k: v for k, v in Js.items() if k in descendants}

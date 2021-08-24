@@ -1,7 +1,6 @@
 import numpy as np
 import sequence_jacobian as sj
-from sequence_jacobian import het, simple, hetoutput, combine, solved, create_model, get_H_U
-from sequence_jacobian.jacobian.classes import JacobianDict, ZeroMatrix
+from sequence_jacobian import het, simple, hetoutput, solved, combine, create_model 
 from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
@@ -107,18 +106,18 @@ def interest_rates(r):
     return rpost, rb
 
 
-@simple
-def fiscal(B, G, rb, Y, transfer):
-    rev = rb * B + G + transfer   # revenue to be raised
-    tau = rev / Y
-    return rev, tau
-
 # @simple
-# def fiscal(B, G, rb, Y, transfer, rho_B):
-#     B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
-#     rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
+# def fiscal(B, G, rb, Y, transfer):
+#     rev = rb * B + G + transfer   # revenue to be raised
 #     tau = rev / Y
-#     return B_rule, rev, tau
+#     return rev, tau
+
+@simple
+def fiscal(B, G, rb, Y, transfer, rho_B):
+    B_rule = B.ss + rho_B * (B(-1) - B.ss + G - G.ss) - B
+    rev = (1 + rb) * B(-1) + G + transfer - B   # revenue to be raised
+    tau = rev / Y
+    return B_rule, rev, tau
 
 
 @solved(unknowns={'B': (0.0, 10.0)}, targets=['B_rule'], solver='brentq')
@@ -136,41 +135,42 @@ def mkt_clearing(A, B, C, Y, G):
     return asset_mkt, goods_mkt
 
 
-'''Try this'''
 
-# DAG with a nested CombinedBlock 
-hh = combine([household, income_state_vars, asset_state_vars], name='HH')
-dag = sj.create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
+'''Tests'''
 
-# Calibrate steady state
-calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
-               'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143, 'rho_B': 0.8}
 
-ss = dag.solve_steady_state(calibration, dissolve=['fiscal_solved'], solver='hybr',
-                            unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-                            targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+def test_all():
+    hh = combine([household, income_state_vars, asset_state_vars], name='HH')
+    calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
+                   'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143, 'rho_B': 0.8}
+    
+    # DAG with SimpleBlock `fiscal`
+    dag0 = create_model([hh, interest_rates, fiscal, mkt_clearing], name='HANK')
+    ss0 = dag0.solve_steady_state(calibration, solver='hybr',
+                                  unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
+                                  targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
 
-# ss0 = dag.solve_steady_state(calibration, solver='hybr',
-#                             unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-#                             targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
-# assert all(np.allclose(ss0[k], ss[k]) for k in ss0)
+    # DAG with SolvedBlock `fiscal_solved`
+    dag1 = create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
+    ss1 = dag1.solve_steady_state(calibration, solver='hybr', dissolve=['fiscal_solved'],
+                                  unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
+                                  targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
 
-# Precompute household Jacobian
-Js = {'household': household.jacobian(ss, inputs=['Y', 'rpost', 'tau', 'transfer'], outputs=['C', 'A'], T=300)}
+    assert all(np.allclose(ss0[k], ss1[k]) for k in ss0)
 
-# Solve Jacobian
-G = dag.solve_jacobian(ss, inputs=['r'], outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'],
-                       unknowns=['Y'], targets=['asset_mkt'], T=300, Js=Js)
-shock = ImpulseDict({'r': 1E-4*0.9**np.arange(300)})
-td_lin1 = G @ shock 
+    # Precompute household Jacobian
+    Js = {'household': household.jacobian(ss1, inputs=['Y', 'rpost', 'tau', 'transfer'], outputs=['C', 'A'], T=300)}
 
-# Compare to solve_impulse_linear
-td_lin2 = dag.solve_impulse_linear(ss, unknowns=['Y'], targets=['asset_mkt'],
-                                   inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], Js=Js)
-assert all(np.allclose(td_lin1[k], td_lin2[k]) for k in td_lin1)
+    # Linear impulse responses from Jacobian vs directly
+    G = dag1.solve_jacobian(ss1, inputs=['r'], outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'],
+                            unknowns=['Y'], targets=['asset_mkt'], T=300, Js=Js)
+    shock = ImpulseDict({'r': 1E-4 * 0.9 ** np.arange(300)})
+    td_lin1 = G @ shock
+    td_lin2 = dag1.solve_impulse_linear(ss1, unknowns=['Y'], targets=['asset_mkt'],
+                                       inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], Js=Js)
+    assert all(np.allclose(td_lin1[k], td_lin2[k]) for k in td_lin1)
 
-# Solve impulse_nonlinear
-td_hh = hh.impulse_nonlinear(ss, td_lin1[['Y']], outputs=['C', 'A'], Js=Js) 
-
-td_nonlin = dag.solve_impulse_nonlinear(ss, unknowns=['Y'], targets=['asset_mkt'],
-                                        inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], Js=Js)
+    # Nonlinear vs linear impulses
+    td_nonlin = dag1.solve_impulse_nonlinear(ss1, unknowns=['Y'], targets=['asset_mkt'],
+                                             inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], Js=Js)
+    assert all(np.allclose(td_lin1[k], td_nonlin[k]) for k in td_lin1)

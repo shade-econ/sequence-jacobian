@@ -1,4 +1,3 @@
-import warnings
 import copy
 import numpy as np
 
@@ -207,7 +206,7 @@ class DiscontBlock(Block):
             - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
         """
 
-        ss = copy.deepcopy(calibration)
+        ss = copy.deepcopy(calibration.toplevel)
 
         # extract information from calibration
         grid = calibration[self.policy + '_grid']
@@ -233,20 +232,16 @@ class DiscontBlock(Block):
             aggregate_hetoutputs = {}
         ss.update({**hetoutputs, **aggregate_hetoutputs})
 
-        return SteadyStateDict(ss, internal=self)
+        return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
+                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
-    def _impulse_nonlinear(self, ss, exogenous, returnindividual=False, grid_paths=None):
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for DiscontBlock given dynamic paths for inputs in exogenous,
         assuming that we start and end in steady state ss, and that all inputs not specified in
         exogenous are constant at their ss values. Analog to SimpleBlock.td.
 
-        Parameters
-        ----------
-        ss : SteadyStateDict
-            all steady-state info, intended to be from .ss()
-        exogenous : dict of {str : array(T, ...)}
-            all time-varying inputs here (in deviations), with first dimension being time
-            this must have same length T for all entries (all outputs will be calculated up to T)
+        Block-specific inputs
+        ---------------------
         returnindividual : [optional] bool
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
@@ -260,14 +255,9 @@ class DiscontBlock(Block):
             if returnindividual = True, additionally time paths for distribution and for all outputs
                 of self.back_Step_fun on the full grid
         """
-        # infer T from exogenous, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in exogenous.values()]
-        if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-        T = shock_lengths[0]
-
-        # copy from ss info
-        D, P = ss.internal[self.name]['D'], ss.internal[self.name][self.disc_policy]
+        T = inputs.T
+        D = ss.internal[self.name]['D']
+        P = ss.internal[self.name][self.disc_policy]
 
         # construct grids for policy variables either from the steady state grid if the grid is meant to be
         # non-time-varying or from the provided `grid_path` if the grid is meant to be time-varying.
@@ -289,7 +279,7 @@ class DiscontBlock(Block):
         if self.hetinput is not None:
             indict = dict(ss.items())
             for t in range(T):
-                indict.update({k: ss[k] + v[t, ...] for k, v in exogenous.items()})
+                indict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
                 hetout = dict(zip(self.hetinput_outputs_order,
                                   self.hetinput(**{k: indict[k] for k in self.hetinput_inputs})))
                 for k in self.hetinput_outputs_order:
@@ -300,7 +290,7 @@ class DiscontBlock(Block):
         backdict.update(copy.deepcopy(ss.internal[self.name]))
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
-            backdict.update({k: ss[k] + v[t, ...] for k, v in exogenous.items()})
+            backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
 
             # add in multidimensional inputs EXCEPT exogenous state transitions (at lead 0)
             backdict.update({k: ss.internal[self.name][k] + v[t, ...] for k, v in multidim_inputs.items() if k not in self.exogenous})
@@ -367,53 +357,18 @@ class DiscontBlock(Block):
         else:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs}) - ss
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
-        # infer T from exogenous, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in exogenous.values()]
-        if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-        T = shock_lengths[0]
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
 
-        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
-
-    def _jacobian(self, ss, exogenous=None, T=300, outputs=None, Js=None, h=1E-4):
-        """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
-
-        Parameters
-        ----------
-        ss : dict,
-            all steady-state info, intended to be from .ss()
-        T : [optional] int
-            number of time periods for T*T Jacobian
-        exogenous : list of str
-            names of input variables to differentiate wrt (main cost scales with # of inputs)
-        outputs : list of str
-            names of output variables to get derivatives of, if not provided assume all outputs of
-            self.back_step_fun except self.back_iter_vars
+    def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
+        """
+        Block-specific inputs
+        ---------------------
         h : [optional] float
             h for numerical differentiation of backward iteration
-        Js : [optional] dict of {str: JacobianDict}}
-            supply saved Jacobians
-
-        Returns
-        -------
-        J : dict of {str: dict of {str: array(T,T)}}
-            J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
-        # The default set of outputs are all outputs of the backward iteration function
-        # except for the backward iteration variables themselves
-        if exogenous is None:
-            exogenous = list(self.inputs)
-        if outputs is None:
-            outputs = self.non_back_iter_outputs
-
-        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in exogenous]
-
-        # if we supply Jacobians, use them if possible, warn if they cannot be used
-        if Js is not None:
-            outputs_cap = [o.capitalize() for o in outputs]
-            if verify_saved_jacobian(self.name, Js, outputs_cap, relevant_shocks, T):
-                return Js[self.name]
+        outputs = self.M_outputs.inv @ outputs # horrible
+        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in inputs]
 
         # step 0: preliminary processing of steady state
         (ssin_dict, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space, D0, D2, Pi, P) = self.jac_prelim(ss)
