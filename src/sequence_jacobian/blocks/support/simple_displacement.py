@@ -282,6 +282,10 @@ class Displace(np.ndarray):
         obj.name = name
         return obj
 
+    def __array_finalize__(self, obj):
+        self.ss = getattr(obj, "ss", None)
+        self.name = getattr(obj, "name", "UNKNOWN")
+
     def __repr__(self):
         return f'Displace({numeric_primitive(self)})'
 
