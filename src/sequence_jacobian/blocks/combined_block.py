@@ -77,15 +77,18 @@ class CombinedBlock(Block, Parent):
 
         return ss
 
-    def _impulse_nonlinear(self, ss, exogenous, **kwargs):
-        irf_nonlin_partial_eq = deepcopy(exogenous)
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js):
+        original_outputs = outputs
+        outputs = (outputs | self._required) - ss._vector_valued()
+
+        irf_nonlin_partial_eq = deepcopy(inputs)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_nonlin_partial_eq.update({k: v for k, v in block.impulse_nonlinear(ss, input_args, **kwargs)})
+                irf_nonlin_partial_eq.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, Js))
 
-        return ImpulseDict(irf_nonlin_partial_eq)
+        return irf_nonlin_partial_eq[original_outputs]
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
         original_outputs = outputs
@@ -98,7 +101,7 @@ class CombinedBlock(Block, Parent):
             if input_args:  # If this block is actually perturbed
                 irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, outputs & block.outputs, Js))
 
-        return ImpulseDict(irf_lin_partial_eq[original_outputs])
+        return irf_lin_partial_eq[original_outputs]
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js):
         # Add intermediate inputs; remove vector-valued inputs

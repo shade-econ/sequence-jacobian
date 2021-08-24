@@ -1,13 +1,10 @@
-import warnings
-
 from sequence_jacobian.utilities.ordered_set import OrderedSet
 
 from ..primitives import Block
 from ..blocks.simple_block import simple
 from ..blocks.parent import Parent
-from ..utilities import graph
 
-from ..jacobian.classes import JacobianDict, FactoredJacobianDict
+from ..jacobian.classes import FactoredJacobianDict
 
 
 def solved(unknowns, targets, solver=None, solver_kwargs={}, name=""):
@@ -73,14 +70,18 @@ class SolvedBlock(Block, Parent):
         return self.block.solve_steady_state(calibration, unknowns, self.targets, solver=solver,
                                           ttol=ttol, ctol=ctol, verbose=verbose)
 
-    def _impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
-        return self.block.solve_impulse_nonlinear(ss, exogenous=exogenous,
-                                               unknowns=list(self.unknowns.keys()), Js=Js,
-                                               targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
-                                               monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
+    # def _impulse_nonlinear(self, ss, exogenous=None, monotonic=False, Js=None, returnindividual=False, verbose=False):
+    #     return self.block.solve_impulse_nonlinear(ss, exogenous=exogenous,
+    #                                            unknowns=list(self.unknowns.keys()), Js=Js,
+    #                                            targets=self.targets if isinstance(self.targets, list) else list(self.targets.keys()),
+    #                                            monotonic=monotonic, returnindividual=returnindividual, verbose=verbose)
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js):
+        return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
+                                                  inputs, outputs - self.unknowns.keys(), Js)
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
-        return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets), inputs, outputs - self.unknowns.keys(), Js)
+        return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
+                                               inputs, outputs - self.unknowns.keys(), Js)
 
     def _jacobian(self, ss, inputs, outputs, T, Js):
         return self.block.solve_jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),

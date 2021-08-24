@@ -422,6 +422,7 @@ class JacobianDict(NestedDict):
         return bool(self.outputs) and bool(self.inputs)
 
     def compose(self, J):
+        """Returns self @ J"""
         if self.T is not None and J.T is not None and self.T != J.T:
             raise ValueError(f'Trying to multiply JacobianDicts with inconsistent dimensions {self.T} and {J.T}')
 
@@ -446,6 +447,7 @@ class JacobianDict(NestedDict):
         return JacobianDict(J_oi, o_list, i_list)
 
     def apply(self, x: Union[ImpulseDict, Dict[str, Array]]):
+        """Returns J @ x"""
         x = ImpulseDict(x)
 
         inputs = x.keys() & set(self.inputs)
@@ -507,7 +509,8 @@ class FactoredJacobianDict:
 
     # TODO: test this
     def to_jacobian_dict(self):
-        return JacobianDict.unpack(-factored_solve(self.H_U_factored, np.eye(self.T*len(self.unknowns))), self.unknowns, self.targets, self.T)
+        return JacobianDict.unpack(-factored_solve(self.H_U_factored, np.eye(self.T*len(self.unknowns))),
+                                    self.unknowns, self.targets, self.T)
 
     def __matmul__(self, x):
         if isinstance(x, JacobianDict):
@@ -530,28 +533,16 @@ class FactoredJacobianDict:
         return newself
 
     def compose(self, J: JacobianDict):
-        # take intersection of J outputs with self.targets
-        # then pack that reduced J into a matrix, then apply lu_solve, then unpack
+        """Returns = -H_U^{-1} @ J"""
         Jsub = J[[o for o in self.targets if o in J.outputs]].pack(self.T)
-        X = -factored_solve(self.H_U_factored, Jsub) 
-        return JacobianDict.unpack(X, self.unknowns, J.inputs, self.T)
+        out = -factored_solve(self.H_U_factored, Jsub) 
+        return JacobianDict.unpack(out, self.unknowns, J.inputs, self.T)
 
     def apply(self, x: Union[ImpulseDict, Dict[str, Array]]):
-        x = ImpulseDict(x)[self.targets]
-
-        inputs = x.keys() & set(self.targets)
-        #J_oi = self.complete().nesteddict
-        # y = {}
-
-        # for o in self.outputs:
-        #     y[o] = np.zeros(x.T)
-        #     for i in inputs:
-        #         y[o] += J_oi[o][i] @ x[i]
-
-        # return ImpulseDict(y, T=x.T)
-        # take intersection of x entries with self.targets
-        # then pack (should be ImpulseDict?) into a vector, then apply lu_solve, then unpack
-        pass
+        """Returns -H_U^{-1} @ x"""
+        xsub = ImpulseDict(x)[self.targets].pack()
+        out = -factored_solve(self.H_U_factored, xsub)
+        return ImpulseDict.unpack(out, self.unknowns, self.T)
 
 
 def ensure_valid_jacobiandict(d):

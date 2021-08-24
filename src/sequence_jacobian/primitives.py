@@ -11,10 +11,8 @@ from sequence_jacobian.utilities.ordered_set import OrderedSet
 
 from .steady_state.drivers import steady_state as ss
 from .steady_state.support import provide_solver_default
-# from .nonlinear import td_solve
-# from .jacobian.drivers import get_impulse, get_G
 from .steady_state.classes import SteadyStateDict, UserProvidedSS
-from .jacobian.classes import JacobianDict
+from .jacobian.classes import JacobianDict, FactoredJacobianDict
 from .blocks.support.impulse import ImpulseDict
 from .blocks.support.bijection import Bijection
 from .blocks.parent import Parent
@@ -90,22 +88,27 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
         return self.M @ self._steady_state(self.M.inv @ calibration, **{k: v for k, v in kwargs.items() if k in self.ss_valid_input_kwargs})
 
-    def impulse_nonlinear(self, ss: SteadyStateDict,
-                          exogenous: Dict[str, Array], **kwargs) -> ImpulseDict:
-        """Calculate a partial equilibrium, non-linear impulse response to a set of `exogenous` shocks
-        from a steady state `ss`."""
-        return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ exogenous, **kwargs)
+    def impulse_nonlinear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict],
+                          outputs: Optional[List[str]] = None,
+                          Js: Optional[Dict[str, JacobianDict]] = {}, **kwargs) -> ImpulseDict:
+        # TODO: do we want Js at all? better alternative to kwargs?
+        """Calculate a partial equilibrium, non-linear impulse response of `outputs` to a set of shocks in `inputs`
+        around a steady state `ss`."""
+        inputs = ImpulseDict(inputs)
+        _, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
+        return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, **kwargs)
 
     def impulse_linear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict],
-                       outputs: Optional[List[str]] = None, Js={}) -> ImpulseDict:
+                       outputs: Optional[List[str]] = None,
+                       Js: Optional[Dict[str, JacobianDict]] = {}) -> ImpulseDict:
         """Calculate a partial equilibrium, linear impulse response of `outputs` to a set of shocks in `inputs`
         around a steady state `ss`."""
         inputs = ImpulseDict(inputs)
         _, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
         return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js)
 
-    def partial_jacobians(self, ss, inputs=None, outputs=None, T=None, Js={}):
-        # TODO: annotate signature
+    def partial_jacobians(self, ss: SteadyStateDict, inputs: List[str] = None, outputs: List[str] = None,
+                          T: Optional[int] = None, Js: Optional[Dict[str, JacobianDict]] = {}):
         if inputs is None:
             inputs = self.inputs
         if outputs is None:
@@ -129,7 +132,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         return partial
 
     def jacobian(self, ss: SteadyStateDict, inputs: List[str], outputs: Optional[List[str]] = None,
-                 T: Optional[int] = None, Js={}) -> JacobianDict:
+                 T: Optional[int] = None, Js: Optional[Dict[str, JacobianDict]] = {}) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `input` shocks at a steady state `ss`."""
         inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
 
@@ -159,37 +162,79 @@ class Block(abc.ABC, metaclass=ABCMeta):
         solver = solver if solver else provide_solver_default(unknowns)
         return ss(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
 
-    def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
-                                exogenous: Dict[str, Array],
-                                unknowns: List[str], targets: List[str],
+    # def solve_impulse_nonlinear(self, ss: Dict[str, Union[Real, Array]],
+    #                             exogenous: Dict[str, Array],
+    #                             unknowns: List[str], targets: List[str],
+    #                             Js: Optional[Dict[str, JacobianDict]] = {},
+    #                             **kwargs) -> ImpulseDict:
+    #     """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
+    #     from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+    #     variables to be solved for and the target conditions that must hold in general equilibrium"""
+    #     blocks = self.blocks if hasattr(self, "blocks") else [self]
+    #     irf_nonlin_gen_eq = td_solve(blocks, ss,
+    #                                  exogenous={k: v for k, v in exogenous.items()},
+    #                                  unknowns=unknowns, targets=targets, Js=Js, **kwargs)
+    #     return ImpulseDict(irf_nonlin_gen_eq)
+    def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
+                                inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]],
                                 Js: Optional[Dict[str, JacobianDict]] = {},
-                                **kwargs) -> ImpulseDict:
-        """Calculate a general equilibrium, non-linear impulse response to a set of `exogenous` shocks
-        from a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
-        variables to be solved for and the target conditions that must hold in general equilibrium"""
-        blocks = self.blocks if hasattr(self, "blocks") else [self]
-        irf_nonlin_gen_eq = td_solve(blocks, ss,
-                                     exogenous={k: v for k, v in exogenous.items()},
-                                     unknowns=unknowns, targets=targets, Js=Js, **kwargs)
-        return ImpulseDict(irf_nonlin_gen_eq)
+                                tol: Optional[Real] = 1E-8, maxit: Optional[int] = 30,
+                                verbose: Optional[bool] = True) -> ImpulseDict:
+        """Calculate a general equilibrium, non-linear impulse response to a set of shocks in `inputs` 
+           around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+           variables to be solved for and the `targets` that must hold in general equilibrium"""
+        inputs = ImpulseDict(inputs)
+        input_names, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
+        unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
+        T = inputs.T
+
+        # initialize guess for unknowns to steady state
+        U = ImpulseDict({k: np.zeros(T) for k in unknowns})
+
+        # obtain Jacobian of targets wrt to unknowns
+        Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, T, Js)
+        H_U = self.jacobian(ss, unknowns, targets, T, Js)
+        H_U_factored = FactoredJacobianDict(H_U, T)
+
+        # iterate until convergence
+        for it in range(maxit):
+            # results = td_map(block_list, ss, exogenous, unknown_paths, sort=sort,
+            #                 monotonic=monotonic, returnindividual=returnindividual,
+            #                 grid_paths=grid_paths)
+            results = self.impulse_nonlinear(ss, inputs | U, outputs | targets, Js=Js)
+            errors = {k: np.max(np.abs(results[k])) for k in targets}
+            if verbose:
+                print(f'On iteration {it}')
+                for k in errors:
+                    print(f'   max error for {k} is {errors[k]:.2E}')
+            if all(v < tol for v in errors.values()):
+                break
+            else:
+                # update guess U by -H_U^(-1) times errors
+                U += H_U_factored.apply(results)
+        else:
+            raise ValueError(f'No convergence after {maxit} backward iterations!')
+
+        return results | U
 
     def solve_impulse_linear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                              inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]],
                              Js: Optional[Dict[str, JacobianDict]] = {}) -> ImpulseDict:
-        """Calculate a general equilibrium, linear impulse response to a set of shocks in `inputs` around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
-        variables to be solved for and the target conditions that must hold in general equilibrium"""
+        """Calculate a general equilibrium, linear impulse response to a set of shocks in `inputs`
+           around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
+           variables to be solved for and the target conditions that must hold in general equilibrium"""
         inputs = ImpulseDict(inputs)
         input_names, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
         unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
+        T = inputs.T
 
-        Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, inputs.T, Js)
+        Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, T, Js)
 
-        H_U = self.jacobian(ss, unknowns, targets, inputs.T, Js).pack(inputs.T)
+        H_U = self.jacobian(ss, unknowns, targets, T, Js).pack(T)
         dH = self.impulse_linear(ss, inputs, targets, Js).pack()
-        dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, inputs.T)
+        dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, T)
 
         return self.impulse_linear(ss, dU | inputs, outputs, Js)
-
 
     def solve_jacobian(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                        inputs: List[str], outputs: Optional[List[str]] = None, T: Optional[int] = None,
