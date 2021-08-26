@@ -8,6 +8,7 @@ from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
 from ..jacobian.classes import JacobianDict
 from .support.bijection import Bijection
+from ..utilities.function import DifferentiableExtendedFunction, ExtendedFunction
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -58,14 +59,7 @@ class HetBlock(Block):
 
         # self.back_step_fun is one iteration of the backward step function pertaining to a given HetBlock.
         # i.e. the function pertaining to equation (14) in the paper: v_t = curlyV(v_{t+1}, X_t)
-        self.back_step_fun = back_step_fun
-
-        # self.back_step_outputs and self.back_step_inputs are all of the output and input arguments of
-        # self.back_step_fun, the variables used in the backward iteration,
-        # which generally include value and/or policy functions.
-        self.back_step_output_list = utils.misc.output_list(back_step_fun)
-        self.back_step_outputs = set(self.back_step_output_list)
-        self.back_step_inputs = set(utils.misc.input_list(back_step_fun))
+        self.back_step_fun = ExtendedFunction(back_step_fun)
 
         # See the docstring of HetBlock for details on the attributes directly below
         self.exogenous = exogenous
@@ -80,7 +74,7 @@ class HetBlock(Block):
 
         # self.non_back_iter_outputs are all of the outputs from self.back_step_fun excluding the backward
         # iteration variables themselves.
-        self.non_back_iter_outputs = self.back_step_outputs - set(self.back_iter_vars)
+        self.non_back_iter_outputs = self.back_step_fun.outputs - set(self.back_iter_vars)
 
         # self.outputs and self.inputs are the *aggregate* outputs and inputs of this HetBlock, which are used
         # in utils.graph.block_sort to topologically sort blocks along the DAG
@@ -88,7 +82,7 @@ class HetBlock(Block):
         # TODO: go back from capitalize to upper!!! (ask Michael first)
         self.outputs = {o.capitalize() for o in self.non_back_iter_outputs}
         self.M_outputs = Bijection({o: o.capitalize() for o in self.non_back_iter_outputs})
-        self.inputs = self.back_step_inputs - {k + '_p' for k in self.back_iter_vars}
+        self.inputs = self.back_step_fun.inputs - {k + '_p' for k in self.back_iter_vars}
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
 
@@ -107,26 +101,26 @@ class HetBlock(Block):
 
         # The set of variables that will be wrapped in a separate namespace for this HetBlock
         # as opposed to being available at the top level
-        self.internal = utils.misc.smart_set(self.back_step_outputs) | utils.misc.smart_set(self.exogenous) | {"D"}
+        self.internal = utils.misc.smart_set(self.back_step_fun.outputs) | utils.misc.smart_set(self.exogenous) | {"D"}
 
         if len(self.policy) > 2:
             raise ValueError(f"More than two endogenous policies in {back_step_fun.__name__}, not yet supported")
 
         # Checking that the various inputs/outputs attributes are correctly set
-        if self.exogenous + '_p' not in self.back_step_inputs:
+        if self.exogenous + '_p' not in self.back_step_fun.inputs:
             raise ValueError(f"Markov matrix '{self.exogenous}_p' not included as argument in {back_step_fun.__name__}")
 
         for pol in self.policy:
-            if pol not in self.back_step_outputs:
+            if pol not in self.back_step_fun.outputs:
                 raise ValueError(f"Policy '{pol}' not included as output in {back_step_fun.__name__}")
             if pol[0].isupper():
                 raise ValueError(f"Policy '{pol}' is uppercase in {back_step_fun.__name__}, which is not allowed")
 
         for back in self.back_iter_vars:
-            if back + '_p' not in self.back_step_inputs:
+            if back + '_p' not in self.back_step_fun.inputs:
                 raise ValueError(f"Backward variable '{back}_p' not included as argument in {back_step_fun.__name__}")
 
-            if back not in self.back_step_outputs:
+            if back not in self.back_step_fun.outputs:
                 raise ValueError(f"Backward variable '{back}' not included as output in {back_step_fun.__name__}")
 
         for out in self.non_back_iter_outputs:
@@ -277,8 +271,7 @@ class HetBlock(Block):
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
             backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
-            individual = {k: v for k, v in zip(self.back_step_output_list,
-                                               self.back_step_fun(**self.make_inputs(backdict)))}
+            individual = self.back_step_fun(self.make_inputs(backdict))
             backdict.update({k: individual[k] for k in self.back_iter_vars})
 
             if self.hetoutput is not None:
@@ -344,16 +337,16 @@ class HetBlock(Block):
 
         # TODO: this is one instance of us letting people supply inputs that aren't actually inputs
         # This behavior should lead to an error instead (probably should be handled at top level)
-        relevant_shocks = [i for i in self.back_step_inputs | self.hetinput_inputs if i in inputs]
+        relevant_shocks = [i for i in self.back_step_fun.inputs | self.hetinput_inputs if i in inputs]
 
         # step 0: preliminary processing of steady state
-        (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = self.jac_prelim(ss)
+        Pi, differentiable_back_step_fun, ss_for_hetinput, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
         for i in relevant_shocks:
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, ssin_dict, ssout_list,
+            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, differentiable_back_step_fun,
                                                                       ss.internal[self.name]['D'], Pi.T.copy(),
                                                                       sspol_i, sspol_pi, sspol_space, T, h,
                                                                       ss_for_hetinput)
@@ -442,7 +435,7 @@ class HetBlock(Block):
             # 2) objects computed within hetoutput that enter into hetoutput's aggregation (self.hetoutput.outputs)
             # 3) D, the cross-sectional distribution of agents, which is used in the hetoutput aggregation
             # but is computed after the backward iteration
-            self.inputs |= (self.hetoutput_inputs - self.hetinput_outputs - self.back_step_outputs - self.hetoutput_outputs - set("D"))
+            self.inputs |= (self.hetoutput_inputs - self.hetinput_outputs - self.back_step_fun.outputs - self.hetoutput_outputs - set("D"))
             # Modify the HetBlock's outputs to include the aggregated hetoutputs
             self.outputs |= set([o.capitalize() for o in self.hetoutput_outputs])
             self.M_outputs = Bijection({o: o.capitalize() for o in self.hetoutput_outputs}) @ self.M_outputs
@@ -480,7 +473,7 @@ class HetBlock(Block):
         for it in range(maxit):
             try:
                 # run and store results of backward iteration, which come as tuple, in dict
-                sspol = {k: v for k, v in zip(self.back_step_output_list, self.back_step_fun(**ssin))}
+                sspol = self.back_step_fun(ssin)
             except KeyError as e:
                 print(f'Missing input {e} to {self.back_step_fun.__name__}!')
                 raise
@@ -571,24 +564,14 @@ class HetBlock(Block):
         - Step 4: J_from_F to get Jacobian from fake news matrix
     '''
 
-    def backward_step_fakenews(self, din_dict, output_list, ssin_dict, ssout_list,
-                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=1E-4):
+    def backward_step_fakenews(self, din_dict, output_list, differentiable_back_step_fun,
+                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space):
         # shock perturbs outputs
-        shocked_outputs = {k: v for k, v in zip(self.back_step_output_list,
-                                                utils.differentiate.numerical_diff(self.back_step_fun,
-                                                                                   ssin_dict, din_dict, h,
-                                                                                   ssout_list))}
+        shocked_outputs = differentiable_back_step_fun.diff(din_dict)
         curlyV = {k: shocked_outputs[k] for k in self.back_iter_vars}
 
         # which affects the distribution tomorrow
         pol_pi_shock = {k: -shocked_outputs[k] / sspol_space[k] for k in self.policy}
-
-        # Include an additional term to account for the effect of a deleveraging shock affecting the grid
-        if "delev_exante" in din_dict:
-            dx = np.zeros_like(sspol_pi["a"])
-            dx[sspol_i["a"] == 0] = 1.
-            add_term = sspol_pi["a"] * dx / sspol_space["a"]
-            pol_pi_shock["a"] += add_term
 
         curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
 
@@ -597,8 +580,8 @@ class HetBlock(Block):
 
         return curlyV, curlyD, curlyY
 
-    def backward_iteration_fakenews(self, input_shocked, output_list, ssin_dict, ssout_list, Dss, Pi_T,
-                                    sspol_i, sspol_pi, sspol_space, T, h=1E-4, ss_for_hetinput=None):
+    def backward_iteration_fakenews(self, input_shocked, output_list, differentiable_back_step_fun, Dss, Pi_T,
+                                    sspol_i, sspol_pi, sspol_space, T, h, ss_for_hetinput=None):
         """Iterate policy steps backward T times for a single shock."""
         # TODO: Might need to add a check for ss_for_hetinput if self.hetinput is not None
         #   since unless self.hetinput_inputs is exactly equal to input_shocked, calling
@@ -614,8 +597,8 @@ class HetBlock(Block):
             din_dict = {input_shocked: 1}
 
         # contemporaneous response to unit scalar shock
-        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, ssin_dict, ssout_list,
-                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h=h)
+        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun,
+                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
 
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -629,8 +612,8 @@ class HetBlock(Block):
         # fill in anticipation effects
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
-                                                    output_list, ssin_dict, ssout_list,
-                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space, h)
+                                                    output_list, differentiable_back_step_fun,
+                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
 
@@ -669,7 +652,7 @@ class HetBlock(Block):
 
     '''Part 5: helpers for .jac and .ajac: preliminary processing'''
 
-    def jac_prelim(self, ss):
+    def jac_prelim(self, ss, h):
         """Helper that does preliminary processing of steady state for fake news algorithm.
 
         Parameters
@@ -691,7 +674,9 @@ class HetBlock(Block):
         ssin_dict = self.make_inputs(ss)
         Pi = ss.internal[self.name][self.exogenous]
         grid = {k: ss[k+'_grid'] for k in self.policy}
-        ssout_list = self.back_step_fun(**ssin_dict)
+        #ssout_list = self.back_step_fun(ssin_dict)
+        differentiable_back_step_fun = self.back_step_fun.differentiable(ssin_dict, h=h)
+
 
         ss_for_hetinput = None
         if self.hetinput is not None:
@@ -706,9 +691,7 @@ class HetBlock(Block):
             sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss.internal[self.name][pol])
             sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
 
-        toreturn = (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space)
-
-        return toreturn
+        return Pi, differentiable_back_step_fun, ss_for_hetinput, sspol_i, sspol_pi, sspol_space
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
@@ -748,7 +731,7 @@ class HetBlock(Block):
             del input_dict[i_p]
 
         try:
-            return {k: input_dict[k] for k in self.back_step_inputs if k in input_dict}
+            return {k: input_dict[k] for k in self.back_step_fun.inputs if k in input_dict}
         except KeyError as e:
             print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
             raise

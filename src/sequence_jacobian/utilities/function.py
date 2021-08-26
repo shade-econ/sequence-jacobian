@@ -1,6 +1,7 @@
 from sequence_jacobian.utilities.ordered_set import OrderedSet
 import re
 import inspect
+import numpy as np
 
 # TODO: fix this, have it twice (main version in misc) due to circular import problem
 # let's make everything point to here for input_list, etc. so that this is unnecessary
@@ -82,3 +83,57 @@ class ExtendedFunction:
             output_dict = {k: postprocess(v) for k, v in output_dict.items()}
         
         return output_dict
+
+    def differentiable(self, input_dict, h=1E-6, h2=1E-4):
+        return DifferentiableExtendedFunction(self.f, self.name, self.inputs, self.outputs, input_dict, h, h2)
+
+
+class DifferentiableExtendedFunction(ExtendedFunction):
+    def __init__(self, f, name, inputs, outputs, input_dict, h=1E-6, h2=1E-4):
+        self.f, self.name, self.inputs, self.outputs = f, name, inputs, outputs
+        self.input_dict = input_dict
+        self.output_dict = None # lazy evaluation of outputs for one-sided diff
+        self.h = h
+        self.h2 = h2
+
+    def diff(self, shock_dict, h=None, hide_zeros=False):
+        if h is None:
+            h = self.h
+
+        if self.output_dict is None:
+            self.output_dict = self(self.input_dict)
+
+        shocked_input_dict = {**self.input_dict,
+            **{k: self.input_dict[k] + h * shock for k, shock in shock_dict.items() if k in self.input_dict}}
+
+        shocked_output_dict = self(shocked_input_dict)
+
+        derivative_dict = {k: (shocked_output_dict[k] - self.output_dict[k])/h for k in self.output_dict}
+
+        if hide_zeros:
+            derivative_dict = hide_zero_values(derivative_dict)
+
+        return derivative_dict
+
+    def diff2(self, shock_dict, h=None, hide_zeros=False):
+        if h is None:
+            h = self.h2
+
+        shocked_input_dict_up = {**self.input_dict,
+            **{k: self.input_dict[k] + h * shock for k, shock in shock_dict.items() if k in self.input_dict}}
+        shocked_input_dict_dn = {**self.input_dict,
+            **{k: self.input_dict[k] - h * shock for k, shock in shock_dict.items() if k in self.input_dict}}
+
+        shocked_output_dict_up = self(shocked_input_dict_up)
+        shocked_output_dict_dn = self(shocked_input_dict_dn)
+
+        derivative_dict = {k: (shocked_output_dict_up[k] - shocked_output_dict_dn[k])/(2*h) for k in shocked_output_dict_dn}
+
+        if hide_zeros:
+            derivative_dict = hide_zero_values(derivative_dict)
+
+        return derivative_dict
+
+
+def hide_zero_values(d):
+    return {k: v for k, v in d.items() if not np.allclose(v, 0)}

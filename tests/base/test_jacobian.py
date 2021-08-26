@@ -57,69 +57,6 @@ def test_ks_jac(krusell_smith_dag):
 #             assert np.allclose(G[o][i], G2[o][i])
 
 
-def test_fake_news_v_actual(one_asset_hank_dag):
-    hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
-
-    household = hank_model._blocks_unsorted[0]
-    T = 40
-    exogenous = ['w', 'r', 'Div', 'Tax']
-    Js = household.jacobian(ss, exogenous, T=T)
-    output_list = household.non_back_iter_outputs
-
-    # Preliminary processing of the steady state
-    (ssin_dict, Pi, ssout_list, ss_for_hetinput, sspol_i, sspol_pi, sspol_space) = household.jac_prelim(ss)
-
-    # Step 1 of fake news algorithm: backward iteration
-    h = 1E-4
-    curlyYs, curlyDs = {}, {}
-    for i in exogenous:
-        curlyYs[i], curlyDs[i] = household.backward_iteration_fakenews(i, output_list, ssin_dict,
-                                                                       ssout_list, ss.internal["household"]['D'],
-                                                                       Pi.T.copy(), sspol_i, sspol_pi, sspol_space,
-                                                                       T, h, ss_for_hetinput)
-
-    asset_effects = np.sum(curlyDs['r'] * ss['a_grid'], axis=(1, 2))
-    assert np.linalg.norm(asset_effects - curlyYs["r"]["a"], np.inf) < 2e-15
-
-    # Step 2 of fake news algorithm: (transpose) forward iteration
-    curlyPs = {}
-    for o in output_list:
-        curlyPs[o] = household.forward_iteration_fakenews(ss.internal["household"][o], Pi, sspol_i, sspol_pi, T-1)
-
-    persistent_asset = np.array([np.vdot(curlyDs['r'][0, ...],
-                                         curlyPs['a'][u, ...]) for u in range(30)])
-
-    assert np.linalg.norm(persistent_asset - Js["A"]["r"][1:31, 0], np.inf) < 3e-15
-
-    # Step 3 of fake news algorithm: combine everything to make the fake news matrix for each output-input pair
-    Fs = {o.capitalize(): {} for o in output_list}
-    for o in output_list:
-        for i in exogenous:
-            F = np.empty((T,T))
-            F[0, ...] = curlyYs[i][o]
-            F[1:, ...] = curlyPs[o].reshape(T-1, -1) @ curlyDs[i].reshape(T, -1).T
-            Fs[o.capitalize()][i] = F
-
-    impulse = Fs['C']['w'][:10, 1].copy()  # start with fake news impulse
-    impulse[1:10] += Js['C']['w'][:9, 0]   # add unanticipated impulse, shifted by 1
-
-    assert np.linalg.norm(impulse - Js["C"]["w"][:10, 1], np.inf) == 0.0
-
-    # Step 4 of fake news algorithm: recursively convert fake news matrices to actual Jacobian matrices
-    Js_original = Js
-    Js = {o.capitalize(): {} for o in output_list}
-    for o in output_list:
-        for i in exogenous:
-            # implement recursion (30): start with J=F and accumulate terms along diagonal
-            J = Fs[o.capitalize()][i].copy()
-            for t in range(1, J.shape[1]):
-                J[1:, t] += J[:-1, t-1]
-            Js[o.capitalize()][i] = J
-
-    for o in output_list:
-        for i in exogenous:
-            assert np.array_equal(Js[o.capitalize()][i], Js_original[o.capitalize()][i])
-
 
 def test_fake_news_v_direct_method(one_asset_hank_dag):
     hank_model, _, _, _, ss = one_asset_hank_dag
