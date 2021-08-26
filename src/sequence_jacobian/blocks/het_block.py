@@ -318,20 +318,13 @@ class HetBlock(Block):
         """
         outputs = self.M_outputs.inv @ outputs # horrible
 
-        # TODO: this is one instance of us letting people supply inputs that aren't actually inputs
-        # This behavior should lead to an error instead (probably should be handled at top level)
-        relevant_shocks = self.back_step_fun.inputs
-        if self.hetinput is not None:
-            relevant_shocks = relevant_shocks | self.hetinput.inputs
-        relevant_shocks = relevant_shocks & inputs
-
         # step 0: preliminary processing of steady state
         Pi, differentiable_back_step_fun, differentiable_hetinput, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
-        for i in relevant_shocks:
+        for i in inputs:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, differentiable_back_step_fun,
                                                                       ss.internal[self.name]['D'], Pi.T.copy(),
                                                                       sspol_i, sspol_pi, sspol_space, T,
@@ -347,7 +340,7 @@ class HetBlock(Block):
         # make fake news matrix and Jacobian for each outcome-input pair
         F, J = {}, {}
         for o in outputs:
-            for i in relevant_shocks:
+            for i in inputs:
                 if o.capitalize() not in F:
                     F[o.capitalize()] = {}
                 if o.capitalize() not in J:
