@@ -89,15 +89,7 @@ class HetBlock(Block):
         # A HetBlock can have heterogeneous inputs and heterogeneous outputs, henceforth `hetinput` and `hetoutput`.
         # See docstring for methods `add_hetinput` and `add_hetoutput` for more details.
         self.hetinput = None
-        self.hetinput_inputs = set()
-        self.hetinput_outputs = set()
-        self.hetinput_outputs_order = tuple()
-
-        # start without a hetoutput
         self.hetoutput = None
-        self.hetoutput_inputs = set()
-        self.hetoutput_outputs = set()
-        self.hetoutput_outputs_order = tuple()
 
         # The set of variables that will be wrapped in a separate namespace for this HetBlock
         # as opposed to being available at the top level
@@ -127,13 +119,9 @@ class HetBlock(Block):
             if out[0].isupper():
                 raise ValueError("Output '{out}' is uppercase in {back_step_fun.__name__}, which is not allowed")
 
-        # Add the backward iteration initializer function (the initial guesses for self.back_iter_vars)
-        if backward_init is None:
-            # TODO: Think about implementing some "automated way" of providing
-            #  an initial guess for the backward iteration.
-            self.backward_init = backward_init
-        else:
-            self.backward_init = backward_init
+        if backward_init is not None:
+            backward_init = ExtendedFunction(backward_init)
+        self.backward_init = backward_init
 
         # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
@@ -141,10 +129,10 @@ class HetBlock(Block):
         """Nice string representation of HetBlock for printing to console"""
         if self.hetinput is not None:
             if self.hetoutput is not None:
-                return f"<HetBlock '{self.name}' with hetinput '{self.hetinput.__name__}'" \
+                return f"<HetBlock '{self.name}' with hetinput '{self.hetinput.name}'" \
                        f" and with hetoutput `{self.hetoutput.name}'>"
             else:
-                return f"<HetBlock '{self.name}' with hetinput '{self.hetinput.__name__}'>"
+                return f"<HetBlock '{self.name}' with hetinput '{self.hetinput.name}'>"
         else:
             return f"<HetBlock '{self.name}'>"
 
@@ -197,7 +185,7 @@ class HetBlock(Block):
             - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
         """
 
-        ss = copy.deepcopy(calibration.toplevel)
+        ss = calibration.toplevel.copy()
 
         # extract information from calibration
         Pi = ss[self.exogenous]
@@ -213,17 +201,16 @@ class HetBlock(Block):
         D = self.dist_ss(Pi, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
         ss.update({"D": D})
 
-        # aggregate all outputs other than backward variables on grid, capitalize
-        aggregates = {o.capitalize(): np.vdot(D, sspol[o]) for o in self.non_back_iter_outputs}
-        ss.update(aggregates)
-
+        # run hetoutput if it's there
         if self.hetoutput is not None:
-            hetoutputs = self.hetoutput.evaluate(ss)
-            aggregate_hetoutputs = self.hetoutput.aggregate(hetoutputs, D, ss, mode="ss")
-        else:
-            hetoutputs = {}
-            aggregate_hetoutputs = {}
-        ss.update({**hetoutputs, **aggregate_hetoutputs})
+            ss.update(self.hetoutput(ss))
+
+        # aggregate all outputs other than backward variables on grid, capitalize
+        toreturn = self.non_back_iter_outputs
+        if self.hetoutput is not None:
+            toreturn = toreturn | self.hetoutput.outputs
+        aggregates = {o.capitalize(): np.vdot(D, ss[o]) for o in toreturn}
+        ss.update(aggregates)
 
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
@@ -262,8 +249,10 @@ class HetBlock(Block):
                 use_ss_grid[k] = True
 
         # allocate empty arrays to store result, assume all like D
-        individual_paths = {k: np.empty((T,) + D.shape) for k in self.non_back_iter_outputs}
-        hetoutput_paths = {k: np.empty((T,) + D.shape) for k in self.hetoutput_outputs}
+        toreturn = self.non_back_iter_outputs
+        if self.hetoutput is not None:
+            toreturn = toreturn | self.hetoutput.outputs
+        individual_paths = {k: np.empty((T,) + D.shape) for k in toreturn}
 
         # backward iteration
         backdict = dict(ss.items())
@@ -271,13 +260,12 @@ class HetBlock(Block):
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
             backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
-            individual = self.back_step_fun(self.make_inputs(backdict))
+            individual = self.make_inputs(backdict)
+            individual.update(self.back_step_fun(individual))
             backdict.update({k: individual[k] for k in self.back_iter_vars})
 
             if self.hetoutput is not None:
-                hetoutput = self.hetoutput.evaluate(backdict)
-                for k in self.hetoutput_outputs:
-                    hetoutput_paths[k][t, ...] = hetoutput[k]
+                individual.update(self.hetoutput(individual))
 
             for k in self.non_back_iter_outputs:
                 individual_paths[k][t, ...] = individual[k]
@@ -306,19 +294,14 @@ class HetBlock(Block):
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
-                      for o in self.non_back_iter_outputs}
-        if self.hetoutput:
-            aggregate_hetoutputs = self.hetoutput.aggregate(hetoutput_paths, D_path, backdict, mode="td")
-        else:
-            aggregate_hetoutputs = {}
+                      for o in individual_paths}
 
         # return either this, or also include distributional information
         # TODO: rethink this
         if returnindividual:
-            return ImpulseDict({**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths,
-                                'D': D_path}) - ss
+            return ImpulseDict({**aggregates, **individual_paths, 'D': D_path}) - ss
         else:
-            return ImpulseDict({**aggregates, **aggregate_hetoutputs})[outputs] - ss
+            return ImpulseDict(aggregates)[outputs] - ss
 
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
@@ -337,10 +320,13 @@ class HetBlock(Block):
 
         # TODO: this is one instance of us letting people supply inputs that aren't actually inputs
         # This behavior should lead to an error instead (probably should be handled at top level)
-        relevant_shocks = [i for i in self.back_step_fun.inputs | self.hetinput_inputs if i in inputs]
+        relevant_shocks = self.back_step_fun.inputs
+        if self.hetinput is not None:
+            relevant_shocks = relevant_shocks | self.hetinput.inputs
+        relevant_shocks = relevant_shocks & inputs
 
         # step 0: preliminary processing of steady state
-        Pi, differentiable_back_step_fun, ss_for_hetinput, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
+        Pi, differentiable_back_step_fun, differentiable_hetinput, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
@@ -348,8 +334,8 @@ class HetBlock(Block):
         for i in relevant_shocks:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, differentiable_back_step_fun,
                                                                       ss.internal[self.name]['D'], Pi.T.copy(),
-                                                                      sspol_i, sspol_pi, sspol_space, T, h,
-                                                                      ss_for_hetinput)
+                                                                      sspol_i, sspol_pi, sspol_space, T,
+                                                                      differentiable_hetinput)
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
@@ -392,16 +378,11 @@ class HetBlock(Block):
                 else:
                     print(f"Added hetinput {hetinput.__name__} to the {self.back_step_fun.__name__} HetBlock")
 
-            self.hetinput = hetinput
-            self.hetinput_inputs = set(utils.misc.input_list(hetinput))
-            self.hetinput_outputs = set(utils.misc.output_list(hetinput))
-            self.hetinput_outputs_order = utils.misc.output_list(hetinput)
+            self.hetinput = ExtendedFunction(hetinput)
+            self.inputs |= self.hetinput.inputs
+            self.inputs -= self.hetinput.outputs
 
-            # modify inputs to include hetinput's additional inputs, remove outputs
-            self.inputs |= self.hetinput_inputs
-            self.inputs -= self.hetinput_outputs
-
-            self.internal |= self.hetinput_outputs
+            self.internal |= self.hetinput.outputs
 
     def add_hetoutput(self, hetoutput, overwrite=False, verbose=True):
         """Add a hetoutput to this HetBlock. Any call to self.back_step_fun will first process
@@ -424,10 +405,7 @@ class HetBlock(Block):
                 else:
                     print(f"Added hetoutput {hetoutput.name} to the {self.back_step_fun.__name__} HetBlock")
 
-            self.hetoutput = hetoutput
-            self.hetoutput_inputs = set(hetoutput.input_list)
-            self.hetoutput_outputs = set(hetoutput.output_list)
-            self.hetoutput_outputs_order = hetoutput.output_list
+            self.hetoutput = ExtendedFunction(hetoutput)
 
             # Modify the HetBlock's inputs to include additional inputs required for computing both the hetoutput
             # and aggregating the hetoutput, but do not include:
@@ -435,12 +413,12 @@ class HetBlock(Block):
             # 2) objects computed within hetoutput that enter into hetoutput's aggregation (self.hetoutput.outputs)
             # 3) D, the cross-sectional distribution of agents, which is used in the hetoutput aggregation
             # but is computed after the backward iteration
-            self.inputs |= (self.hetoutput_inputs - self.hetinput_outputs - self.back_step_fun.outputs - self.hetoutput_outputs - set("D"))
+            self.inputs |= (self.hetoutput.inputs - self.hetinput.outputs - self.back_step_fun.outputs - self.hetoutput.outputs - set("D"))
             # Modify the HetBlock's outputs to include the aggregated hetoutputs
-            self.outputs |= set([o.capitalize() for o in self.hetoutput_outputs])
-            self.M_outputs = Bijection({o: o.capitalize() for o in self.hetoutput_outputs}) @ self.M_outputs
+            self.outputs |= set([o.capitalize() for o in self.hetoutput.outputs])
+            self.M_outputs = Bijection({o: o.capitalize() for o in self.hetoutput.outputs}) @ self.M_outputs
 
-            self.internal |= self.hetoutput_outputs
+            self.internal |= self.hetoutput.outputs
 
     '''Part 3: components of ss():
         - policy_ss : backward iteration to get steady-state policies and other outcomes
@@ -494,7 +472,7 @@ class HetBlock(Block):
             ssin[k] = ssin[k + '_p']
             del ssin[k + '_p']
         if self.hetinput is not None:
-            for k in self.hetinput_inputs:
+            for k in self.hetinput.inputs:
                 if k in original_ssin:
                     ssin[k] = original_ssin[k]
         return {**ssin, **sspol}
@@ -581,17 +559,15 @@ class HetBlock(Block):
         return curlyV, curlyD, curlyY
 
     def backward_iteration_fakenews(self, input_shocked, output_list, differentiable_back_step_fun, Dss, Pi_T,
-                                    sspol_i, sspol_pi, sspol_space, T, h, ss_for_hetinput=None):
+                                    sspol_i, sspol_pi, sspol_space, T, differentiable_hetinput):
         """Iterate policy steps backward T times for a single shock."""
         # TODO: Might need to add a check for ss_for_hetinput if self.hetinput is not None
         #   since unless self.hetinput_inputs is exactly equal to input_shocked, calling
         #   self.hetinput() inside the symmetric differentiation function will throw an error.
         #   It's probably better/more informative to throw that error out here.
-        if self.hetinput is not None and input_shocked in self.hetinput_inputs:
+        if self.hetinput is not None and input_shocked in self.hetinput.inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
-            din_dict = dict(zip(self.hetinput_outputs_order,
-                                utils.differentiate.numerical_diff_symmetric(self.hetinput,
-                                                                             ss_for_hetinput, {input_shocked: 1}, h)))
+            din_dict = differentiable_hetinput.diff2({input_shocked: 1})
         else:
             # otherwise, we just have that one shock
             din_dict = {input_shocked: 1}
@@ -677,10 +653,10 @@ class HetBlock(Block):
         #ssout_list = self.back_step_fun(ssin_dict)
         differentiable_back_step_fun = self.back_step_fun.differentiable(ssin_dict, h=h)
 
-
-        ss_for_hetinput = None
+        differentiable_hetinput = None
         if self.hetinput is not None:
-            ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
+            # ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
+            differentiable_hetinput = self.hetinput.differentiable(ss)
 
         # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
         sspol_i = {}
@@ -691,7 +667,7 @@ class HetBlock(Block):
             sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss.internal[self.name][pol])
             sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
 
-        return Pi, differentiable_back_step_fun, ss_for_hetinput, sspol_i, sspol_pi, sspol_space
+        return Pi, differentiable_back_step_fun, differentiable_hetinput, sspol_i, sspol_pi, sspol_space
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
@@ -699,32 +675,16 @@ class HetBlock(Block):
         """Extract from back_step_inputs_dict exactly the inputs needed for self.back_step_fun,
         process stuff through self.hetinput first if it's there.
         """
-        input_dict = copy.deepcopy(back_step_inputs_dict)
-
-        # TODO: This make_inputs function needs to be revisited since it creates inputs both for initial steady
-        #   state computation as well as for Jacobian/impulse evaluation for HetBlocks,
-        #   where in the former the hetinputs and value function have yet to be computed,
-        #   whereas in the latter they have already been computed
-        #   and hence do not need to be recomputed. There may be room to clean this function up a bit.
         if isinstance(back_step_inputs_dict, SteadyStateDict):
-            input_dict = copy.deepcopy(back_step_inputs_dict.toplevel)
-            input_dict.update({k: v for k, v in back_step_inputs_dict.internal[self.name].items()})
+            input_dict = {**back_step_inputs_dict.toplevel, **back_step_inputs_dict.internal[self.name]}
         else:
-            # If this HetBlock has a hetinput, then we need to compute the outputs of the hetinput first and include
-            # them as inputs for self.back_step_fun
-            if self.hetinput is not None:
-                outputs_as_tuple = utils.misc.make_tuple(self.hetinput(**{k: input_dict[k]
-                                                                          for k in self.hetinput_inputs if k in input_dict}))
-                input_dict.update(dict(zip(self.hetinput_outputs_order, outputs_as_tuple)))
+            input_dict = back_step_inputs_dict.copy()
 
-            # Check if there are entries in indict corresponding to self.inputs_to_be_primed.
-            # In particular, we are interested in knowing if an initial value
-            # for the backward iteration variable has been provided.
-            # If it has not been provided, then use self.backward_init to calculate the initial values.
-            if not self.inputs_to_be_primed.issubset(set(input_dict.keys())):
-                initial_value_input_args = [input_dict[arg_name] for arg_name in utils.misc.input_list(self.backward_init)]
-                input_dict.update(zip(utils.misc.output_list(self.backward_init),
-                                  utils.misc.make_tuple(self.backward_init(*initial_value_input_args))))
+        if self.hetinput is not None:
+            input_dict.update(self.hetinput(input_dict))
+
+        if not all(k in input_dict for k in self.back_iter_vars):
+            input_dict.update(self.backward_init(input_dict))
 
         for i_p in self.inputs_to_be_primed:
             input_dict[i_p + "_p"] = input_dict[i_p]
@@ -785,59 +745,3 @@ class HetBlock(Block):
         else:
             raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
 
-
-def hetoutput(custom_aggregation=None):
-    def decorator(f):
-        return HetOutput(f, custom_aggregation=custom_aggregation)
-    return decorator
-
-
-class HetOutput:
-    def __init__(self, f, custom_aggregation=None):
-        self.name = f.__name__
-        self.f = f
-        self.eval_input_list = utils.misc.input_list(f)
-
-        self.custom_aggregation = custom_aggregation
-        self.agg_input_list = [] if custom_aggregation is None else utils.misc.input_list(custom_aggregation)
-
-        # We are distinguishing between the eval_input_list and agg_input_list because custom aggregation may require
-        # certain arguments that are not required for simply evaluating the hetoutput
-        self.input_list = list(set(self.eval_input_list).union(set(self.agg_input_list)))
-        self.output_list = utils.misc.output_list(f)
-
-    def evaluate(self, arg_dict):
-        hetoutputs = dict(zip(self.output_list, utils.misc.make_tuple(self.f(*[arg_dict[i] for i
-                                                                               in self.eval_input_list]))))
-        return hetoutputs
-
-    def aggregate(self, hetoutputs, D, custom_aggregation_args, mode="ss"):
-        if self.custom_aggregation is not None:
-            hetoutputs_w_std_aggregation = list(set(self.output_list) -
-                                                set([utils.misc.uncapitalize(o) for o
-                                                     in utils.misc.output_list(self.custom_aggregation)]))
-            hetoutputs_w_custom_aggregation = list(set(self.output_list) - set(hetoutputs_w_std_aggregation))
-        else:
-            hetoutputs_w_std_aggregation = self.output_list
-            hetoutputs_w_custom_aggregation = []
-
-        # TODO: May need to check if this works properly for td
-        if self.custom_aggregation is not None:
-            hetoutputs_w_custom_aggregation_args = dict(zip(hetoutputs_w_custom_aggregation,
-                                                        [hetoutputs[i] for i in hetoutputs_w_custom_aggregation]))
-            custom_agg_inputs = {"D": D, **hetoutputs_w_custom_aggregation_args, **custom_aggregation_args}
-            custom_aggregates = dict(zip([o.capitalize() for o in hetoutputs_w_custom_aggregation],
-                                         utils.misc.make_tuple(self.custom_aggregation(*[custom_agg_inputs[i] for i
-                                                                                         in self.agg_input_list]))))
-        else:
-            custom_aggregates = {}
-
-        if mode == "ss":
-            std_aggregates = {o.capitalize(): np.vdot(D, hetoutputs[o]) for o in hetoutputs_w_std_aggregation}
-        elif mode == "td":
-            std_aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D, hetoutputs[o])
-                              for o in hetoutputs_w_std_aggregation}
-        else:
-            raise RuntimeError(f"Mode {mode} is not supported in HetOutput aggregation. Choose either 'ss' or 'td'")
-
-        return {**std_aggregates, **custom_aggregates}

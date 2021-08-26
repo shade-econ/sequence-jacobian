@@ -1,6 +1,6 @@
 import numpy as np
 import sequence_jacobian as sj
-from sequence_jacobian import het, simple, hetoutput, solved, combine, create_model 
+from sequence_jacobian import het, simple, solved, combine, create_model 
 from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
@@ -85,7 +85,6 @@ def asset_state_vars(amin, amax, nA):
     return a_grid
 
 
-@hetoutput()
 def mpcs(c, a, a_grid, rpost):
     """MPC out of lump-sum transfer."""
     mpc = get_mpcs(c, a, a_grid, rpost)
@@ -176,4 +175,4 @@ def test_all():
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
     assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1)
 
-test_all()
+#test_all()

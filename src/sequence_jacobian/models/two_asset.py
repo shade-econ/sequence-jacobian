@@ -4,7 +4,7 @@ from numba import guvectorize
 
 from .. import utilities as utils
 from ..blocks.simple_block import simple
-from ..blocks.het_block import het, hetoutput
+from ..blocks.het_block import het
 from ..blocks.solved_block import solved
 from ..blocks.support.simple_displacement import apply_function
 from ..blocks.combined_block import combine
@@ -116,7 +116,6 @@ def income(e_grid, tax, w, N):
 
 
 # A potential hetoutput to include with the above HetBlock
-@hetoutput()
 def adjustment_costs(a, a_grid, ra, chi0, chi1, chi2):
     chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, ra, chi0, chi1, chi2)
     return chi

@@ -3,7 +3,7 @@
 from . import estimation, jacobian, utilities, devtools
 
 from .blocks.simple_block import simple
-from .blocks.het_block import het, hetoutput
+from .blocks.het_block import het
 from .blocks.solved_block import solved
 from .blocks.combined_block import combine, create_model
 from .blocks.support.simple_displacement import apply_function
