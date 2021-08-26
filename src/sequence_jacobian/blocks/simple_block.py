@@ -6,10 +6,9 @@ from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .support.impulse import ImpulseDict
-from .support.bijection import Bijection
 from ..primitives import Block
 from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix, verify_saved_jacobian
+from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
 
@@ -39,9 +38,6 @@ class SimpleBlock(Block):
         super().__init__()
         self.f = ExtendedFunction(f)
         self.name = self.f.name
-        # TODO: if we do OrderedSet here instead of set, things break!
-        #self.inputs = set(self.f.inputs)
-        #self.outputs = set(self.f.outputs)
         self.inputs = self.f.inputs
         self.outputs = self.f.outputs
 
@@ -52,9 +48,9 @@ class SimpleBlock(Block):
         outputs = self.f.wrapped_call(ss, preprocess=ignore, postprocess=misc.numeric_primitive)
         return SteadyStateDict({**ss, **outputs})
 
-    def _impulse_nonlinear(self, ss, exogenous):
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js):
         input_args = {}
-        for k, v in exogenous.items():
+        for k, v in inputs.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
             input_args[k] = Displace(v + ss[k], ss=ss[k], name=k)
@@ -63,10 +59,10 @@ class SimpleBlock(Block):
             if k not in input_args:
                 input_args[k] = ignore(ss[k])
 
-        return ImpulseDict(make_impulse_uniform_length(self.f(input_args))) - ss
+        return ImpulseDict(make_impulse_uniform_length(self.f(input_args)))[outputs] - ss
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None):
-        return ImpulseDict(self.jacobian(ss, exogenous=list(exogenous.keys()), T=T, Js=Js).apply(exogenous))
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
 
     def _jacobian(self, ss, inputs, outputs, T):
         invertedJ = {i: {} for i in inputs}
@@ -87,8 +83,7 @@ class SimpleBlock(Block):
                 else:
                     J[o][i] = invertedJ[i][o]
 
-        to_return = JacobianDict(J, name=self.name)[outputs, :]
-        return JacobianDict(J, name=self.name)[outputs, :]
+        return JacobianDict(J, name=self.name, T=T)[outputs, :]
 
     def compute_single_shock_J(self, ss, i):
         input_args = {i: ignore(ss[i]) for i in self.inputs}
@@ -102,6 +97,7 @@ class SimpleBlock(Block):
         return J
 
 
+# TODO: move this to impulse.py?
 def make_impulse_uniform_length(out):
     T = np.max([np.size(v) for v in out.values()])
     return {k: (np.full(T, misc.numeric_primitive(v)) if np.isscalar(v) else misc.numeric_primitive(v))

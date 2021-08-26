@@ -25,6 +25,6 @@ J1 = myblock_solved.jacobian(ss, inputs=['i'], T=20)
 J_u = myblock.jacobian(ss, inputs=['u'], T=20)  # square jac of underlying simple block 
 J_factored = FactoredJacobianDict(J_u, T=20)       
 J_i = myblock.jacobian(ss, inputs=['i'], T=20)  # jac of underlying simple block wrt inputs that are NOT unknowns 
-J2 = J_factored.compose(J_i, T=20)              # obtain jac of unknown wrt to non-unknown inputs using factored jac
+J2 = J_factored.compose(J_i)              # obtain jac of unknown wrt to non-unknown inputs using factored jac
 
 assert np.allclose(J1['u']['i'], J2['u']['i'])

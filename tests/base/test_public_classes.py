@@ -14,7 +14,7 @@ def test_impulsedict(krusell_smith_dag):
     T = 200
 
     # Linearized impulse responses as deviations
-    ir_lin = ks_model.solve_impulse_linear(ss, {'Z': 0.01 * 0.5**np.arange(T)}, unknowns, targets)
+    ir_lin = ks_model.solve_impulse_linear(ss, unknowns, targets, inputs={'Z': 0.01 * 0.5**np.arange(T)}, outputs=['C', 'K', 'r'])
 
     # Get method
     assert isinstance(ir_lin, ImpulseDict)

@@ -1,4 +1,3 @@
-import warnings
 import copy
 import numpy as np
 
@@ -7,9 +6,8 @@ from .support.bijection import Bijection
 from ..primitives import Block
 from .. import utilities as utils
 from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict, verify_saved_jacobian
+from ..jacobian.classes import JacobianDict
 from .support.bijection import Bijection
-from ..devtools.deprecate import rename_output_list_to_outputs
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -236,20 +234,15 @@ class HetBlock(Block):
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
-    def _impulse_nonlinear(self, ss, exogenous, monotonic=False, returnindividual=False, grid_paths=None):
-        """Evaluate transitional dynamics for HetBlock given dynamic paths for inputs in kwargs,
-        assuming that we start and end in steady state ss, and that all inputs not specified in
-        kwargs are constant at their ss values. Analog to SimpleBlock.td.
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js, monotonic=False, returnindividual=False, grid_paths=None):
+        """Evaluate transitional dynamics for HetBlock given dynamic paths for `inputs`,
+        assuming that we start and end in steady state `ss`, and that all inputs not specified in
+        `inputs` are constant at their ss values.
 
-        CANNOT provide time-varying paths of grid or Markov transition matrix for now.
+        CANNOT provide time-varying Markov transition matrix for now.
 
-        Parameters
-        ----------
-        ss : SteadyStateDict
-            all steady-state info, intended to be from .ss()
-        exogenous : dict of {str : array(T, ...)}
-            all time-varying inputs here (in deviations), with first dimension being time
-            this must have same length T for all entries (all outputs will be calculated up to T)
+        Block-specific inputs
+        ---------------------
         monotonic : [optional] bool
             flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
@@ -257,22 +250,8 @@ class HetBlock(Block):
             return distribution and full outputs on grid
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
-
-        Returns
-        ----------
-        td : dict
-            if returnindividual = False, time paths for aggregates (uppercase) for all outputs
-                of self.back_step_fun except self.back_iter_vars
-            if returnindividual = True, additionally time paths for distribution and for all outputs
-                of self.back_Step_fun on the full grid
         """
-        # infer T from exogenous, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in exogenous.values()]
-        if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-        T = shock_lengths[0]
-
-        # copy from ss info
+        T = inputs.T
         Pi_T = ss.internal[self.name][self.exogenous].T.copy()
         D = ss.internal[self.name]['D']
 
@@ -285,7 +264,7 @@ class HetBlock(Block):
                 grid[k] = grid_paths[k]
                 use_ss_grid[k] = False
             else:
-                grid[k] = ss[k+"_grid"]
+                grid[k] = ss[k + "_grid"]
                 use_ss_grid[k] = True
 
         # allocate empty arrays to store result, assume all like D
@@ -297,7 +276,7 @@ class HetBlock(Block):
         backdict.update(copy.deepcopy(ss.internal[self.name]))
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
-            backdict.update({k: ss[k] + v[t, ...] for k, v in exogenous.items()})
+            backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
             individual = {k: v for k, v in zip(self.back_step_output_list,
                                                self.back_step_fun(**self.make_inputs(backdict)))}
             backdict.update({k: individual[k] for k in self.back_iter_vars})
@@ -341,51 +320,27 @@ class HetBlock(Block):
             aggregate_hetoutputs = {}
 
         # return either this, or also include distributional information
+        # TODO: rethink this
         if returnindividual:
             return ImpulseDict({**aggregates, **aggregate_hetoutputs, **individual_paths, **hetoutput_paths,
                                 'D': D_path}) - ss
         else:
-            return ImpulseDict({**aggregates, **aggregate_hetoutputs}) - ss
+            return ImpulseDict({**aggregates, **aggregate_hetoutputs})[outputs] - ss
 
-    def _impulse_linear(self, ss, exogenous, T=None, Js=None, **kwargs):
-        # infer T from exogenous, check that all shocks have same length
-        shock_lengths = [x.shape[0] for x in exogenous.values()]
-        if shock_lengths[1:] != shock_lengths[:-1]:
-            raise ValueError('Not all shocks in kwargs (exogenous) are same length!')
-        T = shock_lengths[0]
 
-        return ImpulseDict(self.jacobian(ss, list(exogenous.keys()), T=T, Js=Js, **kwargs).apply(exogenous))
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
+
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
         # TODO: h is unusable for now, figure out how to suggest options
-        """Assemble nested dict of Jacobians of agg outputs vs. inputs, using fake news algorithm.
-
-        Parameters
-        ----------
-        ss : dict,
-            all steady-state info, intended to be from .ss()
-        T : [optional] int
-            number of time periods for T*T Jacobian
-        exogenous : list of str
-            names of input variables to differentiate wrt (main cost scales with # of inputs)
-        outputs : list of str
-            names of output variables to get derivatives of, if not provided assume all outputs of
-            self.back_step_fun except self.back_iter_vars
+        """
+        Block-specific inputs
+        ---------------------
         h : [optional] float
             h for numerical differentiation of backward iteration
-        Js : [optional] dict of {str: JacobianDict}}
-            supply saved Jacobians
-
-        Returns
-        -------
-        J : dict of {str: dict of {str: array(T,T)}}
-            J[o][i] for output o and input i gives T*T Jacobian of o with respect to i
         """
         outputs = self.M_outputs.inv @ outputs # horrible
-        print('HERE ARE THE OUTPUTS')
-        print(outputs)
-
-        print(self.M_outputs)
 
         # TODO: this is one instance of us letting people supply inputs that aren't actually inputs
         # This behavior should lead to an error instead (probably should be handled at top level)
@@ -421,7 +376,7 @@ class HetBlock(Block):
                 F[o.capitalize()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
                 J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
 
-        return JacobianDict(J, name=self.name)
+        return JacobianDict(J, name=self.name, T=T)
 
     def add_hetinput(self, hetinput, overwrite=False, verbose=True):
         # TODO: serious violation, this is mutating the block
