@@ -70,6 +70,13 @@ class RedirectedBlock(CombinedBlock):
         """Evaluate a partial equilibrium steady state of the RedirectedBlock given a `calibration`"""
         if bypass_redirection:
             kwargs['dissolve'], kwargs['bypass_redirection'] = dissolve, bypass_redirection
-            return self.directed._steady_state(calibration, **{k: v for k, v in kwargs.items() if k in self.directed.ss_valid_input_kwargs})
+            return self.directed.steady_state(calibration, **{k: v for k, v in kwargs.items() if k in self.directed.ss_valid_input_kwargs})
         else:
-            return super()._steady_state(calibration, dissolve=dissolve, bypass_redirection=bypass_redirection, **kwargs)
+            ss = calibration.copy()
+            for block in self.blocks:
+                # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
+                inner_dissolve = [k for k in dissolve if self.descendants[k] == block.name]
+                outputs = block.steady_state(ss, dissolve=inner_dissolve, **kwargs)
+                # If we're not bypassing redirection, don't overwrite entries in ss populated by the redirect block
+                ss.update(outputs) if block == self.redirected else ss.update(outputs.difference(ss))
+            return ss
