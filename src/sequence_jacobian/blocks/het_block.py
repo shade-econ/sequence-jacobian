@@ -267,7 +267,7 @@ class HetBlock(Block):
             if self.hetoutput is not None:
                 individual.update(self.hetoutput(individual))
 
-            for k in self.non_back_iter_outputs:
+            for k in individual_paths:
                 individual_paths[k][t, ...] = individual[k]
 
         D_path = np.empty((T,) + D.shape)
@@ -316,25 +316,26 @@ class HetBlock(Block):
         h : [optional] float
             h for numerical differentiation of backward iteration
         """
+        ss = {**ss.toplevel, **ss.internal[self.name]}
         outputs = self.M_outputs.inv @ outputs # horrible
 
         # step 0: preliminary processing of steady state
-        Pi, differentiable_back_step_fun, differentiable_hetinput, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
+        Pi, differentiable_back_step_fun, differentiable_hetinput, differentiable_hetoutput, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
         for i in inputs:
             curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, differentiable_back_step_fun,
-                                                                      ss.internal[self.name]['D'], Pi.T.copy(),
+                                                                      ss['D'], Pi.T.copy(),
                                                                       sspol_i, sspol_pi, sspol_space, T,
-                                                                      differentiable_hetinput)
+                                                                      differentiable_hetinput, differentiable_hetoutput)
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = {}
         for o in outputs:
-            curlyPs[o] = self.forward_iteration_fakenews(ss.internal[self.name][o], Pi, sspol_i, sspol_pi, T-1)
+            curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
@@ -536,7 +537,7 @@ class HetBlock(Block):
     '''
 
     def backward_step_fakenews(self, din_dict, output_list, differentiable_back_step_fun,
-                               Dss, Pi_T, sspol_i, sspol_pi, sspol_space):
+                               differentiable_hetoutput, Dss, Pi_T, sspol_i, sspol_pi, sspol_space):
         # shock perturbs outputs
         shocked_outputs = differentiable_back_step_fun.diff(din_dict)
         curlyV = {k: shocked_outputs[k] for k in self.back_iter_vars}
@@ -547,12 +548,14 @@ class HetBlock(Block):
         curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
 
         # and the aggregate outcomes today
+        if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
+            shocked_outputs.update(differentiable_hetoutput.diff(shocked_outputs))
         curlyY = {k: np.vdot(Dss, shocked_outputs[k]) for k in output_list}
 
         return curlyV, curlyD, curlyY
 
     def backward_iteration_fakenews(self, input_shocked, output_list, differentiable_back_step_fun, Dss, Pi_T,
-                                    sspol_i, sspol_pi, sspol_space, T, differentiable_hetinput):
+                                    sspol_i, sspol_pi, sspol_space, T, differentiable_hetinput, differentiable_hetoutput):
         """Iterate policy steps backward T times for a single shock."""
         # TODO: Might need to add a check for ss_for_hetinput if self.hetinput is not None
         #   since unless self.hetinput_inputs is exactly equal to input_shocked, calling
@@ -566,7 +569,7 @@ class HetBlock(Block):
             din_dict = {input_shocked: 1}
 
         # contemporaneous response to unit scalar shock
-        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun,
+        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun, differentiable_hetoutput,
                                                              Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
 
         # infer dimensions from this and initialize empty arrays
@@ -581,7 +584,7 @@ class HetBlock(Block):
         # fill in anticipation effects
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
-                                                    output_list, differentiable_back_step_fun,
+                                                    output_list, differentiable_back_step_fun, differentiable_hetoutput,
                                                     Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
@@ -639,17 +642,18 @@ class HetBlock(Block):
         sspol_pi        : dict, weights on lower bracketing gridpoint for all in self.policy
         sspol_space     : dict, space between lower and upper bracketing gridpoints for all in self.policy
         """
-        # preliminary a: obtain ss inputs and other info, run once to get baseline for numerical differentiation
-        ssin_dict = self.make_inputs(ss)
-        Pi = ss.internal[self.name][self.exogenous]
+        Pi = ss[self.exogenous]
         grid = {k: ss[k+'_grid'] for k in self.policy}
-        #ssout_list = self.back_step_fun(ssin_dict)
-        differentiable_back_step_fun = self.back_step_fun.differentiable(ssin_dict, h=h)
+        differentiable_back_step_fun = self.back_step_fun.differentiable(self.make_inputs(ss), h=h)
 
         differentiable_hetinput = None
         if self.hetinput is not None:
             # ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
             differentiable_hetinput = self.hetinput.differentiable(ss)
+
+        differentiable_hetoutput = None
+        if self.hetoutput is not None:
+            differentiable_hetoutput = self.hetoutput.differentiable(ss)
 
         # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
         sspol_i = {}
@@ -657,10 +661,10 @@ class HetBlock(Block):
         sspol_space = {}
         for pol in self.policy:
             # use robust binary-search-based method that only requires grids to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss.internal[self.name][pol])
+            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss[pol])
             sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
 
-        return Pi, differentiable_back_step_fun, differentiable_hetinput, sspol_i, sspol_pi, sspol_space
+        return Pi, differentiable_back_step_fun, differentiable_hetinput, differentiable_hetoutput, sspol_i, sspol_pi, sspol_space
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
