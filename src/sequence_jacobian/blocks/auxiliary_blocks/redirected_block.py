@@ -37,31 +37,33 @@ class RedirectedBlock(CombinedBlock):
         self.inputs = (redirect_block.inputs | block.inputs) - redirect_block.outputs
         self.outputs = (redirect_block.outputs | block.outputs) - redirect_block.inputs
 
-        # Calculate what are the inputs and outputs of the Block objects underlying `self`, without
-        # any of the redirecting blocks.
-        # TODO: Think more carefully about evaluating a DAG with bypass_redirection, if the redirecting
-        #   blocks change the sort order of the DAG!!
-        if not isinstance(self.directed, Parent):
-            self.inputs_directed = self.directed.inputs
-            self.outputs_directed = self.directed.outputs
-        else:
-            inputs_directed, outputs_directed = OrderedSet({}), OrderedSet({})
-            ps_checked = set({})
-            for d in self.directed.descendants:
-                # The descendant's parent's name (if it has one, o/w the descendant's name)
-                p = self.directed.descendants[d]
-                if p is None or p in ps_checked:
-                    continue
-                else:
-                    ps_checked |= set(p)
-                if hasattr(self.directed[p], "directed"):
-                    inputs_directed |= self.directed[p].directed.inputs
-                    outputs_directed |= self.directed[p].directed.outputs
-                else:
-                    inputs_directed |= self[d].inputs
-                    outputs_directed |= self[d].outputs
-            self.inputs_directed = inputs_directed - outputs_directed
-            self.outputs_directed = outputs_directed
+        # TODO: This all may not be necessary so long as there is a function that undoes the
+        #   insertion of all of the redirect blocks and re-sorts the DAG (if necessary)
+        # # Calculate what are the inputs and outputs of the Block objects underlying `self`, without
+        # # any of the redirecting blocks.
+        # # TODO: Think more carefully about evaluating a DAG with bypass_redirection, if the redirecting
+        # #   blocks change the sort order of the DAG!!
+        # if not isinstance(self.directed, Parent):
+        #     self.inputs_directed = self.directed.inputs
+        #     self.outputs_directed = self.directed.outputs
+        # else:
+        #     inputs_directed, outputs_directed = OrderedSet({}), OrderedSet({})
+        #     ps_checked = set({})
+        #     for d in self.directed.descendants:
+        #         # The descendant's parent's name (if it has one, o/w the descendant's name)
+        #         p = self.directed.descendants[d]
+        #         if p is None or p in ps_checked:
+        #             continue
+        #         else:
+        #             ps_checked |= set(p)
+        #         if hasattr(self.directed[p], "directed"):
+        #             inputs_directed |= self.directed[p].directed.inputs
+        #             outputs_directed |= self.directed[p].directed.outputs
+        #         else:
+        #             inputs_directed |= self[d].inputs
+        #             outputs_directed |= self[d].outputs
+        #     self.inputs_directed = inputs_directed - outputs_directed
+        #     self.outputs_directed = outputs_directed
 
     def __repr__(self):
         return f"<RedirectedBlock '{self.name}'>"

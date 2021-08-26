@@ -101,6 +101,9 @@ def steady_state(blocks, calibration, unknowns, targets, dissolve=None,
                             
     # Check that the solution is consistent with what would come out of the DAG without the helper blocks
     if consistency_check:
+        # TODO: Shouldn't the DAG be re-sorted when the helper blocks are stripped out, so it evaluates through in the
+        #   correct order? The sorted DAG here is based on including the helper blocks! So simply omitting them but
+        #   retaining the order that they created may not be entirely correct?
         # Add the unknowns not handled by helpers into the DAG to be checked.
         unknowns_solved.update({k: ss_values[k] for k in unknowns if k not in unknowns_solved})
 
