@@ -206,7 +206,7 @@ class HetBlock(Block):
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, Js, monotonic=False, returnindividual=False, grid_paths=None):
+    def _impulse_nonlinear(self, ss, inputs, outputs, monotonic=False, returnindividual=False, grid_paths=None):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for `inputs`,
         assuming that we start and end in steady state `ss`, and that all inputs not specified in
         `inputs` are constant at their ss values.

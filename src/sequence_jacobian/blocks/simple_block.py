@@ -48,7 +48,7 @@ class SimpleBlock(Block):
         outputs = self.f.wrapped_call(ss, preprocess=ignore, postprocess=misc.numeric_primitive)
         return SteadyStateDict({**ss, **outputs})
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, Js):
+    def _impulse_nonlinear(self, ss, inputs, outputs):
         input_args = {}
         for k, v in inputs.items():
             if np.isscalar(v):
