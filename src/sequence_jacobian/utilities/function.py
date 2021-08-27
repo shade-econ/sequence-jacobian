@@ -63,8 +63,11 @@ class ExtendedFunction:
     inputs, returns dict containing outputs by name"""
 
     def __init__(self, f):
-        self.f = f
-        self.name, self.inputs, self.outputs = metadata(f)
+        if isinstance(f, ExtendedFunction):
+            self.f, self.name, self.inputs, self.outputs = f.f, f.name, f.inputs, f.outputs
+        else:
+            self.f = f
+            self.name, self.inputs, self.outputs = metadata(f)
 
     def __call__(self, input_dict):
         # take subdict of d contained in inputs
@@ -137,3 +140,74 @@ class DifferentiableExtendedFunction(ExtendedFunction):
 
 def hide_zero_values(d):
     return {k: v for k, v in d.items() if not np.allclose(v, 0)}
+
+
+class ExtendedParallelFunction(ExtendedFunction):
+    def __init__(self, fs, name=None):
+        inputs = OrderedSet([])
+        outputs = OrderedSet([])
+        functions = {}
+        for f in fs:
+            ext_f = ExtendedFunction(f)
+            if not outputs.isdisjoint(ext_f.outputs):
+                raise ValueError(f'Overlap in outputs of ParallelFunction: {ext_f.name} and others both have {outputs & ext_f.outputs}')
+            inputs |= ext_f.inputs
+            outputs |= ext_f.outputs
+            functions[ext_f.name] = ext_f
+
+        self.inputs = inputs
+        self.outputs = outputs
+        self.functions = functions
+
+        if name is None:
+            names = list(functions)
+            if len(names) == 1:
+                self.name = names[0]
+            else:
+                self.name = f'{names[0]}_{names[-1]}'
+        else:
+            self.name = name
+
+    def __call__(self, input_dict):
+        results = {}
+        for f in self.functions.values(): 
+            results.update(f(input_dict))
+        return results
+
+    def call_on_deviations(self, ss, dev_dict):
+        results = {}
+        input_dict = {**ss, **dev_dict}
+        for f in self.functions.values():
+            if not f.inputs.isdisjoint(dev_dict):
+                results.update(f(input_dict))
+        return results
+    
+    def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
+        raise NotImplementedError
+
+    def differentiable(self, input_dict, h=1E-6, h2=1E-4):
+        return DifferentiableExtendedParallelFunction(self.functions, self.name, self.inputs, self.outputs, input_dict, h, h2)        
+
+
+class DifferentiableExtendedParallelFunction(ExtendedParallelFunction, DifferentiableExtendedFunction):
+    def __init__(self, functions, name, inputs, outputs, input_dict, h=1E-6, h2=1E-4):
+        self.name, self.inputs, self.outputs = name, inputs, outputs
+        diff_functions = {}
+        for k, f in functions.items():
+            diff_functions[k] = f.differentiable(input_dict, h, h2)
+        self.diff_functions = diff_functions
+    
+    def diff(self, shock_dict, h=None, hide_zeros=False):
+        results = {}
+        for f in self.diff_functions.values():
+            if not f.inputs.isdisjoint(shock_dict):
+                results.update(f.diff(shock_dict, h, hide_zeros))
+        return results
+
+    def diff2(self, shock_dict, h=None, hide_zeros=False):
+        results = {}
+        for f in self.diff_functions.values():
+            if not f.inputs.isdisjoint(shock_dict):
+                results.update(f.diff2(shock_dict, h, hide_zeros))
+        return results
+
