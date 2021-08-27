@@ -64,7 +64,7 @@ def transfers(pi_e, Div, Tax, e_grid):
     return T
 
 
-household.add_hetinput(transfers, verbose=False)
+household = household.add_hetinputs([transfers])
 
 
 @njit

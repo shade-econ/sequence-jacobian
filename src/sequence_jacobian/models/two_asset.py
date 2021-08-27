@@ -121,8 +121,8 @@ def adjustment_costs(a, a_grid, ra, chi0, chi1, chi2):
     return chi
 
 
-household.add_hetinput(income, verbose=False)
-household.add_hetoutput(adjustment_costs, verbose=False)
+household = household.add_hetinputs([income])
+household = household.add_hetoutputs([adjustment_costs])
 
 
 """Supporting functions for HA block"""

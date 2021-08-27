@@ -75,6 +75,9 @@ class ExtendedFunction:
         input_dict = {k: v for k, v in input_dict.items() if k in self.inputs}
         return self.outputs.dict_from(make_tuple(self.f(**input_dict)))
 
+    def __repr__(self):
+        return f'<{type(self).__name__}({self.name}): {self.inputs} -> {self.outputs}>'
+
     def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
         if preprocess is not None:
             input_dict = {k: preprocess(v) for k, v in input_dict.items() if k in self.inputs}
@@ -98,6 +101,7 @@ class DifferentiableExtendedFunction(ExtendedFunction):
         self.output_dict = None # lazy evaluation of outputs for one-sided diff
         self.h = h
         self.h2 = h2
+
 
     def diff(self, shock_dict, h=None, hide_zeros=False):
         if h is None:
@@ -153,6 +157,9 @@ class ExtendedParallelFunction(ExtendedFunction):
                 raise ValueError(f'Overlap in outputs of ParallelFunction: {ext_f.name} and others both have {outputs & ext_f.outputs}')
             inputs |= ext_f.inputs
             outputs |= ext_f.outputs
+
+            if ext_f.name in functions:
+                raise ValueError(f'Overlap in function names of ParallelFunction: {ext_f.name} listed twice')
             functions[ext_f.name] = ext_f
 
         self.inputs = inputs
@@ -190,6 +197,23 @@ class ExtendedParallelFunction(ExtendedFunction):
     
     def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
         raise NotImplementedError
+
+    def add(self, f):
+        if isinstance(f, function) or isinstance(f, ExtendedFunction):
+            return ExtendedParallelFunction(list(self.functions.values()) + [f])
+        else:
+            # otherwise assume f is iterable
+            return ExtendedParallelFunction(list(self.functions.values()) + list(f))
+        
+    def remove(self, name):
+        if isinstance(name, str):
+            return ExtendedParallelFunction([v for k, v in self.functions.items() if k != name])
+        else:
+            # otherwise assume name is iterable
+            return ExtendedParallelFunction([v for k, v in self.functions.items() if k not in name])
+
+    def children(self):
+        return OrderedSet(self.functions)
 
     def differentiable(self, input_dict, h=1E-6, h2=1E-4):
         return DifferentiableExtendedParallelFunction(self.functions, self.name, self.inputs, self.outputs, input_dict, h, h2)        

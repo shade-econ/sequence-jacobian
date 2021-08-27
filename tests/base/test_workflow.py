@@ -91,8 +91,8 @@ def mpcs(c, a, a_grid, rpost):
     return mpc
 
 
-household.add_hetinput(income, verbose=False)
-household.add_hetoutput(mpcs, verbose=False)
+household = household.add_hetinputs([income])
+household = household.add_hetoutputs([mpcs])
 
 
 '''Part 2: rest of the model'''
