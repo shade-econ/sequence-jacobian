@@ -177,10 +177,12 @@ class HetBlock(Block):
         """
 
         ss = calibration.toplevel.copy()
+        if self.hetinputs is not None:
+            ss.update(self.hetinputs(ss))
 
         # extract information from calibration
         Pi = ss[self.exogenous]
-        grid = {k: ss[k+'_grid'] for k in self.policy}
+        grid = {k: ss[k + '_grid'] for k in self.policy}
         D_seed = ss.get('D', None)
         pi_seed = ss.get(self.exogenous + '_seed', None)
 
@@ -223,9 +225,10 @@ class HetBlock(Block):
         grid_paths: [optional] dict of {str: array(T, Number of grid points)}
             time-varying grids for policies
         """
+        ssin_dict = {**ss.toplevel, **ss.internal[self.name]}
+        Pi_T = ssin_dict[self.exogenous].T.copy()
+        D = ssin_dict['D']
         T = inputs.T
-        Pi_T = ss.internal[self.name][self.exogenous].T.copy()
-        D = ss.internal[self.name]['D']
 
         # construct grids for policy variables either from the steady state grid if the grid is meant to be
         # non-time-varying or from the provided `grid_path` if the grid is meant to be time-varying.
@@ -236,7 +239,7 @@ class HetBlock(Block):
                 grid[k] = grid_paths[k]
                 use_ss_grid[k] = False
             else:
-                grid[k] = ss[k + "_grid"]
+                grid[k] = ssin_dict[k + "_grid"]
                 use_ss_grid[k] = True
 
         # allocate empty arrays to store result, assume all like D
@@ -246,11 +249,12 @@ class HetBlock(Block):
         individual_paths = {k: np.empty((T,) + D.shape) for k in toreturn}
 
         # backward iteration
-        backdict = dict(ss.items())
-        backdict.update(copy.deepcopy(ss.internal[self.name]))
+        backdict = dict(ssin_dict.items())
         for t in reversed(range(T)):
             # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
-            backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
+            backdict.update({k: ssin_dict[k] + v[t, ...] for k, v in inputs.items()})
+            if self.hetinputs is not None:
+                backdict.update(self.hetinputs(backdict))
             individual = self.make_inputs(backdict)
             individual.update(self.back_step_fun(individual))
             backdict.update({k: individual[k] for k in self.back_iter_vars})
@@ -308,6 +312,8 @@ class HetBlock(Block):
             h for numerical differentiation of backward iteration
         """
         ss = {**ss.toplevel, **ss.internal[self.name]}
+        if self.hetinputs is not None:
+            ss.update(self.hetinputs(ss))
         outputs = self.M_outputs.inv @ outputs # horrible
 
         # step 0: preliminary processing of steady state
@@ -412,7 +418,7 @@ class HetBlock(Block):
             all steady-state outputs of backward iteration, combined with inputs to backward iteration
         """
 
-        # find initial values for backward iteration and account for hetinputs
+        # find initial values for backward iteration
         original_ssin = ssin
         ssin = self.make_inputs(ssin)
 
@@ -640,16 +646,11 @@ class HetBlock(Block):
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
     def make_inputs(self, back_step_inputs_dict):
-        """Extract from back_step_inputs_dict exactly the inputs needed for self.back_step_fun,
-        process stuff through self.hetinput first if it's there.
-        """
+        """Extract from back_step_inputs_dict exactly the inputs needed for self.back_step_fun."""
         if isinstance(back_step_inputs_dict, SteadyStateDict):
             input_dict = {**back_step_inputs_dict.toplevel, **back_step_inputs_dict.internal[self.name]}
         else:
             input_dict = back_step_inputs_dict.copy()
-
-        if self.hetinputs is not None:
-            input_dict.update(self.hetinputs(input_dict))
 
         if not all(k in input_dict for k in self.back_iter_vars):
             input_dict.update(self.backward_init(input_dict))

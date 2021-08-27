@@ -8,8 +8,7 @@ from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
 def household_init(a_grid, y, rpost, sigma):
-    c = np.maximum(1e-8, y[:, np.newaxis] +
-                   np.maximum(rpost, 0.04) * a_grid[np.newaxis, :])
+    c = np.maximum(1e-8, y[:, np.newaxis] + np.maximum(rpost, 0.04) * a_grid[np.newaxis, :])
     Va = (1 + rpost) * (c ** (-sigma))
     return Va
 
@@ -66,20 +65,16 @@ def get_mpcs(c, a, a_grid, rpost):
 
 def income(tau, Y, e_grid, e_dist, Gamma, transfer):
     """Labor income on the grid."""
-    gamma = e_grid ** (Gamma * np.log(Y)) / np.vdot(e_dist,
-                                                    e_grid ** (1 + Gamma * np.log(Y)))
+    gamma = e_grid ** (Gamma * np.log(Y)) / np.vdot(e_dist, e_grid ** (1 + Gamma * np.log(Y)))
     y = (1 - tau) * Y * gamma * e_grid + transfer
     return y
 
-
 @simple
 def income_state_vars(rho_e, sd_e, nE):
-    e_grid, e_dist, Pi = sj.utilities.discretize.markov_rouwenhorst(
-        rho=rho_e, sigma=sd_e, N=nE)
+    e_grid, e_dist, Pi = sj.utilities.discretize.markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
     return e_grid, e_dist, Pi
 
 
-@simple
 def asset_state_vars(amin, amax, nA):
     a_grid = sj.utilities.discretize.agrid(amin=amin, amax=amax, n=nA)
     return a_grid
@@ -91,7 +86,7 @@ def mpcs(c, a, a_grid, rpost):
     return mpc
 
 
-household = household.add_hetinputs([income])
+household = household.add_hetinputs([income, asset_state_vars])
 household = household.add_hetoutputs([mpcs])
 
 
@@ -139,7 +134,7 @@ def mkt_clearing(A, B, C, Y, G):
 
 
 def test_all():
-    hh = combine([household, income_state_vars, asset_state_vars], name='HH')
+    hh = combine([household, income_state_vars], name='HH')
     calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
                    'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143, 'rho_B': 0.8}
     
