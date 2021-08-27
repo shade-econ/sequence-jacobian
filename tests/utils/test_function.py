@@ -56,7 +56,19 @@ def test_differentiable_extended_parallel_function():
     assert np.isclose(diff['d'], 0)
     assert np.isclose(diff['f'], 1/16)
 
+    # test narrowing down outputs
+    diff = fs.differentiable(ss1).diff(inputs1, outputs=['c','d'])
+    assert np.isclose(diff['c'], -0.5)
+    assert np.isclose(diff['d'], 0)
+    assert list(diff) == ['c', 'd']
+
+    # if no shocks to first function, hide first function
     inputs2 = {'e': -2}
     diff = fs.differentiable(ss1).diff2(inputs2)
+    assert list(diff) == ['f']
+    assert np.isclose(diff['f'], 1/8)
+
+    # if we ask for output from first function but no inputs shocked, shouldn't be there!
+    diff = fs.differentiable(ss1).diff(inputs2, outputs=['c', 'f'])
     assert list(diff) == ['f']
     assert np.isclose(diff['f'], 1/8)

@@ -168,18 +168,24 @@ class ExtendedParallelFunction(ExtendedFunction):
         else:
             self.name = name
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, outputs=None):
         results = {}
-        for f in self.functions.values(): 
-            results.update(f(input_dict))
+        for f in self.functions.values():
+            if outputs is None or not f.outputs.isdisjoint(outputs): 
+                results.update(f(input_dict))
+        if outputs is not None:
+            results = {k: results[k] for k in outputs}
         return results
 
-    def call_on_deviations(self, ss, dev_dict):
+    def call_on_deviations(self, ss, dev_dict, outputs=None):
         results = {}
         input_dict = {**ss, **dev_dict}
         for f in self.functions.values():
             if not f.inputs.isdisjoint(dev_dict):
-                results.update(f(input_dict))
+                if outputs is None or not f.outputs.isdisjoint(outputs):
+                    results.update(f(input_dict))
+        if outputs is not None:
+            results = {k: results[k] for k in outputs if k in results}
         return results
     
     def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
@@ -197,17 +203,23 @@ class DifferentiableExtendedParallelFunction(ExtendedParallelFunction, Different
             diff_functions[k] = f.differentiable(input_dict, h, h2)
         self.diff_functions = diff_functions
     
-    def diff(self, shock_dict, h=None, hide_zeros=False):
+    def diff(self, shock_dict, h=None, outputs=None, hide_zeros=False):
         results = {}
         for f in self.diff_functions.values():
             if not f.inputs.isdisjoint(shock_dict):
-                results.update(f.diff(shock_dict, h, hide_zeros))
+                if outputs is None or not f.outputs.isdisjoint(outputs):
+                    results.update(f.diff(shock_dict, h, hide_zeros))
+        if outputs is not None:
+            results = {k: results[k] for k in outputs if k in results}
         return results
 
-    def diff2(self, shock_dict, h=None, hide_zeros=False):
+    def diff2(self, shock_dict, h=None, outputs=None, hide_zeros=False):
         results = {}
         for f in self.diff_functions.values():
             if not f.inputs.isdisjoint(shock_dict):
-                results.update(f.diff2(shock_dict, h, hide_zeros))
+                if outputs is None or not f.outputs.isdisjoint(outputs):
+                    results.update(f.diff2(shock_dict, h, hide_zeros))
+        if outputs is not None:
+            results = {k: results[k] for k in outputs if k in results}
         return results
 
