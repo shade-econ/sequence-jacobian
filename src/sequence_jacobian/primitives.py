@@ -95,12 +95,16 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def impulse_nonlinear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict],
                           outputs: Optional[List[str]] = None,
                           Js: Optional[Dict[str, JacobianDict]] = {}, **kwargs) -> ImpulseDict:
-        # TODO: do we want Js at all? better alternative to kwargs?
         """Calculate a partial equilibrium, non-linear impulse response of `outputs` to a set of shocks in `inputs`
         around a steady state `ss`."""
         inputs = ImpulseDict(inputs)
         _, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
-        return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, **kwargs)
+        
+        # SolvedBlocks may use Js and may be nested in a CombinedBlock 
+        if isinstance(self, Parent):
+            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, **kwargs)
+        else:
+            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, **kwargs)
 
     def impulse_linear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict],
                        outputs: Optional[List[str]] = None,
@@ -272,7 +276,6 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def remap(self, map):
         other = deepcopy(self)
         other.M = self.M @ Bijection(map)
-        # TODO: maybe we want to have an ._inputs and ._outputs that never changes, so that it can be used internally?
         other.inputs = other.M @ self.inputs
         other.outputs = other.M @ self.outputs
         if hasattr(self, 'input_list'):

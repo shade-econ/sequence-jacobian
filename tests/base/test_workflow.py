@@ -1,6 +1,6 @@
 import numpy as np
 import sequence_jacobian as sj
-from sequence_jacobian import het, simple, hetoutput, solved, combine, create_model 
+from sequence_jacobian import het, simple, solved, combine, create_model 
 from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
@@ -8,8 +8,7 @@ from sequence_jacobian.blocks.support.impulse import ImpulseDict
 
 
 def household_init(a_grid, y, rpost, sigma):
-    c = np.maximum(1e-8, y[:, np.newaxis] +
-                   np.maximum(rpost, 0.04) * a_grid[np.newaxis, :])
+    c = np.maximum(1e-8, y[:, np.newaxis] + np.maximum(rpost, 0.04) * a_grid[np.newaxis, :])
     Va = (1 + rpost) * (c ** (-sigma))
     return Va
 
@@ -66,34 +65,29 @@ def get_mpcs(c, a, a_grid, rpost):
 
 def income(tau, Y, e_grid, e_dist, Gamma, transfer):
     """Labor income on the grid."""
-    gamma = e_grid ** (Gamma * np.log(Y)) / np.vdot(e_dist,
-                                                    e_grid ** (1 + Gamma * np.log(Y)))
+    gamma = e_grid ** (Gamma * np.log(Y)) / np.vdot(e_dist, e_grid ** (1 + Gamma * np.log(Y)))
     y = (1 - tau) * Y * gamma * e_grid + transfer
     return y
 
-
 @simple
 def income_state_vars(rho_e, sd_e, nE):
-    e_grid, e_dist, Pi = sj.utilities.discretize.markov_rouwenhorst(
-        rho=rho_e, sigma=sd_e, N=nE)
+    e_grid, e_dist, Pi = sj.utilities.discretize.markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
     return e_grid, e_dist, Pi
 
 
-@simple
 def asset_state_vars(amin, amax, nA):
     a_grid = sj.utilities.discretize.agrid(amin=amin, amax=amax, n=nA)
     return a_grid
 
 
-@hetoutput()
 def mpcs(c, a, a_grid, rpost):
     """MPC out of lump-sum transfer."""
     mpc = get_mpcs(c, a, a_grid, rpost)
     return mpc
 
 
-household.add_hetinput(income, verbose=False)
-household.add_hetoutput(mpcs, verbose=False)
+household = household.add_hetinputs([income, asset_state_vars])
+household = household.add_hetoutputs([mpcs])
 
 
 '''Part 2: rest of the model'''
@@ -140,7 +134,7 @@ def mkt_clearing(A, B, C, Y, G):
 
 
 def test_all():
-    hh = combine([household, income_state_vars, asset_state_vars], name='HH')
+    hh = combine([household, income_state_vars], name='HH')
     calibration = {'Y': 1.0, 'r': 0.005, 'sigma': 2.0, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
                    'amin': 0.0, 'amax': 1000, 'nA': 100, 'Gamma': 0.0, 'transfer': 0.143, 'rho_B': 0.8}
     
@@ -162,16 +156,17 @@ def test_all():
     Js = {'household': household.jacobian(ss1, inputs=['Y', 'rpost', 'tau', 'transfer'], outputs=['C', 'A'], T=300)}
 
     # Linear impulse responses from Jacobian vs directly
-    G = dag1.solve_jacobian(ss1, inputs=['r'], outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'],
+    G = dag1.solve_jacobian(ss1, inputs=['r'], outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'],
                             unknowns=['Y'], targets=['asset_mkt'], T=300, Js=Js)
     shock = ImpulseDict({'r': 1E-4 * 0.9 ** np.arange(300)})
     td_lin1 = G @ shock
     td_lin2 = dag1.solve_impulse_linear(ss1, unknowns=['Y'], targets=['asset_mkt'],
-                                       inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], Js=Js)
+                                       inputs=shock, outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'], Js=Js)
     assert all(np.allclose(td_lin1[k], td_lin2[k]) for k in td_lin1)
 
     # Nonlinear vs linear impulses
     td_nonlin = dag1.solve_impulse_nonlinear(ss1, unknowns=['Y'], targets=['asset_mkt'],
-                                             inputs=shock, outputs=['Y', 'C', 'asset_mkt', 'goods_mkt'], Js=Js)
+                                             inputs=shock, outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'], Js=Js)
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
-    assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1)
+    assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'Mpc')
+
