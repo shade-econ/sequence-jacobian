@@ -11,10 +11,7 @@ from .steady_state.classes import SteadyStateDict
 from .jacobian.classes import JacobianDict
 from .blocks.support.impulse import ImpulseDict
 
-
 from .visualization.draw_dag import draw_dag, draw_solved, inspect_solved
-
-from .steady_state.drivers import steady_state
 
 # Useful utilities for setting up HetBlocks
 from .utilities.discretize import agrid, markov_rouwenhorst, markov_tauchen
