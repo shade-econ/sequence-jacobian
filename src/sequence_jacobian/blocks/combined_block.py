@@ -5,12 +5,11 @@ import numpy as np
 
 from .support.impulse import ImpulseDict
 from ..primitives import Block
-from .. import utilities as utils
+from ..utilities.graph import block_sort, find_intermediate_inputs
 from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..blocks.parent import Parent
 from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
-from ..steady_state.classes import SteadyStateDict
 
 
 def combine(blocks, name="", model_alias=False):
@@ -29,12 +28,12 @@ class CombinedBlock(Block, Parent):
     # To users: Do *not* manually change the attributes via assignment. Instantiating a
     #   CombinedBlock has some automated features that are inferred from initial instantiation but not from
     #   re-assignment of attributes post-instantiation.
-    def __init__(self, blocks, name="", model_alias=False):
+    def __init__(self, blocks, name="", model_alias=False, sorted_indices=None, intermediate_inputs=None):
         super().__init__()
 
         self._blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
-        self._sorted_indices = utils.graph.block_sort(blocks)
-        self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks)
+        self._sorted_indices = block_sort(blocks) if sorted_indices is None else sorted_indices
+        self._required = find_intermediate_inputs(blocks) if intermediate_inputs is None else intermediate_inputs
         self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices]
 
         if not name:

@@ -238,11 +238,6 @@ def _solve_for_unknowns(residual, unknowns, solver, solver_kwargs, residual_kwar
             unknown_solutions, _ = solvers.newton_solver(constrained_residual, initial_values,
                                                          tol=tol, verbose=verbose, **solver_kwargs)
         unknown_solutions = list(unknown_solutions)
-    elif solver == "solved":
-        # If the model either doesn't require a numerical solution or is being evaluated at a candidate solution
-        # simply call residual_f once to populate the `ss_values` dict
-        residual_f(unknowns.values())
-        unknown_solutions = unknowns.values()
     else:
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
 

@@ -75,18 +75,13 @@ class Block(abc.ABC, metaclass=ABCMeta):
         pass
 
     def steady_state(self, calibration: Union[SteadyStateDict, UserProvidedSS], 
-                     dissolve: Optional[List[str]] = [], bypass_redirection: bool = False,
+                     dissolve: Optional[List[str]] = [], evaluate_helpers: bool = False,
                      **kwargs) -> SteadyStateDict:
         """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
-        # Special handling: 1) Find inputs/outputs of the Block w/o redirection
+        # Special handling: 1) Find inputs/outputs of the Block w/o helpers blocks
         #                   2) Add all unknowns of dissolved blocks to inputs
-        if bypass_redirection and isinstance(self, Parent):
-            if hasattr(self, "inputs_directed"):
-                inputs = self.directed.inputs.copy()
-            else:
-                inputs = OrderedSet({})
-                for d in self.descendants:
-                    inputs |= self[d].inputs_directed.copy() if hasattr(self, "inputs_directed") else self[d].inputs.copy()
+        if not evaluate_helpers:
+            inputs = self.inputs_orig.copy() if hasattr(self, "inputs_orig") else self.inputs.copy()
         else:
             inputs = self.inputs.copy()
         if isinstance(self, Parent):
@@ -94,7 +89,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
                 inputs |= self.get_attribute(k, 'unknowns').keys()
 
         calibration = SteadyStateDict(calibration)[inputs]
-        kwargs['dissolve'], kwargs['bypass_redirection'] = dissolve, bypass_redirection
+        kwargs['dissolve'], kwargs['evaluate_helpers'] = dissolve, evaluate_helpers
 
         return self.M @ self._steady_state(self.M.inv @ calibration, **{k: v for k, v in kwargs.items() if k in self.ss_valid_input_kwargs})
 
