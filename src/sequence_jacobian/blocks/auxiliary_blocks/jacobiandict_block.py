@@ -1,10 +1,8 @@
 """A simple wrapper for JacobianDicts to be embedded in DAGs"""
 
-from numbers import Real
-from typing import Dict, Union, List
-
 from ...primitives import Block, Array
 from ...jacobian.classes import JacobianDict
+from ..support.impulse import ImpulseDict
 
 
 class JacobianDictBlock(JacobianDict, Block):
@@ -15,12 +13,10 @@ class JacobianDictBlock(JacobianDict, Block):
     def __repr__(self):
         return f"<JacobianDictBlock outputs={self.outputs}, inputs={self.inputs}>"
 
-    def impulse_linear(self, ss: Dict[str, Union[Real, Array]],
-                       exogenous: Dict[str, Array], **kwargs) -> Dict[str, Array]:
-        return self.jacobian(list(exogenous.keys())).apply(exogenous)
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
 
-    def _jacobian(self, ss, inputs, outputs, T) -> JacobianDict:
-        # TODO: T should be an attribute of JacobianDict
+    def _jacobian(self, ss, inputs, outputs, T):
         if not inputs <= self.inputs:
             raise KeyError(f'Asking JacobianDictBlock for {inputs - self.inputs}, which are among its inputs {self.inputs}')
         if not outputs <= self.outputs:
