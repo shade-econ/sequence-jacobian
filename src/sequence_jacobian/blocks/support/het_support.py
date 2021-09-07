@@ -171,8 +171,7 @@ class Markov(Transition):
     def shockable(self, Dss):
         return ShockableMarkov(self.Pi, self.i, Dss)
 
-    def stationary(self, tol=1E-11, maxit=10_000):
-        pi_seed = getattr(self.Pi, 'pi_seed', None)
+    def stationary(self, pi_seed, tol=1E-11, maxit=10_000):
         return general_stationary(self.Pi, pi_seed, tol, maxit)
     
 
@@ -206,6 +205,10 @@ class CombinedTransition(Transition):
             Dss = stage.forward(Dss)
 
         return ShockableCombinedTransition(shockable_stages)
+
+    def __getitem__(self, i):
+        return self.stages[i]
+
 
 Shock = Any
 ListTupleShocks = Union[List[Shock], Tuple[Shock]]

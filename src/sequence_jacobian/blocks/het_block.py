@@ -11,6 +11,7 @@ from ..jacobian.classes import JacobianDict
 from .support.bijection import Bijection
 from ..utilities.function import ExtendedFunction, ExtendedParallelFunction
 from ..utilities.ordered_set import OrderedSet
+from .support.het_support import ShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -71,7 +72,7 @@ class HetBlock(Block):
         self.inputs = self.back_step_fun.inputs - [k + '_p' for k in self.back_iter_vars]
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
-        self.internal = OrderedSet(['D', self.exogenous]) | self.back_step_fun.outputs
+        self.internal = OrderedSet(['D', 'Dbeg', self.exogenous]) | self.back_step_fun.outputs
 
         # store "original" copies of these for use whenever we process new hetinputs/hetoutputs
         self.original_inputs = self.inputs
@@ -172,7 +173,7 @@ class HetBlock(Block):
         ss : dict, contains
             - ss inputs of self.back_step_fun and (if present) self.hetinput
             - ss outputs of self.back_step_fun
-            - ss distribution 'D'
+            - ss distribution 'D' (and end-of-period distribution 'Dbeg')
             - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
         """
 
@@ -191,8 +192,8 @@ class HetBlock(Block):
         ss.update(sspol)
 
         # run forward iteration
-        D = self.dist_ss(Pi, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
-        ss.update({"D": D})
+        Dbeg, D = self.dist_ss(ss, forward_tol, forward_maxit, D_seed, pi_seed)
+        ss.update({'Dbeg': Dbeg, "D": D})
 
         # run hetoutput if it's there
         if self.hetoutputs is not None:
@@ -317,22 +318,22 @@ class HetBlock(Block):
         outputs = self.M_outputs.inv @ outputs # horrible
 
         # step 0: preliminary processing of steady state
-        Pi, differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
+        differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs = self.jac_backward_prelim(ss, h)
+        law_of_motion = self.make_law_of_motion(ss).shockable(ss['Dbeg'])
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
         for i in inputs:
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, differentiable_back_step_fun,
-                                                                      ss['D'], Pi.T.copy(),
-                                                                      sspol_i, sspol_pi, sspol_space, T,
-                                                                      differentiable_hetinputs, differentiable_hetoutputs)
+            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, T, differentiable_back_step_fun,
+                                                                      differentiable_hetinputs, differentiable_hetoutputs,
+                                                                      law_of_motion, ss['D'])
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = {}
         for o in outputs:
-            curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
+            curlyPs[o] = self.forward_iteration_fakenews(ss[o], T-1, law_of_motion)
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
@@ -452,63 +453,37 @@ class HetBlock(Block):
                     ssin[k] = original_ssin[k]
         return {**ssin, **sspol}
 
-    def dist_ss(self, Pi, sspol, grid, tol=1E-10, maxit=100_000, D_seed=None, pi_seed=None):
-        """Find steady-state distribution through forward iteration until convergence.
-
-        Parameters
-        ----------
-        Pi : array
-            steady-state Markov matrix for exogenous variable
-        sspol : dict
-            steady-state policies on grid for all policy variables in self.policy
-        grid : dict
-            grids for all policy variables in self.policy
-        tol : [optional] float
-            absolute tolerance for max diff between consecutive iterations for distribution
-        maxit : [optional] int
-            maximum number of iterations, if 'tol' not reached by then, raise error
-        D_seed : [optional] array
-            initial seed for overall distribution
-        pi_seed : [optional] array
-            initial seed for stationary dist of Pi, if no D_seed
-
-        Returns
-        ----------
-        D : array
-            steady-state distribution
-        """
-
+    def dist_ss(self, ss, tol=1E-10, maxit=100_000, D_seed=None, pi_seed=None):
+        law_of_motion = self.make_law_of_motion(ss)
+        
         # first obtain initial distribution D
         if D_seed is None:
+            # TODO: remember we need to change this once we have more than one exogenous
             # compute stationary distribution for exogenous variable
-            pi = utils.discretize.stationary(Pi, pi_seed)
+            pi = law_of_motion.stages[0].stationary(pi_seed)
 
             # now initialize full distribution with this, assuming uniform distribution on endogenous vars
-            endogenous_dims = [grid[k].shape[0] for k in self.policy]
+            endogenous_dims = [ss[k+'_grid'].shape[0] for k in self.policy]
             D = np.tile(pi, endogenous_dims[::-1] + [1]).T / np.prod(endogenous_dims)
         else:
             D = D_seed
 
-        # obtain interpolated policy rule for each dimension of endogenous policy
-        sspol_i = {}
-        sspol_pi = {}
-        for pol in self.policy:
-            # use robust binary search-based method that only requires grids, not policies, to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], sspol[pol])
-
         # iterate until convergence by tol, or maxit
-        Pi_T = Pi.T.copy()
         for it in range(maxit):
-            Dnew = self.forward_step(D, Pi_T, sspol_i, sspol_pi)
+            Dbeg_new = law_of_motion[1].forward(D)
+            D_new = law_of_motion[0].forward(Dbeg_new)
 
             # only check convergence every 10 iterations for efficiency
-            if it % 10 == 0 and utils.optimized_routines.within_tolerance(D, Dnew, tol):
+            if it % 10 == 0 and utils.optimized_routines.within_tolerance(D, D_new, tol):
                 break
-            D = Dnew
+            Dbeg = Dbeg_new
+            D = D_new
         else:
             raise ValueError(f'No convergence after {maxit} forward iterations!')
 
-        return D
+        # "D" is after the exogenous shock, Dbeg is before it
+        D = law_of_motion.stages[0].forward(Dbeg)
+        return Dbeg, D
 
     '''Part 4: components of jac(), corresponding to *4 steps of fake news algorithm* in paper
         - Step 1: backward_step_fakenews and backward_iteration_fakenews to get curlyYs and curlyDs
@@ -518,15 +493,16 @@ class HetBlock(Block):
     '''
 
     def backward_step_fakenews(self, din_dict, output_list, differentiable_back_step_fun,
-                               differentiable_hetoutput, Dss, Pi_T, sspol_i, sspol_pi, sspol_space):
+                               differentiable_hetoutput, law_of_motion: ShockableTransition, Dss):
+                               
         # shock perturbs outputs
         shocked_outputs = differentiable_back_step_fun.diff(din_dict)
         curlyV = {k: shocked_outputs[k] for k in self.back_iter_vars}
 
         # which affects the distribution tomorrow
-        pol_pi_shock = {k: -shocked_outputs[k] / sspol_space[k] for k in self.policy}
-
-        curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
+        policy_shock = [shocked_outputs[k] for k in self.policy]
+        curlyD = law_of_motion.forward_shock([None, policy_shock])
+        #curlyD = law_of_motion[0].forward(curlyDbeg)
 
         # and the aggregate outcomes today
         if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
@@ -535,8 +511,8 @@ class HetBlock(Block):
 
         return curlyV, curlyD, curlyY
 
-    def backward_iteration_fakenews(self, input_shocked, output_list, differentiable_back_step_fun, Dss, Pi_T,
-                                    sspol_i, sspol_pi, sspol_space, T, differentiable_hetinput, differentiable_hetoutput):
+    def backward_iteration_fakenews(self, input_shocked, output_list, T, differentiable_back_step_fun,
+                            differentiable_hetinput, differentiable_hetoutput, law_of_motion: ShockableTransition, Dss):
         """Iterate policy steps backward T times for a single shock."""
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
@@ -547,7 +523,7 @@ class HetBlock(Block):
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun, differentiable_hetoutput,
-                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
+                                                             law_of_motion, Dss)
 
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -562,34 +538,30 @@ class HetBlock(Block):
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
                                                     output_list, differentiable_back_step_fun, differentiable_hetoutput,
-                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
+                                                    law_of_motion, Dss)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
 
         return curlyYs, curlyDs
 
-    def forward_iteration_fakenews(self, o_ss, Pi, pol_i_ss, pol_pi_ss, T):
-        """Iterate transpose forward T steps to get full set of curlyPs for a given outcome.
+    def forward_iteration_fakenews(self, o_ss, T, law_of_motion: ShockableTransition):
+        """Iterate transpose forward T steps to get full set of curlyEs for a given outcome."""
+        curlyEs = np.empty((T,) + o_ss.shape)
 
-        Note we depart from definition in paper by applying the demeaning operator in addition to Lambda
-        at each step. This does not affect products with curlyD (which are the only way curlyPs enter
-        Jacobian) since perturbations to distribution always have mean zero. It has numerical benefits
-        since curlyPs now go to zero for high t (used in paper in proof of Proposition 1).
-        """
-        curlyPs = np.empty((T,) + o_ss.shape)
-        curlyPs[0, ...] = utils.misc.demean(o_ss)
+        # initialize with beginning-of-period expectation of policy
+        curlyEs[0, ...] = utils.misc.demean(law_of_motion[0].expectations(o_ss))
         for t in range(1, T):
-            curlyPs[t, ...] = utils.misc.demean(self.forward_step_transpose(curlyPs[t - 1, ...],
-                                                                            Pi, pol_i_ss, pol_pi_ss))
-        return curlyPs
+            # we demean so that curlyEs converge to zero (better numerically), in theory no effect
+            curlyEs[t, ...] = utils.misc.demean(law_of_motion.expectations(curlyEs[t-1, ...]))
+        return curlyEs
 
     @staticmethod
-    def build_F(curlyYs, curlyDs, curlyPs):
+    def build_F(curlyYs, curlyDs, curlyEs):
         T = curlyDs.shape[0]
-        Tpost = curlyPs.shape[0] - T + 2
+        Tpost = curlyEs.shape[0] - T + 2
         F = np.empty((Tpost + T - 1, T))
         F[0, :] = curlyYs
-        F[1:, :] = curlyPs.reshape((Tpost + T - 2, -1)) @ curlyDs.reshape((T, -1)).T
+        F[1:, :] = curlyEs.reshape((Tpost + T - 2, -1)) @ curlyDs.reshape((T, -1)).T
         return F
 
     @staticmethod
@@ -601,47 +573,18 @@ class HetBlock(Block):
 
     '''Part 5: helpers for .jac and .ajac: preliminary processing'''
 
-    def jac_prelim(self, ss, h):
-        """Helper that does preliminary processing of steady state for fake news algorithm.
-
-        Parameters
-        ----------
-        ss : dict, all steady-state info, intended to be from .ss()
-
-        Returns
-        ----------
-        ssin_dict       : dict, ss vals of exactly the inputs needed by self.back_step_fun for backward step
-        Pi              : array (S*S), Markov matrix for exogenous state
-        ssout_list      : tuple, what self.back_step_fun returns when given ssin_dict (not exactly the same
-                            as steady-state numerically since SS convergence was to some tolerance threshold)
-        ss_for_hetinput : dict, ss vals of exactly the inputs needed by self.hetinput (if it exists)
-        sspol_i         : dict, indices on lower bracketing gridpoint for all in self.policy
-        sspol_pi        : dict, weights on lower bracketing gridpoint for all in self.policy
-        sspol_space     : dict, space between lower and upper bracketing gridpoints for all in self.policy
-        """
-        Pi = ss[self.exogenous]
-        grid = {k: ss[k+'_grid'] for k in self.policy}
+    def jac_backward_prelim(self, ss, h):
         differentiable_back_step_fun = self.back_step_fun.differentiable(self.make_inputs(ss), h=h)
 
         differentiable_hetinputs = None
         if self.hetinputs is not None:
-            # ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
             differentiable_hetinputs = self.hetinputs.differentiable(ss)
 
         differentiable_hetoutputs = None
         if self.hetoutputs is not None:
             differentiable_hetoutputs = self.hetoutputs.differentiable(ss)
 
-        # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
-        sspol_i = {}
-        sspol_pi = {}
-        sspol_space = {}
-        for pol in self.policy:
-            # use robust binary-search-based method that only requires grids to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss[pol])
-            sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
-
-        return Pi, differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs, sspol_i, sspol_pi, sspol_space
+        return differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
@@ -664,6 +607,19 @@ class HetBlock(Block):
         except KeyError as e:
             print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
             raise
+
+    def make_law_of_motion(self, ss):
+        exog = Markov(ss[self.exogenous], 0)
+
+        if len(self.policy) == 1:
+            endog = lottery_1d(ss[self.policy[0]], ss[self.policy[0] + '_grid'])
+        else:
+            endog = lottery_2d(ss[self.policy[0]], ss[self.policy[1]],
+                        ss[self.policy[0] + '_grid'], ss[self.policy[1] + '_grid'])
+
+        law_of_motion = CombinedTransition([exog, endog])
+
+        return law_of_motion
 
     '''Part 7: routines to do forward steps of different kinds, all wrap functions in utils'''
 

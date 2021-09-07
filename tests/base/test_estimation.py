@@ -4,6 +4,9 @@ import pytest
 import numpy as np
 
 from sequence_jacobian import estimation
+from sequence_jacobian.models import rbc, krusell_smith, hank, two_asset
+from sequence_jacobian import create_model
+
 
 
 # See test_determinacy.py for the to-do describing this suppression
