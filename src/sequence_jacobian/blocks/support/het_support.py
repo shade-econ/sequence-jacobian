@@ -10,15 +10,17 @@ class Transition:
     def forward(self, D):
         pass
 
-    def expectations(self, X):
+    def expectation(self, X):
         pass
 
-    def shockable(self, Dss):
-        # return ShockableTransition
+    def forward_shockable(self, Dss):
         pass
 
+    def expectation_shockable(self, Xss):
+        raise NotImplementedError(f'Shockable expectation not implemented for {type(self)}')
 
-class ShockableTransition(Transition):
+
+class ForwardShockableTransition(Transition):
     """Abstract class extending Transition, allowing us to find effect of shock to transition rule
     on one-period-ahead distribution. This functionality isn't included in the regular Transition
     because it requires knowledge of the incoming ("steady-state") distribution and also sometimes
@@ -29,6 +31,12 @@ class ShockableTransition(Transition):
 
     def forward_shock(self, shocks):
         pass
+
+
+class ExpectationShockableTransition(Transition):
+    def expectation_shock(self, shocks):
+        pass
+
 
 
 def lottery_1d(a, a_grid):
@@ -54,29 +62,22 @@ class PolicyLottery1D(Transition):
     def forward(self, D):
         return het_compiled.forward_policy_1d(D.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
     
-    def expectations(self, X):
-        return het_compiled.expectations_policy_1d(X.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
+    def expectation(self, X):
+        return het_compiled.expectation_policy_1d(X.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
 
-    def shockable(self, Dss):
-        return ShockablePolicyLottery1D(self.i.reshape(self.shape), self.pi.reshape(self.shape),
+    def forward_shockable(self, Dss):
+        return ForwardShockablePolicyLottery1D(self.i.reshape(self.shape), self.pi.reshape(self.shape),
                                       self.grid, Dss)
 
 
-class ShockablePolicyLottery1D(PolicyLottery1D, ShockableTransition):
+class ForwardShockablePolicyLottery1D(PolicyLottery1D, ForwardShockableTransition):
     def __init__(self, i, pi, grid, Dss):
         super().__init__(i, pi, grid)
         self.Dss = Dss.reshape(self.flatshape)
         self.space = grid[self.i+1] - grid[self.i]
 
-    def forward_shock(self, da, dgrid=None):
-        # TODO: think about da being None too for more general applications
+    def forward_shock(self, da):
         pi_shock = - da.reshape(self.flatshape) / self.space
-
-        if dgrid is not None:
-            # see "linearizing_interpolation" note
-            dgrid = np.broadcast_to(dgrid, self.shape)
-            pi_shock += self.expectations(dgrid).reshape(self.flatshape) / self.space
-
         return het_compiled.forward_policy_shock_1d(self.Dss, self.i, pi_shock).reshape(self.shape)
 
 
@@ -107,34 +108,27 @@ class PolicyLottery2D(Transition):
         return het_compiled.forward_policy_2d(D.reshape(self.flatshape), self.i1, self.i2,
                                                 self.pi1, self.pi2).reshape(self.shape)
     
-    def expectations(self, X):
-        return het_compiled.expectations_policy_2d(X.reshape(self.flatshape), self.i1, self.i2,
+    def expectation(self, X):
+        return het_compiled.expectation_policy_2d(X.reshape(self.flatshape), self.i1, self.i2,
                                                     self.pi1, self.pi2).reshape(self.shape)
 
-    def shockable(self, Dss):
-        return ShockablePolicyLottery2D(self.i1.reshape(self.shape), self.pi1.reshape(self.shape),
+    def forward_shockable(self, Dss):
+        return ForwardShockablePolicyLottery2D(self.i1.reshape(self.shape), self.pi1.reshape(self.shape),
                                             self.i2.reshape(self.shape), self.pi2.reshape(self.shape),
                                             self.grid1, self.grid2, Dss)
 
 
-class ShockablePolicyLottery2D(PolicyLottery2D, ShockableTransition):
+class ForwardShockablePolicyLottery2D(PolicyLottery2D, ForwardShockableTransition):
     def __init__(self, i1, pi1, i2, pi2, grid1, grid2, Dss):
         super().__init__(i1, pi1, i2, pi2, grid1, grid2)
         self.Dss = Dss.reshape(self.flatshape)
         self.space1 = grid1[self.i1+1] - grid1[self.i1]
         self.space2 = grid2[self.i2+1] - grid2[self.i2]
 
-    def forward_shock(self, da1, da2, dgrid1=None, dgrid2=None):
+    def forward_shock(self, da):
+        da1, da2 = da
         pi_shock1 = -da1.reshape(self.flatshape) / self.space1
         pi_shock2 = -da2.reshape(self.flatshape) / self.space2
-
-        if dgrid1 is not None:
-            dgrid1 = np.broadcast_to(dgrid1[:, np.newaxis], self.shape)
-            pi_shock1 += self.expectations(dgrid1).reshape(self.flatshape) / self.space1
-        
-        if dgrid2 is not None:
-            dgrid2 = np.broadcast_to(dgrid2, self.shape)
-            pi_shock2 += self.expectations(dgrid2).reshape(self.flatshape) / self.space2
 
         return het_compiled.forward_policy_shock_2d(self.Dss, self.i1, self.i2, self.pi1, self.pi2,
                                                     pi_shock1, pi_shock2).reshape(self.shape)
@@ -152,23 +146,35 @@ class Markov(Transition):
     def forward(self, D):
         return multiply_ith_dimension(self.Pi_T, self.i, D)
 
-    def expectations(self, X):
+    def expectation(self, X):
         return multiply_ith_dimension(self.Pi, self.i, X)
 
-    def shockable(self, Dss):
-        return ShockableMarkov(self.Pi, self.i, Dss)
+    def forward_shockable(self, Dss):
+        return ForwardShockableMarkov(self.Pi, self.i, Dss)
+
+    def expectation_shockable(self, Xss):
+        return ExpectationShockableMarkov(self.Pi, self.i, Xss)
 
     def stationary(self, pi_seed, tol=1E-11, maxit=10_000):
         return general_stationary(self.Pi, pi_seed, tol, maxit)
     
 
-class ShockableMarkov(Markov, ShockableTransition):
+class ForwardShockableMarkov(Markov, ForwardShockableTransition):
     def __init__(self, Pi, i, Dss):
         super().__init__(Pi, i)
         self.Dss = Dss
 
     def forward_shock(self, dPi):
         return multiply_ith_dimension(dPi.T, self.i, self.Dss)
+
+
+class ExpectationShockableMarkov(Markov, ExpectationShockableTransition):
+    def __init__(self, Pi, i, Xss):
+        super().__init__(Pi, i)
+        self.Xss = Xss
+
+    def expectation_shock(self, dPi):
+        return multiply_ith_dimension(dPi, self.i, self.Xss)
 
 
 class CombinedTransition(Transition):
@@ -180,18 +186,26 @@ class CombinedTransition(Transition):
             D = stage.forward(D)
         return D
 
-    def expectations(self, X):
+    def expectation(self, X):
         for stage in reversed(self.stages):
-            X = stage.expectations(X)
+            X = stage.expectation(X)
         return X
 
-    def shockable(self, Dss):
+    def forward_shockable(self, Dss):
         shockable_stages = []
         for stage in self.stages:
-            shockable_stages.append(stage.shockable(Dss))
+            shockable_stages.append(stage.forward_shockable(Dss))
             Dss = stage.forward(Dss)
 
-        return ShockableCombinedTransition(shockable_stages)
+        return ForwardShockableCombinedTransition(shockable_stages)
+
+    def expectation_shockable(self, Xss):
+        shockable_stages = []
+        for stage in reversed(self.stages):
+            shockable_stages.append(stage.expectation_shockable(Xss))
+            Xss = stage.expectation(Xss)
+
+        return ExpectationShockableCombinedTransition(list(reversed(shockable_stages)))
 
     def __getitem__(self, i):
         return self.stages[i]
@@ -200,20 +214,21 @@ class CombinedTransition(Transition):
 Shock = Any
 ListTupleShocks = Union[List[Shock], Tuple[Shock]]
 
-class ShockableCombinedTransition(CombinedTransition, ShockableTransition):
-    def __init__(self, stages: Sequence[ShockableTransition]):
+class ForwardShockableCombinedTransition(CombinedTransition, ForwardShockableTransition):
+    def __init__(self, stages: Sequence[ForwardShockableTransition]):
         self.stages = stages
+        self.Dss = stages[0].Dss
 
-    def forward_shock(self, shocks: Sequence[Optional[Union[Shock, ListTupleShocks]]]):
+    def forward_shock(self, shocks: Optional[Sequence[Optional[Union[Shock, ListTupleShocks]]]]):
+        if shocks is None:
+            return None
+
         # each entry of shocks is either a sequence (list or tuple) 
         dD = None
 
         for stage, shock in zip(self.stages, shocks):
             if shock is not None:
-                if isinstance(shock, tuple) or isinstance(shock, list):
-                    dD_shock = stage.forward_shock(*shock)
-                else:
-                    dD_shock = stage.forward_shock(shock)
+                dD_shock = stage.forward_shock(shock)
             else:
                 dD_shock = None
 
@@ -226,3 +241,26 @@ class ShockableCombinedTransition(CombinedTransition, ShockableTransition):
                 dD = dD_shock
 
         return dD
+
+
+class ExpectationShockableCombinedTransition(CombinedTransition, ExpectationShockableTransition):
+    def __init__(self, stages: Sequence[ExpectationShockableTransition]):
+        self.stages = stages
+        self.Xss = stages[-1].Xss
+
+    def expectation_shock(self, shocks: Sequence[Optional[Union[Shock, ListTupleShocks]]]):
+        dX = None
+
+        for stage, shock in zip(reversed(self.stages), reversed(shocks)):
+            if shock is not None:
+                dX_shock = stage.expectation_shock(shock)
+            else:
+                dX_shock = None
+
+            if dX is not None:
+                dX = stage.expectation(dX)
+
+                if shock is not None:
+                    dX += dX_shock
+            else:
+                dX = dX_shock

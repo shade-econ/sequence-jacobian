@@ -21,7 +21,7 @@ def household_init(b_grid, a_grid, e_grid, eis, tax, w):
 
 
 @het(exogenous='Pi', policy=['b', 'a'], backward=['Vb', 'Va'], backward_init=household_init)  # order as in grid!
-def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2):
+def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2):
     # require that k is decreasing (new)
     assert k_grid[1] < k_grid[0], 'kappas in k_grid must be decreasing!'
 
@@ -31,8 +31,8 @@ def household(Va_p, Vb_p, Pi_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, ei
 
     # === STEP 2: Wb(z, b', a') and Wa(z, b', a') ===
     # (take discounted expectation of tomorrow's value function)
-    Wb = matrix_times_first_dim(beta * Pi_p, Vb_p)
-    Wa = matrix_times_first_dim(beta * Pi_p, Va_p)
+    Wb = beta * Vb_p
+    Wa = beta * Va_p
     W_ratio = Wa / Wb
 
     # === STEP 3: a'(z, b', a) for UNCONSTRAINED ===

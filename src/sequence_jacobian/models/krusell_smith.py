@@ -17,7 +17,7 @@ def household_init(a_grid, e_grid, r, w, eis):
 
 
 @het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
-def household(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
+def household(Va_p, a_grid, e_grid, r, w, beta, eis):
     """Single backward iteration step using endogenous gridpoint method for households with CRRA utility.
 
     Parameters
@@ -37,7 +37,7 @@ def household(Va_p, Pi_p, a_grid, e_grid, r, w, beta, eis):
     a  : array (S*A), asset policy today
     c  : array (S*A), consumption policy today
     """
-    uc_nextgrid = (beta * Pi_p) @ Va_p
+    uc_nextgrid = beta * Va_p
     c_nextgrid = uc_nextgrid ** (-eis)
     coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis]
     a = utils.interpolate.interpolate_y(c_nextgrid + a_grid, coh, a_grid)

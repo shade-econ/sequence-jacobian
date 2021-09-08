@@ -18,7 +18,7 @@ def forward_policy_1d(D, x_i, x_pi):
 
 
 @njit
-def expectations_policy_1d(X, x_i, x_pi):
+def expectation_policy_1d(X, x_i, x_pi):
     nZ, nX = X.shape
     Xnew = np.zeros_like(X)
     for iz in range(nZ):
@@ -64,7 +64,7 @@ def forward_policy_2d(D, x_i, y_i, x_pi, y_pi):
 
 
 @njit
-def expectations_policy_2d(X, x_i, y_i, x_pi, y_pi):
+def expectation_policy_2d(X, x_i, y_i, x_pi, y_pi):
     nZ, nX, nY = X.shape
     Xnew = np.empty_like(X)
     for iz in range(nZ):

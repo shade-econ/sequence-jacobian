@@ -13,7 +13,7 @@ def household_init(a_grid, y, rpost, sigma):
 
 
 @het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
-def household(Va_p, Pi_p, a_grid, y, rpost, beta, sigma):
+def household(Va_p, a_grid, y, rpost, beta, sigma):
     """
     Backward step in simple incomplete market model. Assumes CRRA utility.
     Parameters
@@ -31,8 +31,7 @@ def household(Va_p, Pi_p, a_grid, y, rpost, beta, sigma):
     a     : array (E, A), asset policy today
     c     : array (E, A), consumption policy today
     """
-    uc_nextgrid = (beta * Pi_p) @ Va_p
-    c_nextgrid = uc_nextgrid ** (-1 / sigma)
+    c_nextgrid = (beta * Va_p) ** (-1 / sigma)
     coh = (1 + rpost) * a_grid[np.newaxis, :] + y[:, np.newaxis]
     a = sj.utilities.interpolate.interpolate_y(c_nextgrid + a_grid, coh, a_grid)  # (x, xq, y)
     sj.utilities.optimized_routines.setmin(a, a_grid[0])

@@ -17,13 +17,13 @@ def household_init(a_grid, e_grid, r, w, eis, T):
 
 
 @het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
-def household(Va_p, Pi_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi):
+def household(Va_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi):
     """Single backward iteration step using endogenous gridpoint method for households with separable CRRA utility."""
     # this one is useful to do internally
     ws = w * e_grid
 
     # uc(z_t, a_t)
-    uc_nextgrid = (beta * Pi_p) @ Va_p
+    uc_nextgrid = beta * Va_p
 
     # c(z_t, a_t) and n(z_t, a_t)
     c_nextgrid, n_nextgrid = cn(uc_nextgrid, ws[:, np.newaxis], eis, frisch, vphi)
