@@ -6,7 +6,30 @@ import scipy.optimize as opt
 from numbers import Real
 from functools import partial
 
+from .classes import SteadyStateDict
 from ..utilities import misc, solvers
+
+
+
+def augment_dag_w_helper_blocks(dag, calibration, unknowns, targets, helper_blocks, helper_targets):
+    """For a given DAG (either an individual Block or CombinedBlock), add a set of helper blocks, which help
+    to solve the provided set of helper targets analytically, reducing the number of unknowns/targets that need
+    to be solved for numerically.
+    """
+    from ..blocks.auxiliary_blocks.calibration_block import CalibrationBlock
+
+    targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
+    helper_targets = {t: targets[t] for t in helper_targets} if isinstance(helper_targets, list) else helper_targets
+    helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
+
+    unknowns_to_solve = misc.dict_diff(unknowns, helper_unknowns)
+    targets_to_solve = misc.dict_diff(targets, helper_targets)
+
+    ss = SteadyStateDict({**calibration, **helper_targets})
+    blocks = dag.blocks if hasattr(dag, "blocks") else [dag]
+    dag_augmented = CalibrationBlock(blocks + helper_blocks, helper_blocks=helper_blocks, calibration=ss)
+
+    return dag_augmented, ss, unknowns_to_solve, targets_to_solve
 
 
 def instantiate_steady_state_mutable_kwargs(dissolve, block_kwargs, solver_kwargs, constrained_kwargs):

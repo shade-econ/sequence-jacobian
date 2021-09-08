@@ -162,29 +162,43 @@ class Block(abc.ABC, metaclass=ABCMeta):
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]], dissolve: Optional[List] = [],
-                           solver: Optional[str] = "", solver_kwargs: Optional[Dict] = {},
                            helper_blocks: Optional[List] = [], helper_targets: Optional[Dict] = {},
-                           block_kwargs: Optional[Dict] = {}, ttol: Optional[float] = 1e-11, ctol: Optional[float] = 1e-9,
+                           solver: Optional[str] = "", solver_kwargs: Optional[Dict] = {},
+                           block_kwargs: Optional[Dict] = {}, ttol: Optional[float] = 1e-12, ctol: Optional[float] = 1e-9,
                            verbose: Optional[bool] = False, check_consistency: Optional[bool] = True,
                            constrained_method: Optional[str] = "linear_continuation",
                            constrained_kwargs: Optional[Dict] = {}):
         """Evaluate a general equilibrium steady state of Block given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
+        if helper_blocks is not None:
+            if helper_targets is None:
+                raise ValueError("Must provide the dict of targets and their values that the `helper_blocks` solve"
+                                 " in the `helper_targets` keyword argument.")
+            else:
+                from .steady_state.support import augment_dag_w_helper_blocks
+                dag, ss, unknowns_to_solve, targets_to_solve = augment_dag_w_helper_blocks(self, calibration, unknowns,
+                                                                                           targets, helper_blocks,
+                                                                                           helper_targets)
+        else:
+            dag, ss, unknowns_to_solve, targets_to_solve = self, SteadyStateDict(calibration), unknowns, targets
+
         solver = solver if solver else provide_solver_default(unknowns)
 
-        ss = SteadyStateDict(calibration)
-        def residual(unknown_values, evaluate_helpers=True):
-            ss.update(misc.smart_zip(unknowns.keys(), unknown_values))
-            ss.update(self.steady_state(ss, dissolve=dissolve, helper_targets=helper_targets,
-                                        evaluate_helpers=evaluate_helpers, **block_kwargs))
+        def residual(unknown_values, unknowns_keys=unknowns_to_solve.keys(), targets=targets_to_solve,
+                     evaluate_helpers=True):
+            ss.update(misc.smart_zip(unknowns_keys, unknown_values))
+            ss.update(dag.steady_state(ss, dissolve=dissolve, evaluate_helpers=evaluate_helpers, **block_kwargs))
             return compute_target_values(targets, ss)
-        unknowns_solved = solve_for_unknowns(residual, unknowns, solver, solver_kwargs, tol=ttol, verbose=verbose,
+
+        unknowns_solved = solve_for_unknowns(residual, unknowns_to_solve, solver, solver_kwargs, tol=ttol, verbose=verbose,
                                              constrained_method=constrained_method, constrained_kwargs=constrained_kwargs)
+
         if helper_blocks and helper_targets and check_consistency:
             # Add in the unknowns solved analytically by helper blocks and re-evaluate the DAG without helpers
             unknowns_solved.update({k: ss[k] for k in unknowns if k not in unknowns_solved})
-            cresid = np.max(abs(residual(unknowns_solved.values(), evaluate_helpers=False)))
+            cresid = np.max(abs(residual(unknowns_solved.values(), unknowns_keys=unknowns_solved.keys(),
+                                         targets=targets, evaluate_helpers=False)))
             if cresid > ctol:
                 raise RuntimeError(f"Target value residual {cresid} exceeds ctol specified for checking"
                                    f" the consistency of the DAG without redirection.")
