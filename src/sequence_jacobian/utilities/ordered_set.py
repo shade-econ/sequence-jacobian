@@ -29,6 +29,9 @@ class OrderedSet:
     def __len__(self):
         return len(self.d)
 
+    def __getitem__(self, i):
+        return list(self.d)[i]
+
     def add(self, x):
         self.d[x] = None
     

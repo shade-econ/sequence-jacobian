@@ -11,6 +11,7 @@ from ..jacobian.classes import JacobianDict
 from .support.bijection import Bijection
 from ..utilities.function import ExtendedFunction, ExtendedParallelFunction
 from ..utilities.ordered_set import OrderedSet
+from .support.het_support import ShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -61,17 +62,17 @@ class HetBlock(Block):
 
         self.back_step_fun = ExtendedFunction(back_step_fun)
 
-        self.exogenous = exogenous
+        self.exogenous = OrderedSet(utils.misc.make_tuple(exogenous))
         self.policy, self.back_iter_vars = (OrderedSet(utils.misc.make_tuple(x)) for x in (policy, backward))
-        self.inputs_to_be_primed =  self.back_iter_vars | [self.exogenous]
+        self.inputs_to_be_primed =  self.back_iter_vars | self.exogenous
         self.non_back_iter_outputs = self.back_step_fun.outputs - self.back_iter_vars
 
         self.outputs = OrderedSet([o.capitalize() for o in self.non_back_iter_outputs])
         self.M_outputs = Bijection({o: o.capitalize() for o in self.non_back_iter_outputs})
         self.inputs = self.back_step_fun.inputs - [k + '_p' for k in self.back_iter_vars]
-        self.inputs.remove(exogenous + '_p')
-        self.inputs.add(exogenous)
-        self.internal = OrderedSet(['D', self.exogenous]) | self.back_step_fun.outputs
+        self.inputs -= [k + '_p' for k in self.exogenous]
+        self.inputs |= self.exogenous
+        self.internal = OrderedSet(['D', 'Dbeg']) | self.exogenous | self.back_step_fun.outputs
 
         # store "original" copies of these for use whenever we process new hetinputs/hetoutputs
         self.original_inputs = self.inputs
@@ -87,28 +88,29 @@ class HetBlock(Block):
             self.process_hetinputs_hetoutputs(hetinputs, hetoutputs, tocopy=False)
 
         if len(self.policy) > 2:
-            raise ValueError(f"More than two endogenous policies in {back_step_fun.__name__}, not yet supported")
+            raise ValueError(f"More than two endogenous policies in {self.name}, not yet supported")
 
         # Checking that the various inputs/outputs attributes are correctly set
-        if self.exogenous + '_p' not in self.back_step_fun.inputs:
-            raise ValueError(f"Markov matrix '{self.exogenous}_p' not included as argument in {back_step_fun.__name__}")
+        for k in self.exogenous:
+            if k + '_p' not in self.back_step_fun.inputs:
+                raise ValueError(f"Markov matrix '{k}_p' not included as argument in {self.name}")
 
         for pol in self.policy:
             if pol not in self.back_step_fun.outputs:
-                raise ValueError(f"Policy '{pol}' not included as output in {back_step_fun.__name__}")
+                raise ValueError(f"Policy '{pol}' not included as output in {self.name}")
             if pol[0].isupper():
-                raise ValueError(f"Policy '{pol}' is uppercase in {back_step_fun.__name__}, which is not allowed")
+                raise ValueError(f"Policy '{pol}' is uppercase in {self.name}, which is not allowed")
 
         for back in self.back_iter_vars:
             if back + '_p' not in self.back_step_fun.inputs:
-                raise ValueError(f"Backward variable '{back}_p' not included as argument in {back_step_fun.__name__}")
+                raise ValueError(f"Backward variable '{back}_p' not included as argument in {self.name}")
 
             if back not in self.back_step_fun.outputs:
-                raise ValueError(f"Backward variable '{back}' not included as output in {back_step_fun.__name__}")
+                raise ValueError(f"Backward variable '{back}' not included as output in {self.name}")
 
         for out in self.non_back_iter_outputs:
             if out[0].isupper():
-                raise ValueError("Output '{out}' is uppercase in {back_step_fun.__name__}, which is not allowed")
+                raise ValueError("Output '{out}' is uppercase in {self.name}, which is not allowed")
 
         if backward_init is not None:
             backward_init = ExtendedFunction(backward_init)
@@ -140,59 +142,17 @@ class HetBlock(Block):
 
     def _steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
-        """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
-
-        Parameters
-        ----------
-        backward_tol : [optional] float
-            in backward iteration, max abs diff between policy in consecutive steps needed for convergence
-        backward_maxit : [optional] int
-            maximum number of backward iterations, if 'backward_tol' not reached by then, raise error
-        forward_tol : [optional] float
-            in forward iteration, max abs diff between dist in consecutive steps needed for convergence
-        forward_maxit : [optional] int
-            maximum number of forward iterations, if 'forward_tol' not reached by then, raise error
-
-        kwargs : dict
-            The following inputs are required as keyword arguments, which show up in 'kwargs':
-                - The exogenous Markov matrix, e.g. Pi=... if self.exogenous=='Pi'
-                - A seed for each backward variable, e.g. Va=... and Vb=... if self.back_iter_vars==('Va','Vb')
-                - A grid for each policy variable, e.g. a_grid=... and b_grid=... if self.policy==('a','b')
-                - All other inputs to the backward iteration function self.back_step_fun, except _p added to
-                    for self.exogenous and self.back_iter_vars, for which the method uses steady-state values.
-                    If there is a self.hetinput, then we need the inputs to that, not to self.back_step_fun.
-
-            Other inputs in 'kwargs' are optional:
-                - A seed for the distribution: D=...
-                - If no seed for the distribution is provided, a seed for the invariant distribution
-                    of the Markov process, e.g. Pi_seed=... if self.exogenous=='Pi'
-
-        Returns
-        ----------
-        ss : dict, contains
-            - ss inputs of self.back_step_fun and (if present) self.hetinput
-            - ss outputs of self.back_step_fun
-            - ss distribution 'D'
-            - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
-        """
-
         ss = calibration.toplevel.copy()
         if self.hetinputs is not None:
             ss.update(self.hetinputs(ss))
-
-        # extract information from calibration
-        Pi = ss[self.exogenous]
-        grid = {k: ss[k + '_grid'] for k in self.policy}
-        D_seed = ss.get('D', None)
-        pi_seed = ss.get(self.exogenous + '_seed', None)
 
         # run backward iteration
         sspol = self.policy_ss(ss, tol=backward_tol, maxit=backward_maxit)
         ss.update(sspol)
 
         # run forward iteration
-        D = self.dist_ss(Pi, sspol, grid, forward_tol, forward_maxit, D_seed, pi_seed)
-        ss.update({"D": D})
+        Dbeg, D = self.dist_ss(ss, forward_tol, forward_maxit)
+        ss.update({'Dbeg': Dbeg, "D": D})
 
         # run hetoutput if it's there
         if self.hetoutputs is not None:
@@ -208,45 +168,16 @@ class HetBlock(Block):
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, monotonic=False, returnindividual=False, grid_paths=None):
-        """Evaluate transitional dynamics for HetBlock given dynamic paths for `inputs`,
-        assuming that we start and end in steady state `ss`, and that all inputs not specified in
-        `inputs` are constant at their ss values.
-
-        CANNOT provide time-varying Markov transition matrix for now.
-
-        Block-specific inputs
-        ---------------------
-        monotonic : [optional] bool
-            flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
-            to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
-        returnindividual : [optional] bool
-            return distribution and full outputs on grid
-        grid_paths: [optional] dict of {str: array(T, Number of grid points)}
-            time-varying grids for policies
-        """
+    def _impulse_nonlinear(self, ss, inputs, outputs, monotonic=False, returnindividual=False):
         ssin_dict = {**ss.toplevel, **ss.internal[self.name]}
-        Pi_T = ssin_dict[self.exogenous].T.copy()
-        D = ssin_dict['D']
+        Dbeg = ssin_dict['Dbeg']
         T = inputs.T
-
-        # construct grids for policy variables either from the steady state grid if the grid is meant to be
-        # non-time-varying or from the provided `grid_path` if the grid is meant to be time-varying.
-        grid = {}
-        use_ss_grid = {}
-        for k in self.policy:
-            if grid_paths is not None and k in grid_paths:
-                grid[k] = grid_paths[k]
-                use_ss_grid[k] = False
-            else:
-                grid[k] = ssin_dict[k + "_grid"]
-                use_ss_grid[k] = True
 
         # allocate empty arrays to store result, assume all like D
         toreturn = self.non_back_iter_outputs
         if self.hetoutputs is not None:
             toreturn = toreturn | self.hetoutputs.outputs
-        individual_paths = {k: np.empty((T,) + D.shape) for k in toreturn}
+        individual_paths = {k: np.empty((T,) + Dbeg.shape) for k in toreturn}
 
         # backward iteration
         backdict = dict(ssin_dict.items())
@@ -265,27 +196,24 @@ class HetBlock(Block):
             for k in individual_paths:
                 individual_paths[k][t, ...] = individual[k]
 
-        D_path = np.empty((T,) + D.shape)
-        D_path[0, ...] = D
-        for t in range(T-1):
-            # have to interpolate policy separately for each t to get sparse transition matrices
-            sspol_i = {}
-            sspol_pi = {}
-            for pol in self.policy:
-                if use_ss_grid[pol]:
-                    grid_var = grid[pol]
-                else:
-                    grid_var = grid[pol][t, ...]
-                if monotonic:
-                    # TODO: change for two-asset case so assumption is monotonicity in own asset, not anything else
-                    sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord(grid_var,
-                                                                                      individual_paths[pol][t, ...])
-                else:
-                    sspol_i[pol], sspol_pi[pol] =\
-                        utils.interpolate.interpolate_coord_robust(grid_var, individual_paths[pol][t, ...])
+        Dbeg_path = np.empty((T,) + Dbeg.shape)
+        Dbeg_path[0, ...] = Dbeg
+        D_path = np.empty((T,) + Dbeg.shape)
 
-            # step forward
-            D_path[t+1, ...] = self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
+        for t in range(T):
+            # assemble dict for this period's law of motion and make law of motion object
+            d = {k: individual_paths[k][t, ...] for k in self.policy}
+            d.update({k + '_grid': ssin_dict[k + '_grid'] for k in self.policy})
+            d.update({k: ssin_dict[k] for k in self.exogenous})
+            exog = self.make_exog_law_of_motion(d)
+            endog = self.make_endog_law_of_motion(d)
+
+            # now step forward in two, first exogenous this period then endogenous
+            D_path[t, ...] = exog.forward(Dbeg)
+
+            if t < T-1:
+                Dbeg = endog.forward(D_path[t, ...])
+                Dbeg_path[t+1, ...] = Dbeg # make this optional
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
@@ -305,34 +233,30 @@ class HetBlock(Block):
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
         # TODO: h is unusable for now, figure out how to suggest options
-        """
-        Block-specific inputs
-        ---------------------
-        h : [optional] float
-            h for numerical differentiation of backward iteration
-        """
         ss = {**ss.toplevel, **ss.internal[self.name]}
         if self.hetinputs is not None:
             ss.update(self.hetinputs(ss))
         outputs = self.M_outputs.inv @ outputs # horrible
 
         # step 0: preliminary processing of steady state
-        Pi, differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs, sspol_i, sspol_pi, sspol_space = self.jac_prelim(ss, h)
+        differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs = self.jac_backward_prelim(ss, h)
+        exog = self.make_exog_law_of_motion(ss)
+        endog = self.make_endog_law_of_motion(ss)
+        law_of_motion = CombinedTransition([exog, endog]).shockable(ss['Dbeg'])
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
         for i in inputs:
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, differentiable_back_step_fun,
-                                                                      ss['D'], Pi.T.copy(),
-                                                                      sspol_i, sspol_pi, sspol_space, T,
-                                                                      differentiable_hetinputs, differentiable_hetoutputs)
+            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, T, differentiable_back_step_fun,
+                                                                      differentiable_hetinputs, differentiable_hetoutputs,
+                                                                      law_of_motion, ss['D'])
 
         # step 2 of fake news algorithm
         # compute prediction vectors curlyP (forward iteration) for each outcome o
         curlyPs = {}
         for o in outputs:
-            curlyPs[o] = self.forward_iteration_fakenews(ss[o], Pi, sspol_i, sspol_pi, T-1)
+            curlyPs[o] = self.forward_iteration_fakenews(ss[o], T-1, law_of_motion)
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
@@ -428,7 +352,7 @@ class HetBlock(Block):
                 # run and store results of backward iteration, which come as tuple, in dict
                 sspol = self.back_step_fun(ssin)
             except KeyError as e:
-                print(f'Missing input {e} to {self.back_step_fun.__name__}!')
+                print(f'Missing input {e} to {self.self.name}!')
                 raise
 
             # only check convergence every 10 iterations for efficiency
@@ -452,63 +376,42 @@ class HetBlock(Block):
                     ssin[k] = original_ssin[k]
         return {**ssin, **sspol}
 
-    def dist_ss(self, Pi, sspol, grid, tol=1E-10, maxit=100_000, D_seed=None, pi_seed=None):
-        """Find steady-state distribution through forward iteration until convergence.
-
-        Parameters
-        ----------
-        Pi : array
-            steady-state Markov matrix for exogenous variable
-        sspol : dict
-            steady-state policies on grid for all policy variables in self.policy
-        grid : dict
-            grids for all policy variables in self.policy
-        tol : [optional] float
-            absolute tolerance for max diff between consecutive iterations for distribution
-        maxit : [optional] int
-            maximum number of iterations, if 'tol' not reached by then, raise error
-        D_seed : [optional] array
-            initial seed for overall distribution
-        pi_seed : [optional] array
-            initial seed for stationary dist of Pi, if no D_seed
-
-        Returns
-        ----------
-        D : array
-            steady-state distribution
-        """
+    def dist_ss(self, ss, tol=1E-10, maxit=100_000):
+        exog = self.make_exog_law_of_motion(ss)
+        endog = self.make_endog_law_of_motion(ss)
+        
+        Dbeg_seed = ss.get('Dbeg', None)
+        pi_seeds = [ss.get(k + '_seed', None) for k in self.exogenous]
 
         # first obtain initial distribution D
-        if D_seed is None:
-            # compute stationary distribution for exogenous variable
-            pi = utils.discretize.stationary(Pi, pi_seed)
+        if Dbeg_seed is None:
+            # stationary distribution of each exogenous
+            pis = [exog[i].stationary(pi_seed) for i, pi_seed in enumerate(pi_seeds)]
 
-            # now initialize full distribution with this, assuming uniform distribution on endogenous vars
-            endogenous_dims = [grid[k].shape[0] for k in self.policy]
-            D = np.tile(pi, endogenous_dims[::-1] + [1]).T / np.prod(endogenous_dims)
+            # uniform distribution over endogenous
+            endog_uniform = [np.full(len(ss[k+'_grid']), 1/len(ss[k+'_grid'])) for k in self.policy]
+
+            # initialize outer product of all these as guess
+            Dbeg = utils.multidim.outer(pis + endog_uniform)
         else:
-            D = D_seed
-
-        # obtain interpolated policy rule for each dimension of endogenous policy
-        sspol_i = {}
-        sspol_pi = {}
-        for pol in self.policy:
-            # use robust binary search-based method that only requires grids, not policies, to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], sspol[pol])
+            Dbeg = Dbeg_seed
 
         # iterate until convergence by tol, or maxit
-        Pi_T = Pi.T.copy()
+        D = exog.forward(Dbeg)
         for it in range(maxit):
-            Dnew = self.forward_step(D, Pi_T, sspol_i, sspol_pi)
+            Dbeg_new = endog.forward(D)
+            D_new = exog.forward(Dbeg_new)
 
             # only check convergence every 10 iterations for efficiency
-            if it % 10 == 0 and utils.optimized_routines.within_tolerance(D, Dnew, tol):
+            if it % 10 == 0 and utils.optimized_routines.within_tolerance(Dbeg, Dbeg_new, tol):
                 break
-            D = Dnew
+            Dbeg = Dbeg_new
+            D = D_new
         else:
             raise ValueError(f'No convergence after {maxit} forward iterations!')
 
-        return D
+        # "D" is after the exogenous shock, Dbeg is before it
+        return Dbeg, D
 
     '''Part 4: components of jac(), corresponding to *4 steps of fake news algorithm* in paper
         - Step 1: backward_step_fakenews and backward_iteration_fakenews to get curlyYs and curlyDs
@@ -518,15 +421,16 @@ class HetBlock(Block):
     '''
 
     def backward_step_fakenews(self, din_dict, output_list, differentiable_back_step_fun,
-                               differentiable_hetoutput, Dss, Pi_T, sspol_i, sspol_pi, sspol_space):
+                               differentiable_hetoutput, law_of_motion: ShockableTransition, Dss):
+                               
         # shock perturbs outputs
         shocked_outputs = differentiable_back_step_fun.diff(din_dict)
         curlyV = {k: shocked_outputs[k] for k in self.back_iter_vars}
 
         # which affects the distribution tomorrow
-        pol_pi_shock = {k: -shocked_outputs[k] / sspol_space[k] for k in self.policy}
-
-        curlyD = self.forward_step_shock(Dss, Pi_T, sspol_i, sspol_pi, pol_pi_shock)
+        policy_shock = [shocked_outputs[k] for k in self.policy]
+        curlyD = law_of_motion.forward_shock([None, policy_shock])
+        #curlyD = law_of_motion[0].forward(curlyDbeg)
 
         # and the aggregate outcomes today
         if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
@@ -535,8 +439,8 @@ class HetBlock(Block):
 
         return curlyV, curlyD, curlyY
 
-    def backward_iteration_fakenews(self, input_shocked, output_list, differentiable_back_step_fun, Dss, Pi_T,
-                                    sspol_i, sspol_pi, sspol_space, T, differentiable_hetinput, differentiable_hetoutput):
+    def backward_iteration_fakenews(self, input_shocked, output_list, T, differentiable_back_step_fun,
+                            differentiable_hetinput, differentiable_hetoutput, law_of_motion: ShockableTransition, Dss):
         """Iterate policy steps backward T times for a single shock."""
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
@@ -547,7 +451,7 @@ class HetBlock(Block):
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun, differentiable_hetoutput,
-                                                             Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
+                                                             law_of_motion, Dss)
 
         # infer dimensions from this and initialize empty arrays
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -562,34 +466,30 @@ class HetBlock(Block):
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
                                                     output_list, differentiable_back_step_fun, differentiable_hetoutput,
-                                                    Dss, Pi_T, sspol_i, sspol_pi, sspol_space)
+                                                    law_of_motion, Dss)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
 
         return curlyYs, curlyDs
 
-    def forward_iteration_fakenews(self, o_ss, Pi, pol_i_ss, pol_pi_ss, T):
-        """Iterate transpose forward T steps to get full set of curlyPs for a given outcome.
+    def forward_iteration_fakenews(self, o_ss, T, law_of_motion: ShockableTransition):
+        """Iterate transpose forward T steps to get full set of curlyEs for a given outcome."""
+        curlyEs = np.empty((T,) + o_ss.shape)
 
-        Note we depart from definition in paper by applying the demeaning operator in addition to Lambda
-        at each step. This does not affect products with curlyD (which are the only way curlyPs enter
-        Jacobian) since perturbations to distribution always have mean zero. It has numerical benefits
-        since curlyPs now go to zero for high t (used in paper in proof of Proposition 1).
-        """
-        curlyPs = np.empty((T,) + o_ss.shape)
-        curlyPs[0, ...] = utils.misc.demean(o_ss)
+        # initialize with beginning-of-period expectation of policy
+        curlyEs[0, ...] = utils.misc.demean(law_of_motion[0].expectations(o_ss))
         for t in range(1, T):
-            curlyPs[t, ...] = utils.misc.demean(self.forward_step_transpose(curlyPs[t - 1, ...],
-                                                                            Pi, pol_i_ss, pol_pi_ss))
-        return curlyPs
+            # we demean so that curlyEs converge to zero (better numerically), in theory no effect
+            curlyEs[t, ...] = utils.misc.demean(law_of_motion.expectations(curlyEs[t-1, ...]))
+        return curlyEs
 
     @staticmethod
-    def build_F(curlyYs, curlyDs, curlyPs):
+    def build_F(curlyYs, curlyDs, curlyEs):
         T = curlyDs.shape[0]
-        Tpost = curlyPs.shape[0] - T + 2
+        Tpost = curlyEs.shape[0] - T + 2
         F = np.empty((Tpost + T - 1, T))
         F[0, :] = curlyYs
-        F[1:, :] = curlyPs.reshape((Tpost + T - 2, -1)) @ curlyDs.reshape((T, -1)).T
+        F[1:, :] = curlyEs.reshape((Tpost + T - 2, -1)) @ curlyDs.reshape((T, -1)).T
         return F
 
     @staticmethod
@@ -601,47 +501,18 @@ class HetBlock(Block):
 
     '''Part 5: helpers for .jac and .ajac: preliminary processing'''
 
-    def jac_prelim(self, ss, h):
-        """Helper that does preliminary processing of steady state for fake news algorithm.
-
-        Parameters
-        ----------
-        ss : dict, all steady-state info, intended to be from .ss()
-
-        Returns
-        ----------
-        ssin_dict       : dict, ss vals of exactly the inputs needed by self.back_step_fun for backward step
-        Pi              : array (S*S), Markov matrix for exogenous state
-        ssout_list      : tuple, what self.back_step_fun returns when given ssin_dict (not exactly the same
-                            as steady-state numerically since SS convergence was to some tolerance threshold)
-        ss_for_hetinput : dict, ss vals of exactly the inputs needed by self.hetinput (if it exists)
-        sspol_i         : dict, indices on lower bracketing gridpoint for all in self.policy
-        sspol_pi        : dict, weights on lower bracketing gridpoint for all in self.policy
-        sspol_space     : dict, space between lower and upper bracketing gridpoints for all in self.policy
-        """
-        Pi = ss[self.exogenous]
-        grid = {k: ss[k+'_grid'] for k in self.policy}
+    def jac_backward_prelim(self, ss, h):
         differentiable_back_step_fun = self.back_step_fun.differentiable(self.make_inputs(ss), h=h)
 
         differentiable_hetinputs = None
         if self.hetinputs is not None:
-            # ss_for_hetinput = {k: ss[k] for k in self.hetinput_inputs if k in ss}
             differentiable_hetinputs = self.hetinputs.differentiable(ss)
 
         differentiable_hetoutputs = None
         if self.hetoutputs is not None:
             differentiable_hetoutputs = self.hetoutputs.differentiable(ss)
 
-        # preliminary b: get sparse representations of policy rules, and distance between neighboring policy gridpoints
-        sspol_i = {}
-        sspol_pi = {}
-        sspol_space = {}
-        for pol in self.policy:
-            # use robust binary-search-based method that only requires grids to be monotonic
-            sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord_robust(grid[pol], ss[pol])
-            sspol_space[pol] = grid[pol][sspol_i[pol]+1] - grid[pol][sspol_i[pol]]
-
-        return Pi, differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs, sspol_i, sspol_pi, sspol_space
+        return differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs
 
     '''Part 6: helper to extract inputs and potentially process them through hetinput'''
 
@@ -662,8 +533,18 @@ class HetBlock(Block):
         try:
             return {k: input_dict[k] for k in self.back_step_fun.inputs if k in input_dict}
         except KeyError as e:
-            print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
+            print(f'Missing backward variable or Markov matrix {e} for {self.self.name}!')
             raise
+
+    def make_exog_law_of_motion(self, d:dict):
+        return CombinedTransition([Markov(d[k], i) for i, k in enumerate(self.exogenous)])
+
+    def make_endog_law_of_motion(self, d: dict):
+        if len(self.policy) == 1:
+            return lottery_1d(d[self.policy[0]], d[self.policy[0] + '_grid'])
+        else:
+            return lottery_2d(d[self.policy[0]], d[self.policy[1]],
+                        d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'])
 
     '''Part 7: routines to do forward steps of different kinds, all wrap functions in utils'''
 

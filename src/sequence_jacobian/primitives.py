@@ -240,7 +240,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
         return results | U
 
     def solve_impulse_linear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
-                             inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]],
+                             inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
                              Js: Optional[Dict[str, JacobianDict]] = {}) -> ImpulseDict:
         """Calculate a general equilibrium, linear impulse response to a set of shocks in `inputs`
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
