@@ -2,7 +2,7 @@ import numpy as np
 import sequence_jacobian as sj
 from sequence_jacobian import het, simple, solved, combine, create_model 
 from sequence_jacobian.blocks.support.impulse import ImpulseDict
-
+from sequence_jacobian.utilities.multidim import multiply_ith_dimension
 
 '''Part 1: Household block'''
 

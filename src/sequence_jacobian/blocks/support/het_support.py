@@ -2,6 +2,7 @@ import numpy as np
 from . import het_compiled
 from ...utilities.discretize import stationary as general_stationary
 from ...utilities.interpolate import interpolate_coord_robust
+from ...utilities.multidim import multiply_ith_dimension
 from typing import Optional, Sequence, Any, List, Tuple, Union
 
 class Transition:
@@ -137,20 +138,6 @@ class ShockablePolicyLottery2D(PolicyLottery2D, ShockableTransition):
 
         return het_compiled.forward_policy_shock_2d(self.Dss, self.i1, self.i2, self.pi1, self.pi2,
                                                     pi_shock1, pi_shock2).reshape(self.shape)
-
-
-def multiply_ith_dimension(Pi, i, X):
-    """If Pi is a square matrix, multiply Pi times the ith dimension of X and return"""
-    X = X.swapaxes(0, i)
-    shape = X.shape
-    X = X.reshape((X.shape[0], -1))
-
-    # iterate forward using Pi
-    X = Pi @ X
-
-    # reverse steps
-    X = X.reshape(shape)
-    return X.swapaxes(0, i)
 
 
 class Markov(Transition):

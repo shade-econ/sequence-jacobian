@@ -70,8 +70,8 @@ class HetBlock(Block):
         self.outputs = OrderedSet([o.capitalize() for o in self.non_back_iter_outputs])
         self.M_outputs = Bijection({o: o.capitalize() for o in self.non_back_iter_outputs})
         self.inputs = self.back_step_fun.inputs - [k + '_p' for k in self.back_iter_vars]
-        self.inputs.remove(exogenous + '_p')
-        self.inputs.add(exogenous)
+        self.inputs -= [k + '_p' for k in self.exogenous]
+        self.inputs |= self.exogenous
         self.internal = OrderedSet(['D', 'Dbeg']) | self.exogenous | self.back_step_fun.outputs
 
         # store "original" copies of these for use whenever we process new hetinputs/hetoutputs
@@ -406,7 +406,7 @@ class HetBlock(Block):
             endog_uniform = [np.full(len(ss[k+'_grid']), 1/len(ss[k+'_grid'])) for k in self.policy]
 
             # initialize outer product of all these as guess
-            Dbeg = utils.discretize.big_outer(pis + endog_uniform)
+            Dbeg = utils.multidim.outer(pis + endog_uniform)
         else:
             Dbeg = Dbeg_seed
 
