@@ -62,9 +62,9 @@ class HetBlock(Block):
 
         self.back_step_fun = ExtendedFunction(back_step_fun)
 
-        self.exogenous = exogenous
+        self.exogenous = OrderedSet(utils.misc.make_tuple(exogenous))
         self.policy, self.back_iter_vars = (OrderedSet(utils.misc.make_tuple(x)) for x in (policy, backward))
-        self.inputs_to_be_primed =  self.back_iter_vars | [self.exogenous]
+        self.inputs_to_be_primed =  self.back_iter_vars | self.exogenous
         self.non_back_iter_outputs = self.back_step_fun.outputs - self.back_iter_vars
 
         self.outputs = OrderedSet([o.capitalize() for o in self.non_back_iter_outputs])
@@ -72,7 +72,7 @@ class HetBlock(Block):
         self.inputs = self.back_step_fun.inputs - [k + '_p' for k in self.back_iter_vars]
         self.inputs.remove(exogenous + '_p')
         self.inputs.add(exogenous)
-        self.internal = OrderedSet(['D', 'Dbeg', self.exogenous]) | self.back_step_fun.outputs
+        self.internal = OrderedSet(['D', 'Dbeg']) | self.exogenous | self.back_step_fun.outputs
 
         # store "original" copies of these for use whenever we process new hetinputs/hetoutputs
         self.original_inputs = self.inputs
@@ -88,28 +88,29 @@ class HetBlock(Block):
             self.process_hetinputs_hetoutputs(hetinputs, hetoutputs, tocopy=False)
 
         if len(self.policy) > 2:
-            raise ValueError(f"More than two endogenous policies in {back_step_fun.__name__}, not yet supported")
+            raise ValueError(f"More than two endogenous policies in {self.name}, not yet supported")
 
         # Checking that the various inputs/outputs attributes are correctly set
-        if self.exogenous + '_p' not in self.back_step_fun.inputs:
-            raise ValueError(f"Markov matrix '{self.exogenous}_p' not included as argument in {back_step_fun.__name__}")
+        for k in self.exogenous:
+            if k + '_p' not in self.back_step_fun.inputs:
+                raise ValueError(f"Markov matrix '{k}_p' not included as argument in {self.name}")
 
         for pol in self.policy:
             if pol not in self.back_step_fun.outputs:
-                raise ValueError(f"Policy '{pol}' not included as output in {back_step_fun.__name__}")
+                raise ValueError(f"Policy '{pol}' not included as output in {self.name}")
             if pol[0].isupper():
-                raise ValueError(f"Policy '{pol}' is uppercase in {back_step_fun.__name__}, which is not allowed")
+                raise ValueError(f"Policy '{pol}' is uppercase in {self.name}, which is not allowed")
 
         for back in self.back_iter_vars:
             if back + '_p' not in self.back_step_fun.inputs:
-                raise ValueError(f"Backward variable '{back}_p' not included as argument in {back_step_fun.__name__}")
+                raise ValueError(f"Backward variable '{back}_p' not included as argument in {self.name}")
 
             if back not in self.back_step_fun.outputs:
-                raise ValueError(f"Backward variable '{back}' not included as output in {back_step_fun.__name__}")
+                raise ValueError(f"Backward variable '{back}' not included as output in {self.name}")
 
         for out in self.non_back_iter_outputs:
             if out[0].isupper():
-                raise ValueError("Output '{out}' is uppercase in {back_step_fun.__name__}, which is not allowed")
+                raise ValueError("Output '{out}' is uppercase in {self.name}, which is not allowed")
 
         if backward_init is not None:
             backward_init = ExtendedFunction(backward_init)
@@ -145,16 +146,12 @@ class HetBlock(Block):
         if self.hetinputs is not None:
             ss.update(self.hetinputs(ss))
 
-        # extract information from calibration
-        D_seed = ss.get('D', None)
-        pi_seed = ss.get(self.exogenous + '_seed', None)
-
         # run backward iteration
         sspol = self.policy_ss(ss, tol=backward_tol, maxit=backward_maxit)
         ss.update(sspol)
 
         # run forward iteration
-        Dbeg, D = self.dist_ss(ss, forward_tol, forward_maxit, D_seed, pi_seed)
+        Dbeg, D = self.dist_ss(ss, forward_tol, forward_maxit)
         ss.update({'Dbeg': Dbeg, "D": D})
 
         # run hetoutput if it's there
@@ -221,14 +218,15 @@ class HetBlock(Block):
             # assemble dict for this period's law of motion and make law of motion object
             d = {k: individual_paths[k][t, ...] for k in self.policy}
             d.update({k + '_grid': ssin_dict[k + '_grid'] for k in self.policy})
-            d[self.exogenous] = ssin_dict[self.exogenous]
-            law_of_motion = self.make_law_of_motion(d)
+            d.update({k: ssin_dict[k] for k in self.exogenous})
+            exog = self.make_exog_law_of_motion(d)
+            endog = self.make_endog_law_of_motion(d)
 
             # now step forward in two, first exogenous this period then endogenous
-            D_path[t, ...] = law_of_motion[0].forward(Dbeg)
+            D_path[t, ...] = exog.forward(Dbeg)
 
             if t < T-1:
-                Dbeg = law_of_motion[1].forward(D_path[t, ...])
+                Dbeg = endog.forward(D_path[t, ...])
                 Dbeg_path[t+1, ...] = Dbeg # make this optional
 
         # obtain aggregates of all outputs, made uppercase
@@ -249,12 +247,6 @@ class HetBlock(Block):
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
         # TODO: h is unusable for now, figure out how to suggest options
-        """
-        Block-specific inputs
-        ---------------------
-        h : [optional] float
-            h for numerical differentiation of backward iteration
-        """
         ss = {**ss.toplevel, **ss.internal[self.name]}
         if self.hetinputs is not None:
             ss.update(self.hetinputs(ss))
@@ -262,7 +254,9 @@ class HetBlock(Block):
 
         # step 0: preliminary processing of steady state
         differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs = self.jac_backward_prelim(ss, h)
-        law_of_motion = self.make_law_of_motion(ss).shockable(ss['Dbeg'])
+        exog = self.make_exog_law_of_motion(ss)
+        endog = self.make_endog_law_of_motion(ss)
+        law_of_motion = CombinedTransition([exog, endog]).shockable(ss['Dbeg'])
 
         # step 1 of fake news algorithm
         # compute curlyY and curlyD (backward iteration) for each input i
@@ -372,7 +366,7 @@ class HetBlock(Block):
                 # run and store results of backward iteration, which come as tuple, in dict
                 sspol = self.back_step_fun(ssin)
             except KeyError as e:
-                print(f'Missing input {e} to {self.back_step_fun.__name__}!')
+                print(f'Missing input {e} to {self.self.name}!')
                 raise
 
             # only check convergence every 10 iterations for efficiency
@@ -396,28 +390,34 @@ class HetBlock(Block):
                     ssin[k] = original_ssin[k]
         return {**ssin, **sspol}
 
-    def dist_ss(self, ss, tol=1E-10, maxit=100_000, D_seed=None, pi_seed=None):
-        law_of_motion = self.make_law_of_motion(ss)
+    def dist_ss(self, ss, tol=1E-10, maxit=100_000):
+        exog = self.make_exog_law_of_motion(ss)
+        endog = self.make_endog_law_of_motion(ss)
         
-        # first obtain initial distribution D
-        if D_seed is None:
-            # TODO: remember we need to change this once we have more than one exogenous
-            # compute stationary distribution for exogenous variable
-            pi = law_of_motion.stages[0].stationary(pi_seed)
+        Dbeg_seed = ss.get('Dbeg', None)
+        pi_seeds = [ss.get(k + '_seed', None) for k in self.exogenous]
 
-            # now initialize full distribution with this, assuming uniform distribution on endogenous vars
-            endogenous_dims = [ss[k+'_grid'].shape[0] for k in self.policy]
-            D = np.tile(pi, endogenous_dims[::-1] + [1]).T / np.prod(endogenous_dims)
+        # first obtain initial distribution D
+        if Dbeg_seed is None:
+            # stationary distribution of each exogenous
+            pis = [exog[i].stationary(pi_seed) for i, pi_seed in enumerate(pi_seeds)]
+
+            # uniform distribution over endogenous
+            endog_uniform = [np.full(len(ss[k+'_grid']), 1/len(ss[k+'_grid'])) for k in self.policy]
+
+            # initialize outer product of all these as guess
+            Dbeg = utils.discretize.big_outer(pis + endog_uniform)
         else:
-            D = D_seed
+            Dbeg = Dbeg_seed
 
         # iterate until convergence by tol, or maxit
+        D = exog.forward(Dbeg)
         for it in range(maxit):
-            Dbeg_new = law_of_motion[1].forward(D)
-            D_new = law_of_motion[0].forward(Dbeg_new)
+            Dbeg_new = endog.forward(D)
+            D_new = exog.forward(Dbeg_new)
 
             # only check convergence every 10 iterations for efficiency
-            if it % 10 == 0 and utils.optimized_routines.within_tolerance(D, D_new, tol):
+            if it % 10 == 0 and utils.optimized_routines.within_tolerance(Dbeg, Dbeg_new, tol):
                 break
             Dbeg = Dbeg_new
             D = D_new
@@ -425,7 +425,6 @@ class HetBlock(Block):
             raise ValueError(f'No convergence after {maxit} forward iterations!')
 
         # "D" is after the exogenous shock, Dbeg is before it
-        D = law_of_motion.stages[0].forward(Dbeg)
         return Dbeg, D
 
     '''Part 4: components of jac(), corresponding to *4 steps of fake news algorithm* in paper
@@ -548,21 +547,18 @@ class HetBlock(Block):
         try:
             return {k: input_dict[k] for k in self.back_step_fun.inputs if k in input_dict}
         except KeyError as e:
-            print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
+            print(f'Missing backward variable or Markov matrix {e} for {self.self.name}!')
             raise
 
-    def make_law_of_motion(self, d: dict):
-        exog = Markov(d[self.exogenous], 0)
+    def make_exog_law_of_motion(self, d:dict):
+        return CombinedTransition([Markov(d[k], i) for i, k in enumerate(self.exogenous)])
 
+    def make_endog_law_of_motion(self, d: dict):
         if len(self.policy) == 1:
-            endog = lottery_1d(d[self.policy[0]], d[self.policy[0] + '_grid'])
+            return lottery_1d(d[self.policy[0]], d[self.policy[0] + '_grid'])
         else:
-            endog = lottery_2d(d[self.policy[0]], d[self.policy[1]],
+            return lottery_2d(d[self.policy[0]], d[self.policy[1]],
                         d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'])
-
-        law_of_motion = CombinedTransition([exog, endog])
-
-        return law_of_motion
 
     '''Part 7: routines to do forward steps of different kinds, all wrap functions in utils'''
 

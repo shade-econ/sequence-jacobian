@@ -42,6 +42,14 @@ def stationary(Pi, pi_seed=None, tol=1E-11, maxit=10_000):
     return pi
 
 
+def big_outer(pis):
+    """Return n-dimensional outer product of list of n vectors"""
+    pi = pis[0]
+    for pi_i in pis[1:]:
+        pi = np.kron(pi, pi_i)
+    return pi.reshape(*(len(pi_i) for pi_i in pis))
+
+
 def mean(x, pi):
     """Mean of discretized random variable with support x and probability mass function pi."""
     return np.sum(pi * x)
