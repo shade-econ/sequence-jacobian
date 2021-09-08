@@ -141,49 +141,11 @@ class HetBlock(Block):
 
     def _steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
-        """Evaluate steady state HetBlock using keyword args for all inputs. Analog to SimpleBlock.ss.
-
-        Parameters
-        ----------
-        backward_tol : [optional] float
-            in backward iteration, max abs diff between policy in consecutive steps needed for convergence
-        backward_maxit : [optional] int
-            maximum number of backward iterations, if 'backward_tol' not reached by then, raise error
-        forward_tol : [optional] float
-            in forward iteration, max abs diff between dist in consecutive steps needed for convergence
-        forward_maxit : [optional] int
-            maximum number of forward iterations, if 'forward_tol' not reached by then, raise error
-
-        kwargs : dict
-            The following inputs are required as keyword arguments, which show up in 'kwargs':
-                - The exogenous Markov matrix, e.g. Pi=... if self.exogenous=='Pi'
-                - A seed for each backward variable, e.g. Va=... and Vb=... if self.back_iter_vars==('Va','Vb')
-                - A grid for each policy variable, e.g. a_grid=... and b_grid=... if self.policy==('a','b')
-                - All other inputs to the backward iteration function self.back_step_fun, except _p added to
-                    for self.exogenous and self.back_iter_vars, for which the method uses steady-state values.
-                    If there is a self.hetinput, then we need the inputs to that, not to self.back_step_fun.
-
-            Other inputs in 'kwargs' are optional:
-                - A seed for the distribution: D=...
-                - If no seed for the distribution is provided, a seed for the invariant distribution
-                    of the Markov process, e.g. Pi_seed=... if self.exogenous=='Pi'
-
-        Returns
-        ----------
-        ss : dict, contains
-            - ss inputs of self.back_step_fun and (if present) self.hetinput
-            - ss outputs of self.back_step_fun
-            - ss distribution 'D' (and end-of-period distribution 'Dbeg')
-            - ss aggregates (in uppercase) for all outputs of self.back_step_fun except self.back_iter_vars
-        """
-
         ss = calibration.toplevel.copy()
         if self.hetinputs is not None:
             ss.update(self.hetinputs(ss))
 
         # extract information from calibration
-        Pi = ss[self.exogenous]
-        grid = {k: ss[k + '_grid'] for k in self.policy}
         D_seed = ss.get('D', None)
         pi_seed = ss.get(self.exogenous + '_seed', None)
 
@@ -209,7 +171,7 @@ class HetBlock(Block):
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, monotonic=False, returnindividual=False, grid_paths=None):
+    def _impulse_nonlinear(self, ss, inputs, outputs, monotonic=False, returnindividual=False):
         """Evaluate transitional dynamics for HetBlock given dynamic paths for `inputs`,
         assuming that we start and end in steady state `ss`, and that all inputs not specified in
         `inputs` are constant at their ss values.
@@ -223,31 +185,16 @@ class HetBlock(Block):
             to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
         returnindividual : [optional] bool
             return distribution and full outputs on grid
-        grid_paths: [optional] dict of {str: array(T, Number of grid points)}
-            time-varying grids for policies
         """
         ssin_dict = {**ss.toplevel, **ss.internal[self.name]}
-        Pi_T = ssin_dict[self.exogenous].T.copy()
-        D = ssin_dict['D']
+        Dbeg = ssin_dict['Dbeg']
         T = inputs.T
-
-        # construct grids for policy variables either from the steady state grid if the grid is meant to be
-        # non-time-varying or from the provided `grid_path` if the grid is meant to be time-varying.
-        grid = {}
-        use_ss_grid = {}
-        for k in self.policy:
-            if grid_paths is not None and k in grid_paths:
-                grid[k] = grid_paths[k]
-                use_ss_grid[k] = False
-            else:
-                grid[k] = ssin_dict[k + "_grid"]
-                use_ss_grid[k] = True
 
         # allocate empty arrays to store result, assume all like D
         toreturn = self.non_back_iter_outputs
         if self.hetoutputs is not None:
             toreturn = toreturn | self.hetoutputs.outputs
-        individual_paths = {k: np.empty((T,) + D.shape) for k in toreturn}
+        individual_paths = {k: np.empty((T,) + Dbeg.shape) for k in toreturn}
 
         # backward iteration
         backdict = dict(ssin_dict.items())
@@ -266,27 +213,23 @@ class HetBlock(Block):
             for k in individual_paths:
                 individual_paths[k][t, ...] = individual[k]
 
-        D_path = np.empty((T,) + D.shape)
-        D_path[0, ...] = D
-        for t in range(T-1):
-            # have to interpolate policy separately for each t to get sparse transition matrices
-            sspol_i = {}
-            sspol_pi = {}
-            for pol in self.policy:
-                if use_ss_grid[pol]:
-                    grid_var = grid[pol]
-                else:
-                    grid_var = grid[pol][t, ...]
-                if monotonic:
-                    # TODO: change for two-asset case so assumption is monotonicity in own asset, not anything else
-                    sspol_i[pol], sspol_pi[pol] = utils.interpolate.interpolate_coord(grid_var,
-                                                                                      individual_paths[pol][t, ...])
-                else:
-                    sspol_i[pol], sspol_pi[pol] =\
-                        utils.interpolate.interpolate_coord_robust(grid_var, individual_paths[pol][t, ...])
+        Dbeg_path = np.empty((T,) + Dbeg.shape)
+        Dbeg_path[0, ...] = Dbeg
+        D_path = np.empty((T,) + Dbeg.shape)
 
-            # step forward
-            D_path[t+1, ...] = self.forward_step(D_path[t, ...], Pi_T, sspol_i, sspol_pi)
+        for t in range(T):
+            # assemble dict for this period's law of motion and make law of motion object
+            d = {k: individual_paths[k][t, ...] for k in self.policy}
+            d.update({k + '_grid': ssin_dict[k + '_grid'] for k in self.policy})
+            d[self.exogenous] = ssin_dict[self.exogenous]
+            law_of_motion = self.make_law_of_motion(d)
+
+            # now step forward in two, first exogenous this period then endogenous
+            D_path[t, ...] = law_of_motion[0].forward(Dbeg)
+
+            if t < T-1:
+                Dbeg = law_of_motion[1].forward(D_path[t, ...])
+                Dbeg_path[t+1, ...] = Dbeg # make this optional
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
@@ -608,14 +551,14 @@ class HetBlock(Block):
             print(f'Missing backward variable or Markov matrix {e} for {self.back_step_fun.__name__}!')
             raise
 
-    def make_law_of_motion(self, ss):
-        exog = Markov(ss[self.exogenous], 0)
+    def make_law_of_motion(self, d: dict):
+        exog = Markov(d[self.exogenous], 0)
 
         if len(self.policy) == 1:
-            endog = lottery_1d(ss[self.policy[0]], ss[self.policy[0] + '_grid'])
+            endog = lottery_1d(d[self.policy[0]], d[self.policy[0] + '_grid'])
         else:
-            endog = lottery_2d(ss[self.policy[0]], ss[self.policy[1]],
-                        ss[self.policy[0] + '_grid'], ss[self.policy[1] + '_grid'])
+            endog = lottery_2d(d[self.policy[0]], d[self.policy[1]],
+                        d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'])
 
         law_of_motion = CombinedTransition([exog, endog])
 
