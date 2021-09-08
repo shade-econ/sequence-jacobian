@@ -58,3 +58,8 @@ def test_equivalence():
     D_multidim = ss_multidim.internal['household_multidim']['D']
 
     assert np.allclose(D_onedim, D_multidim.reshape(*D_onedim.shape))
+
+    J_multidim = household_multidim.jacobian(ss_multidim, inputs = ['r'], outputs=['A'], T=10)
+    J_onedim = household_onedim.jacobian(ss_onedim, inputs = ['r'], outputs=['A'], T=10)
+
+    assert np.allclose(J_multidim['A','r'], J_onedim['A','r'])

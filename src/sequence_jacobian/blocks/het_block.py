@@ -169,20 +169,6 @@ class HetBlock(Block):
                                {self.name: {k: ss[k] for k in ss if k in self.internal}})
 
     def _impulse_nonlinear(self, ss, inputs, outputs, monotonic=False, returnindividual=False):
-        """Evaluate transitional dynamics for HetBlock given dynamic paths for `inputs`,
-        assuming that we start and end in steady state `ss`, and that all inputs not specified in
-        `inputs` are constant at their ss values.
-
-        CANNOT provide time-varying Markov transition matrix for now.
-
-        Block-specific inputs
-        ---------------------
-        monotonic : [optional] bool
-            flag indicating date-t policies are monotonic in same date-(t-1) policies, allows us
-            to use faster interpolation routines, otherwise use slower robust to nonmonotonicity
-        returnindividual : [optional] bool
-            return distribution and full outputs on grid
-        """
         ssin_dict = {**ss.toplevel, **ss.internal[self.name]}
         Dbeg = ssin_dict['Dbeg']
         T = inputs.T
