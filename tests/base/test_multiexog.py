@@ -65,7 +65,7 @@ def test_equivalence():
     e_onedim = np.kron(e1, e2)
     Pi = np.kron(Pi1, Pi2)
 
-    ss_multidim = household_multidim.steady_state({**calibration, 'y': e_multidim, 'Pi_z': Pi1, 'Pi_e': Pi2})
+    ss_multidim = household_multidim.steady_state({**calibration, 'y': e_multidim, 'Pi_e': Pi1, 'Pi_z': Pi2})
     ss_onedim = household_onedim.steady_state({**calibration, 'y': e_onedim, 'Pi': Pi})
 
     assert np.isclose(ss_multidim['A'], ss_onedim['A']) and np.isclose(ss_multidim['C'], ss_onedim['C'])
@@ -90,14 +90,12 @@ def test_pishock():
 
     ss = hh.steady_state(calibration)
 
-    J = hh.jacobian(ss, inputs=['f', 's'], outputs=['C'], T=10)
+    J = hh.jacobian(ss, inputs=['f', 's', 'r'], outputs=['C'], T=10)
 
-    assert np.max(np.triu(J['C']['r']), 1) < 0  # low C before hike in r
-    assert np.min(np.tril(J['C']['r'])) > 0     # high C after hike in r
+    assert np.max(np.triu(J['C']['r'], 1)) <= 0  # low C before hike in r
+    assert np.min(np.tril(J['C']['r'])) >= 0     # high C after hike in r
 
-    # assert np.all(J['C']['f'] > 0)  # high f increases C everywhere
-    # assert np.all(J['C']['s'] < 0)  # high s decreases C everywhere 
+    assert np.all(J['C']['f'] > 0)  # high f increases C everywhere
+    assert np.all(J['C']['s'] < 0)  # high s decreases C everywhere 
 
     return ss, J
-
-ss, J = test_pishock()

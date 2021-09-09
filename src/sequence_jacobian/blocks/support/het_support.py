@@ -264,3 +264,5 @@ class ExpectationShockableCombinedTransition(CombinedTransition, ExpectationShoc
                     dX += dX_shock
             else:
                 dX = dX_shock
+
+        return dX
