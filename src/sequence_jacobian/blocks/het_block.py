@@ -123,17 +123,6 @@ class HetBlock(Block):
         else:
             return f"<HetBlock '{self.name}'>"
 
-    '''Part 2: high-level routines, with first three called analogously to SimpleBlock counterparts
-        - steady_state      : do backward and forward iteration until convergence to get complete steady state
-        - impulse_nonlinear : do backward and forward iteration up to T to compute dynamics given some shocks
-        - impulse_linear    : apply jacobians to compute linearized dynamics given some shocks
-        - jacobian          : compute jacobians of outputs with respect to shocked inputs, using fake news algorithm
-
-        - add_hetinput : add a hetinput to the HetBlock that first processes inputs through function hetinput
-        - add_hetoutput: add a hetoutput to the HetBlock that is computed after the entire ss computation, or after
-                         each backward iteration step in td, jacobian is not computed for these!
-    '''
-
     def _steady_state(self, calibration, backward_tol=1E-8, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
         ss = self.extract_ss_dict(calibration)
@@ -158,71 +147,30 @@ class HetBlock(Block):
 
     def _impulse_nonlinear(self, ssin, inputs, outputs, monotonic=False, returnindividual=False):
         ss = self.extract_ss_dict(ssin)
-        Dbeg = ss['Dbeg']
-        T = inputs.T
 
-        # allocate empty arrays to store result, assume all like D
+        # identify individual variable paths we want from backward iteration, then run it
         toreturn = self.non_back_iter_outputs
         if self.hetoutputs is not None:
             toreturn = toreturn | self.hetoutputs.outputs
-        individual_paths = {k: np.empty((T,) + Dbeg.shape) for k in toreturn}
+        
+        individual_paths, exog_path = self.backward_nonlinear(ss, inputs, toreturn)
 
-        # backward iteration
-        backdict = ss.copy()
-
-        # initialize exogenous law of motion with steady-state, need this to take exp of backward vars
-        exog = self.make_exog_law_of_motion(backdict)
-        all_exog = []
-
-        for t in reversed(range(T)):
-            for k in self.back_iter_vars:
-                backdict[k + '_p'] = exog.expectation(backdict[k])
-                del backdict[k]
-
-            backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
-            self.update_with_hetinputs(backdict)
-            backdict.update(self.back_step_fun(backdict))
-            self.update_with_hetoutputs(backdict)
- 
-            for k in individual_paths:
-                individual_paths[k][t, ...] = backdict[k]
-
-            exog = self.make_exog_law_of_motion(backdict)
-
-            all_exog.append(exog)
-
-        all_exog = all_exog[::-1]
-
-        Dbeg_path = np.empty((T,) + Dbeg.shape)
-        Dbeg_path[0, ...] = Dbeg
-        D_path = np.empty((T,) + Dbeg.shape)
-
-        for t in range(T):
-            endog = self.make_endog_law_of_motion({**ss, **{k: individual_paths[k][t, ...] for k in self.policy}})
-            exog = all_exog[t]
-
-            # now step forward in two, first exogenous this period then endogenous
-            D_path[t, ...] = exog.forward(Dbeg)
-
-            if t < T-1:
-                Dbeg = endog.forward(D_path[t, ...])
-                Dbeg_path[t+1, ...] = Dbeg # make this optional
+        # run forward iteration to get path of distribution (both Dbeg - what to do with this? - and D)
+        Dbeg_path, D_path = self.forward_nonlinear(ss, individual_paths, exog_path)
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {o.capitalize(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
                       for o in individual_paths}
 
         # return either this, or also include distributional information
-        # TODO: rethink this when dealing with internals
+        # TODO: rethink this when dealing with internals, including Dbeg
         if returnindividual:
             return ImpulseDict({**aggregates, **individual_paths, 'D': D_path}) - ssin
         else:
             return ImpulseDict(aggregates)[outputs] - ssin
 
-
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
-
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
         # TODO: h is unusable for now, figure out how to suggest options
@@ -264,61 +212,6 @@ class HetBlock(Block):
                 J[o.capitalize()][i] = HetBlock.J_from_F(F[o.capitalize()][i])
 
         return JacobianDict(J, name=self.name, T=T)
-
-    """HetInput and HetOutput processing"""
-
-    def process_hetinputs_hetoutputs(self, hetinputs: Optional[ExtendedParallelFunction], hetoutputs: Optional[ExtendedParallelFunction], tocopy=True):
-        if tocopy:
-            self = copy.copy(self)
-        inputs = self.original_inputs.copy()
-        outputs = self.original_outputs.copy()
-        internal = self.original_internal.copy()
-
-        if hetoutputs is not None:
-            inputs |= (hetoutputs.inputs - self.back_step_fun.outputs - ['D'])
-            outputs |= [o.capitalize() for o in hetoutputs.outputs]
-            self.M_outputs = Bijection({o: o.capitalize() for o in hetoutputs.outputs}) @ self.original_M_outputs
-            internal |= hetoutputs.outputs
-
-        if hetinputs is not None:
-            inputs |= hetinputs.inputs
-            inputs -= hetinputs.outputs
-            internal |= hetinputs.outputs
-
-        self.inputs = inputs
-        self.outputs = outputs
-        self.internal = internal
-
-        self.hetinputs = hetinputs
-        self.hetoutputs = hetoutputs
-
-        return self
-
-    def add_hetinputs(self, functions):
-        if self.hetinputs is None:
-            return self.process_hetinputs_hetoutputs(ExtendedParallelFunction(functions), self.hetoutputs)
-        else:
-            return self.process_hetinputs_hetoutputs(self.hetinputs.add(functions), self.hetoutputs)
-
-    def remove_hetinputs(self, names):
-        return self.process_hetinputs_hetoutputs(self.hetinputs.remove(names), self.hetoutputs)
-
-    def add_hetoutputs(self, functions):
-        if self.hetoutputs is None:
-            return self.process_hetinputs_hetoutputs(self.hetinputs, ExtendedParallelFunction(functions))
-        else:
-            return self.process_hetinputs_hetoutputs(self.hetinputs, self.hetoutputs.add(functions))
-
-    def remove_hetoutputs(self, names):
-        return self.process_hetinputs_hetoutputs(self.hetinputs, self.hetoutputs.remove(names))
-
-    def update_with_hetinputs(self, d):
-        if self.hetinputs is not None:
-            d.update(self.hetinputs(d))
-
-    def update_with_hetoutputs(self, d):
-        if self.hetoutputs is not None:
-            d.update(self.hetoutputs(d))
 
     '''Steady-state backward and forward methods'''
 
@@ -386,35 +279,82 @@ class HetBlock(Block):
         # "D" is after the exogenous shock, Dbeg is before it
         return Dbeg, D
 
-    '''Jacobian calculation: four parts of fake news algorithm'''
+    '''Nonlinear impulse backward and forward methods'''
+
+    def backward_nonlinear(self, ss, inputs, toreturn):
+        T = inputs.T
+        individual_paths = {k: np.empty((T,) + ss['D'].shape) for k in toreturn}
+
+        backdict = ss.copy()
+        exog = self.make_exog_law_of_motion(backdict)
+        exog_path = []
+
+        for t in reversed(range(T)):
+            for k in self.back_iter_vars:
+                backdict[k + '_p'] = exog.expectation(backdict[k])
+                del backdict[k]
+
+            backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
+            self.update_with_hetinputs(backdict)
+            backdict.update(self.back_step_fun(backdict))
+            self.update_with_hetoutputs(backdict)
+ 
+            for k in individual_paths:
+                individual_paths[k][t, ...] = backdict[k]
+
+            exog = self.make_exog_law_of_motion(backdict)
+
+            exog_path.append(exog)
+        
+        return individual_paths, exog_path[::-1]
+
+    def forward_nonlinear(self, ss, individual_paths, exog_path):
+        T = len(exog_path)
+        Dbeg = ss['Dbeg']
+
+        Dbeg_path = np.empty((T,) + Dbeg.shape)
+        Dbeg_path[0, ...] = Dbeg
+        D_path = np.empty_like(Dbeg_path)
+
+        for t in range(T):
+            endog = self.make_endog_law_of_motion({**ss, **{k: individual_paths[k][t, ...] for k in self.policy}})
+
+            # now step forward in two, first exogenous this period then endogenous
+            D_path[t, ...] = exog_path[t].forward(Dbeg)
+
+            if t < T-1:
+                Dbeg = endog.forward(D_path[t, ...])
+                Dbeg_path[t+1, ...] = Dbeg # make this optional
+
+        return Dbeg_path, D_path
+
+    '''Jacobian calculation: four parts of fake news algorithm, plus support methods'''
 
     def backward_fakenews(self, input_shocked, output_list, T, differentiable_back_step_fun,
                             differentiable_hetinput, differentiable_hetoutput,
                             law_of_motion: ForwardShockableTransition, exog: Dict[str, ExpectationShockableTransition]):
         """Part 1 of fake news algorithm: calculate curlyY and curlyD in response to fake news shock"""
-
+        # contemporaneous effect of unit scalar shock to input_shocked
         din_dict = {input_shocked: 1}
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
             din_dict.update(differentiable_hetinput.diff2({input_shocked: 1}))
 
-        # contemporaneous response to unit scalar shock
-        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun, differentiable_hetoutput,
-                                                             law_of_motion, exog, True)
+        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun,
+                                                            differentiable_hetoutput, law_of_motion, exog, True)
 
-        # infer dimensions from this and initialize empty arrays
+        # infer dimensions from this, initialize empty arrays, and fill in contemporaneous effect
         curlyDs = np.empty((T,) + curlyD.shape)
         curlyYs = {k: np.empty(T) for k in curlyY.keys()}
 
-        # fill in current effect of shock
         curlyDs[0, ...] = curlyD
         for k in curlyY.keys():
             curlyYs[k][0] = curlyY[k]
 
-        # fill in anticipation effects
+        # fill in anticipation effects of shock up to horizon T
         for t in range(1, T):
             curlyV, curlyDs[t, ...], curlyY = self.backward_step_fakenews({k+'_p': v for k, v in curlyV.items()},
-                                                    output_list, differentiable_back_step_fun, differentiable_hetoutput,
-                                                    law_of_motion, exog)
+                                                    output_list, differentiable_back_step_fun,
+                                                    differentiable_hetoutput, law_of_motion, exog)
             for k in curlyY.keys():
                 curlyYs[k][t] = curlyY[k]
 
@@ -427,7 +367,7 @@ class HetBlock(Block):
         # initialize with beginning-of-period expectation of steady-state policy
         curlyEs[0, ...] = utils.misc.demean(law_of_motion[0].expectation(o_ss))
         for t in range(1, T):
-            # we demean so that curlyEs converge to zero (better numerically), in theory no effect
+            # demean so that curlyEs converge to zero, in theory no effect but better numerically
             curlyEs[t, ...] = utils.misc.demean(law_of_motion.expectation(curlyEs[t-1, ...]))
         return curlyEs
 
@@ -453,7 +393,6 @@ class HetBlock(Block):
                                differentiable_hetoutput, law_of_motion: ForwardShockableTransition,
                                exog: Dict[str, ExpectationShockableTransition], maybe_exog_shock=False):
         """Support for part 1 of fake news algorithm: single backward step in response to shock"""
-
         Dbeg, D = law_of_motion[0].Dss, law_of_motion[1].Dss
                                
         # shock perturbs outputs
@@ -493,6 +432,7 @@ class HetBlock(Block):
         return curlyV, curlyD, curlyY
 
     def jac_backward_prelim(self, ss, h, exog):
+        """Support for part 1 of fake news algorithm: preload differentiable functions"""
         differentiable_hetinputs = None
         if self.hetinputs is not None:
             differentiable_hetinputs = self.hetinputs.differentiable(ss)
@@ -508,7 +448,62 @@ class HetBlock(Block):
 
         return differentiable_back_step_fun, differentiable_hetinputs, differentiable_hetoutputs
 
-    '''Part 6: helper to extract inputs and potentially process them through hetinput'''
+    '''HetInput and HetOutput options and processing'''
+
+    def process_hetinputs_hetoutputs(self, hetinputs: Optional[ExtendedParallelFunction], hetoutputs: Optional[ExtendedParallelFunction], tocopy=True):
+        if tocopy:
+            self = copy.copy(self)
+        inputs = self.original_inputs.copy()
+        outputs = self.original_outputs.copy()
+        internal = self.original_internal.copy()
+
+        if hetoutputs is not None:
+            inputs |= (hetoutputs.inputs - self.back_step_fun.outputs - ['D'])
+            outputs |= [o.capitalize() for o in hetoutputs.outputs]
+            self.M_outputs = Bijection({o: o.capitalize() for o in hetoutputs.outputs}) @ self.original_M_outputs
+            internal |= hetoutputs.outputs
+
+        if hetinputs is not None:
+            inputs |= hetinputs.inputs
+            inputs -= hetinputs.outputs
+            internal |= hetinputs.outputs
+
+        self.inputs = inputs
+        self.outputs = outputs
+        self.internal = internal
+
+        self.hetinputs = hetinputs
+        self.hetoutputs = hetoutputs
+
+        return self
+
+    def add_hetinputs(self, functions):
+        if self.hetinputs is None:
+            return self.process_hetinputs_hetoutputs(ExtendedParallelFunction(functions), self.hetoutputs)
+        else:
+            return self.process_hetinputs_hetoutputs(self.hetinputs.add(functions), self.hetoutputs)
+
+    def remove_hetinputs(self, names):
+        return self.process_hetinputs_hetoutputs(self.hetinputs.remove(names), self.hetoutputs)
+
+    def add_hetoutputs(self, functions):
+        if self.hetoutputs is None:
+            return self.process_hetinputs_hetoutputs(self.hetinputs, ExtendedParallelFunction(functions))
+        else:
+            return self.process_hetinputs_hetoutputs(self.hetinputs, self.hetoutputs.add(functions))
+
+    def remove_hetoutputs(self, names):
+        return self.process_hetinputs_hetoutputs(self.hetinputs, self.hetoutputs.remove(names))
+
+    def update_with_hetinputs(self, d):
+        if self.hetinputs is not None:
+            d.update(self.hetinputs(d))
+
+    def update_with_hetoutputs(self, d):
+        if self.hetoutputs is not None:
+            d.update(self.hetoutputs(d))
+
+    '''Additional helper functions'''
 
     def extract_ss_dict(self, ss):
         if isinstance(ss, SteadyStateDict):
@@ -532,4 +527,3 @@ class HetBlock(Block):
         else:
             return lottery_2d(d[self.policy[0]], d[self.policy[1]],
                         d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'])
-
