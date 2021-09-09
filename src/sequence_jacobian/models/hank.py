@@ -134,9 +134,9 @@ def fiscal(r, B):
 
 
 @simple
-def mkt_clearing(A, N_e, C, L, Y, B, pi, mu, kappa):
+def mkt_clearing(A, N_E, C, L, Y, B, pi, mu, kappa):
     asset_mkt = A - B
-    labor_mkt = N_e - L
+    labor_mkt = N_E - L
     goods_mkt = Y - C - mu/(mu-1)/(2*kappa) * (1+pi).apply(np.log)**2 * Y
     return asset_mkt, labor_mkt, goods_mkt
 

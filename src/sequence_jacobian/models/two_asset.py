@@ -275,10 +275,10 @@ def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
 
 
 @simple
-def mkt_clearing(p, A, B, Bg, C, I, G, Chi, psip, omega, Y):
+def mkt_clearing(p, A, B, Bg, C, I, G, CHI, psip, omega, Y):
     wealth = A + B
     asset_mkt = p + Bg - wealth
-    goods_mkt = C + I + G + Chi + psip + omega * B - Y
+    goods_mkt = C + I + G + CHI + psip + omega * B - Y
     return asset_mkt, wealth, goods_mkt
 
 

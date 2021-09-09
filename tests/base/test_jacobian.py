@@ -64,11 +64,11 @@ def test_fake_news_v_direct_method(one_asset_hank_dag):
     household = hank_model['household']
     T = 40
     exogenous = ['r']
-    output_list = household.non_back_iter_outputs
+    output_list = household.non_backward_outputs
     h = 1E-4
 
     Js = household.jacobian(ss, exogenous, T=T)
-    Js_direct = {o.capitalize(): {i: np.empty((T, T)) for i in exogenous} for o in output_list}
+    Js_direct = {o.upper(): {i: np.empty((T, T)) for i in exogenous} for o in output_list}
 
     # run td once without any shocks to get paths to subtract against
     # (better than subtracting by ss since ss not exact)
@@ -83,6 +83,6 @@ def test_fake_news_v_direct_method(one_asset_hank_dag):
 
             # store results as column t of J[o][i] for each outcome o
             for o in output_list:
-                Js_direct[o.capitalize()][i][:, t] = (td_out[o.capitalize()] - td_noshock[o.capitalize()]) / h
+                Js_direct[o.upper()][i][:, t] = (td_out[o.upper()] - td_noshock[o.upper()]) / h
 
     assert np.linalg.norm(Js['C']['r'] - Js_direct['C']['r'], np.inf) < 3e-4
