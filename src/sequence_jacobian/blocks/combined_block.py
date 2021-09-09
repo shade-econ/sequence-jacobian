@@ -60,7 +60,7 @@ class CombinedBlock(Block, Parent):
     def _steady_state(self, calibration, dissolve=[], **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
 
-        ss = deepcopy(calibration)
+        ss = calibration.copy()
         for block in self.blocks:
             # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
             inner_dissolve = [k for k in dissolve if self.descendants[k] == block.name]
@@ -69,49 +69,47 @@ class CombinedBlock(Block, Parent):
 
         return ss
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, Js):
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js, options):
         original_outputs = outputs
         outputs = (outputs | self._required) - ss._vector_valued()
 
-        irf_nonlin_partial_eq = deepcopy(inputs)
+        irf_nonlin_partial_eq = inputs.copy()
         for block in self.blocks:
             input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_nonlin_partial_eq.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, Js))
+                irf_nonlin_partial_eq.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, Js, options))
 
         return irf_nonlin_partial_eq[original_outputs]
 
-    def _impulse_linear(self, ss, inputs, outputs, Js):
+    def _impulse_linear(self, ss, inputs, outputs, Js, options):
         original_outputs = outputs
         outputs = (outputs | self._required) - ss._vector_valued()
         
+        #irf_lin_partial_eq = inputs.copy()
         irf_lin_partial_eq = deepcopy(inputs)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs} 
 
             if input_args:  # If this block is actually perturbed
-                irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, outputs & block.outputs, Js))
+                irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, outputs & block.outputs, Js, options))
 
         return irf_lin_partial_eq[original_outputs]
 
-    def _partial_jacobians(self, ss, inputs, outputs, T, Js):
+    def _partial_jacobians(self, ss, inputs, outputs, T, Js, options):
         vector_valued = ss._vector_valued()
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
 
         curlyJs = {}
         for block in self.blocks:
-            descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
-            Js_block = {k: v for k, v in Js.items() if k in descendants}
-
-            curlyJ = block.partial_jacobians(ss, inputs & block.inputs, outputs & block.outputs, T, Js_block)
+            curlyJ = block.partial_jacobians(ss, inputs & block.inputs, outputs & block.outputs, T, Js, options)
             curlyJs.update(curlyJ)
             
         return curlyJs
 
-    def _jacobian(self, ss, inputs, outputs, T, Js={}):
-        Js = self._partial_jacobians(ss, inputs, outputs, T=T, Js=Js)
+    def _jacobian(self, ss, inputs, outputs, T, Js, options):
+        Js = self._partial_jacobians(ss, inputs, outputs, T, Js, options)
 
         original_outputs = outputs
         total_Js = JacobianDict.identity(inputs)
@@ -121,9 +119,7 @@ class CombinedBlock(Block, Parent):
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
         for block in self.blocks:
-            descendants = block.descendants if isinstance(block, Parent) else {block.name: None}
-            Js_block = {k: v for k, v in Js.items() if k in descendants}
-            J = block.jacobian(ss, inputs & block.inputs, outputs & block.outputs, T, Js_block)
+            J = block.jacobian(ss, inputs & block.inputs, outputs & block.outputs, T, Js, options)
             total_Js.update(J @ total_Js)
 
         return total_Js[original_outputs, :]

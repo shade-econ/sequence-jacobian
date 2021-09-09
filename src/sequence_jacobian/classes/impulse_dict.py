@@ -6,7 +6,7 @@ from copy import deepcopy
 from ..utilities.ordered_set import OrderedSet
 from ..utilities.bijection import Bijection
 from .steady_state_dict import SteadyStateDict
-
+import copy
 
 class ImpulseDict:
     def __init__(self, impulse, T=None):
@@ -26,6 +26,11 @@ class ImpulseDict:
 
     def __iter__(self):
         return iter(self.impulse)
+
+    def copy(self):
+        newself = copy.copy(self)
+        newself.impulse = newself.impulse.copy()
+        return newself
 
     def items(self):
         return self.impulse.items()

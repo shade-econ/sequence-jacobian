@@ -2,9 +2,6 @@
 
 import numpy as np
 
-from sequence_jacobian.classes.jacobian_dict import JacobianDict
-
-
 def test_ks_jac(krusell_smith_dag):
     ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
     household, firm, mkt_clearing, _, _ = ks_model._blocks_unsorted

@@ -134,7 +134,6 @@ class HetBlock(Block):
         return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
-        # TODO: h is unusable for now, figure out how to suggest options
         ss = self.extract_ss_dict(ss)
         self.update_with_hetinputs(ss)
         outputs = self.M_outputs.inv @ outputs

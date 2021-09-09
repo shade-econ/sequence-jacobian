@@ -17,7 +17,7 @@ def make_tuple(x):
 
 def input_list(f):
     """Return list of function inputs (both positional and keyword arguments)"""
-    return list(inspect.signature(f).parameters)
+    return OrderedSet(inspect.signature(f).parameters)
 
 
 def input_arg_list(f):
@@ -26,7 +26,7 @@ def input_arg_list(f):
     for p in inspect.signature(f).parameters.values():
         if p.default == p.empty:
             arg_list.append(p.name)
-    return arg_list
+    return OrderedSet(arg_list)
 
 
 def input_kwarg_list(f):
@@ -35,7 +35,7 @@ def input_kwarg_list(f):
     for p in inspect.signature(f).parameters.values():
         if p.default != p.empty:
             kwarg_list.append(p.name)
-    return kwarg_list
+    return OrderedSet(kwarg_list)
 
 
 def output_list(f):
@@ -48,13 +48,13 @@ def output_list(f):
     Important to write functions in this way when they will be scanned by output_list, for
     either SimpleBlock or HetBlock.
     """
-    return re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
+    return OrderedSet(re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(','))
 
 
 def metadata(f):
     name = f.__name__
-    inputs = OrderedSet(input_list(f))
-    outputs = OrderedSet(output_list(f))
+    inputs = input_list(f)
+    outputs = output_list(f)
     return name, inputs, outputs
 
 

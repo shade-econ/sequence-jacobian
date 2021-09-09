@@ -29,6 +29,10 @@ class SolvedBlock(Block, Parent):
     def __init__(self, block: Block, name, unknowns, targets, solver=None, solver_kwargs={}):
         super().__init__()
 
+        # since we dispatch to solve methods, same set of options
+        self.impulse_nonlinear_options = self.solve_impulse_nonlinear_options
+        self.steady_state_options = self.solve_steady_state_options
+
         self.block = block
         self.name = name
         self.unknowns = unknowns
@@ -53,42 +57,37 @@ class SolvedBlock(Block, Parent):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], unknowns=None, solver="", ttol=1e-9, ctol=1e-9, verbose=False):
+    def _steady_state(self, calibration, dissolve, options, **kwargs):
         if self.name in dissolve:
-            solver = "solved"
+            kwargs['solver'] = "solved"
             unknowns = {k: v for k, v in calibration.items() if k in self.unknowns}
-
-        # Allow override of unknowns/solver, if one wants to evaluate the SolvedBlock at a particular set of
-        # unknown values akin to the steady_state method of Block
-        if unknowns is None:
+        else:
             unknowns = self.unknowns
-        if not solver:
-            solver = self.solver
+            if 'solver' not in kwargs:
+                # TODO: replace this with default option
+                kwargs['solver'] = self.solver
 
-        return self.block.solve_steady_state(calibration, unknowns, self.targets, solver=solver,
-                                             ttol=ttol, ctol=ctol, verbose=verbose)
+        return self.block.solve_steady_state(calibration, unknowns, self.targets, options, **kwargs)
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, Js):
+    def _impulse_nonlinear(self, ss, inputs, outputs, Js, options, **kwargs):
         return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                                  inputs, outputs - self.unknowns.keys(), Js)
+                                                  inputs, outputs - self.unknowns.keys(), Js, options, **kwargs)
 
-    def _impulse_linear(self, ss, inputs, outputs, Js):
+    def _impulse_linear(self, ss, inputs, outputs, Js, options):
         return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                               inputs, outputs - self.unknowns.keys(), Js)
+                                               inputs, outputs - self.unknowns.keys(), Js, options)
 
-    def _jacobian(self, ss, inputs, outputs, T, Js):
+    def _jacobian(self, ss, inputs, outputs, T, Js, options):
         return self.block.solve_jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                         inputs, outputs, T, Js)[outputs]
+                                         inputs, outputs, T, Js, options)[outputs]
 
-    def _partial_jacobians(self, ss, inputs, outputs, T, Js={}):
+    def _partial_jacobians(self, ss, inputs, outputs, T, Js, options):
         # call it on the child first
-        inner_Js = self.block.partial_jacobians(ss,
-                                                inputs=(OrderedSet(self.unknowns) | inputs),
-                                                outputs=(OrderedSet(self.targets) | outputs - self.unknowns.keys()),
-                                                T=T, Js=Js)
+        inner_Js = self.block.partial_jacobians(ss, (OrderedSet(self.unknowns) | inputs), 
+                                                (OrderedSet(self.targets) | outputs - self.unknowns.keys()), T, Js, options)
 
         # with these inner Js, also compute H_U and factorize
-        H_U = self.block.jacobian(ss, inputs=OrderedSet(self.unknowns), outputs=OrderedSet(self.targets), T=T, Js=inner_Js)
+        H_U = self.block.jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets), T, inner_Js, options)
         H_U_factored = FactoredJacobianDict(H_U, T)
 
         return {**inner_Js, self.name: H_U_factored}
