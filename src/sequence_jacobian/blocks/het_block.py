@@ -14,9 +14,9 @@ from ..utilities.ordered_set import OrderedSet
 from .support.het_support import ForwardShockableTransition, ExpectationShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition, Transition
 
 
-def het(exogenous, policy, backward, backward_init=None):
+def het(exogenous, policy, backward, backward_init=None, hetinputs=None, hetoutputs=None):
     def decorator(backward_fun):
-        return HetBlock(backward_fun, exogenous, policy, backward, backward_init=backward_init)
+        return HetBlock(backward_fun, exogenous, policy, backward, backward_init, hetinputs, hetoutputs)
     return decorator
 
 
