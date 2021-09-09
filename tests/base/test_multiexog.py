@@ -98,4 +98,8 @@ def test_pishock():
     assert np.all(J['C']['f'] > 0)  # high f increases C everywhere
     assert np.all(J['C']['s'] < 0)  # high s decreases C everywhere 
 
-    return ss, J
+    shock = 0.8**np.arange(10)
+    C_up = hh.impulse_nonlinear(ss, {'f': 1E-4*shock})['C']
+    C_dn = hh.impulse_nonlinear(ss, {'f': -1E-4*shock})['C']
+    dC = (C_up - C_dn)/2E-4
+    assert np.allclose(dC, J['C', 'f'] @ shock, atol=2E-6)

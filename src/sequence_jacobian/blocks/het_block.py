@@ -164,9 +164,6 @@ class HetBlock(Block):
         Dbeg = ss['Dbeg']
         T = inputs.T
 
-        # for now not allowing shocks to exog, just trying to get code to work!
-        exog = self.make_exog_law_of_motion(ss)
-
         # allocate empty arrays to store result, assume all like D
         toreturn = self.non_back_iter_outputs
         if self.hetoutputs is not None:
@@ -176,33 +173,36 @@ class HetBlock(Block):
         # backward iteration
         backdict = ss.copy()
 
+        # initialize exogenous law of motion with steady-state, need this to take exp of backward vars
+        exog = self.make_exog_law_of_motion(backdict)
+        all_exog = []
+
         for t in reversed(range(T)):
             for k in self.back_iter_vars:
                 backdict[k + '_p'] = exog.expectation(backdict[k])
                 del backdict[k]
 
-            # be careful: if you include vars from self.back_iter_vars in exogenous, agents will use them!
             backdict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
             self.update_with_hetinputs(backdict)
             backdict.update(self.back_step_fun(backdict))
-            backdict.update({k: backdict[k] for k in self.back_iter_vars})
-
             self.update_with_hetoutputs(backdict)
  
             for k in individual_paths:
                 individual_paths[k][t, ...] = backdict[k]
+
+            exog = self.make_exog_law_of_motion(backdict)
+
+            all_exog.append(exog)
+
+        all_exog = all_exog[::-1]
 
         Dbeg_path = np.empty((T,) + Dbeg.shape)
         Dbeg_path[0, ...] = Dbeg
         D_path = np.empty((T,) + Dbeg.shape)
 
         for t in range(T):
-            # assemble dict for this period's law of motion and make law of motion object
-            d = {k: individual_paths[k][t, ...] for k in self.policy}
-            d.update({k + '_grid': ss[k + '_grid'] for k in self.policy})
-            d.update({k: ss[k] for k in self.exogenous})
-            exog = self.make_exog_law_of_motion(d)
-            endog = self.make_endog_law_of_motion(d)
+            endog = self.make_endog_law_of_motion({**ss, **{k: individual_paths[k][t, ...] for k in self.policy}})
+            exog = all_exog[t]
 
             # now step forward in two, first exogenous this period then endogenous
             D_path[t, ...] = exog.forward(Dbeg)
@@ -216,7 +216,7 @@ class HetBlock(Block):
                       for o in individual_paths}
 
         # return either this, or also include distributional information
-        # TODO: rethink this
+        # TODO: rethink this when dealing with internals
         if returnindividual:
             return ImpulseDict({**aggregates, **individual_paths, 'D': D_path}) - ssin
         else:
@@ -420,9 +420,8 @@ class HetBlock(Block):
         curlyD = law_of_motion.forward_shock([shocks_to_exog, policy_shock])
 
         # and also affect aggregate outcomes today
-        # TODO: seems wrong if hetoutput can take in hetinputs, since those might separately change it?
         if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
-            shocked_outputs.update(differentiable_hetoutput.diff(shocked_outputs))
+            shocked_outputs.update(differentiable_hetoutput.diff({**shocked_outputs, **din_dict}))
         curlyY = {k: np.vdot(D, shocked_outputs[k]) for k in output_list}
 
         # add effects from perturbation to exog on beginning-of-period expectations in curlyV and curlyY
@@ -444,13 +443,9 @@ class HetBlock(Block):
                             differentiable_hetinput, differentiable_hetoutput,
                             law_of_motion: ForwardShockableTransition, exog: Dict[str, ExpectationShockableTransition]):
 
-        # TODO: what if input_shocked enters both hetinput and backward_step_fun?
+        din_dict = {input_shocked: 1}
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
-            # if input_shocked is an input to hetinput, take numerical diff to get response
-            din_dict = differentiable_hetinput.diff2({input_shocked: 1})
-        else:
-            # otherwise, we just have that one shock
-            din_dict = {input_shocked: 1}
+            din_dict.update(differentiable_hetinput.diff2({input_shocked: 1}))
 
         # contemporaneous response to unit scalar shock
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_back_step_fun, differentiable_hetoutput,
@@ -535,23 +530,6 @@ class HetBlock(Block):
         if not all(k in ss for k in self.back_iter_vars):
             ss.update(self.backward_init(ss))
 
-    # def make_inputs(self, back_step_inputs_dict):
-    #     """Extract from back_step_inputs_dict exactly the inputs needed for self.back_step_fun."""
-        
-
-    #     if not all(k in input_dict for k in self.back_iter_vars):
-    #         input_dict.update(self.backward_init(input_dict))
-
-    #     for i_p in self.inputs_to_be_primed:
-    #         input_dict[i_p + "_p"] = input_dict[i_p]
-    #         del input_dict[i_p]
-
-    #     try:
-    #         return {k: input_dict[k] for k in self.back_step_fun.inputs if k in input_dict}
-    #     except KeyError as e:
-    #         print(f'Missing backward variable or Markov matrix {e} for {self.self.name}!')
-    #         raise
-
     def make_exog_law_of_motion(self, d:dict):
         return CombinedTransition([Markov(d[k], i) for i, k in enumerate(self.exogenous)])
 
@@ -561,53 +539,4 @@ class HetBlock(Block):
         else:
             return lottery_2d(d[self.policy[0]], d[self.policy[1]],
                         d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'])
-
-    '''Part 7: routines to do forward steps of different kinds, all wrap functions in utils'''
-
-    def forward_step(self, D, Pi_T, pol_i, pol_pi):
-        """Update distribution, calling on 1d and 2d-specific compiled routines.
-
-        Parameters
-        ----------
-        D : array, beginning-of-period distribution
-        Pi_T : array, transpose Markov matrix
-        pol_i : dict, indices on lower bracketing gridpoint for all in self.policy
-        pol_pi : dict, weights on lower bracketing gridpoint for all in self.policy
-
-        Returns
-        ----------
-        Dnew : array, beginning-of-next-period distribution
-        """
-        if len(self.policy) == 1:
-            p, = self.policy
-            return utils.forward_step.forward_step_1d(D, Pi_T, pol_i[p], pol_pi[p])
-        elif len(self.policy) == 2:
-            p1, p2 = self.policy
-            return utils.forward_step.forward_step_2d(D, Pi_T, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
-        else:
-            raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
-
-    def forward_step_transpose(self, D, Pi, pol_i, pol_pi):
-        """Transpose of forward_step (note: this takes Pi rather than Pi_T as argument!)"""
-        if len(self.policy) == 1:
-            p, = self.policy
-            return utils.forward_step.forward_step_transpose_1d(D, Pi, pol_i[p], pol_pi[p])
-        elif len(self.policy) == 2:
-            p1, p2 = self.policy
-            return utils.forward_step.forward_step_transpose_2d(D, Pi, pol_i[p1], pol_i[p2], pol_pi[p1], pol_pi[p2])
-        else:
-            raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
-
-    def forward_step_shock(self, Dss, Pi_T, pol_i_ss, pol_pi_ss, pol_pi_shock):
-        """Forward_step linearized with respect to pol_pi"""
-        if len(self.policy) == 1:
-            p, = self.policy
-            return utils.forward_step.forward_step_shock_1d(Dss, Pi_T, pol_i_ss[p], pol_pi_shock[p])
-        elif len(self.policy) == 2:
-            p1, p2 = self.policy
-            return utils.forward_step.forward_step_shock_2d(Dss, Pi_T, pol_i_ss[p1], pol_i_ss[p2],
-                                                            pol_pi_ss[p1], pol_pi_ss[p2],
-                                                            pol_pi_shock[p1], pol_pi_shock[p2])
-        else:
-            raise ValueError(f"{len(self.policy)} policy variables, only up to 2 implemented!")
 
