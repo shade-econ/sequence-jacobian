@@ -3,10 +3,10 @@
 from copy import deepcopy
 
 from .block import Block
-from ..utilities.graph import block_sort, find_intermediate_inputs
 from .auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from .support.parent import Parent
-from ..classes.jacobian_dict import JacobianDict
+from ..classes import JacobianDict
+from ..utilities.graph import block_sort, find_intermediate_inputs
 
 
 def combine(blocks, name="", model_alias=False):

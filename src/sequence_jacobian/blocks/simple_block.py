@@ -6,10 +6,7 @@ from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .block import Block
-from ..classes.steady_state_dict import SteadyStateDict
-from ..classes.impulse_dict import ImpulseDict
-from ..classes.jacobian_dict import JacobianDict
-from ..classes.sparse_jacobians import SimpleSparse, ZeroMatrix
+from ..classes.steady_state_dict import SteadyStateDict, ImpulseDict, JacobianDict, SimpleSparse, ZeroMatrix
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
 

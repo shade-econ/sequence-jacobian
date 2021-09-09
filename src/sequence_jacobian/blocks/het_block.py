@@ -4,9 +4,7 @@ from typing import Optional, Dict
 
 from .block import Block
 from .. import utilities as utils
-from ..classes.steady_state_dict import SteadyStateDict
-from ..classes.impulse_dict import ImpulseDict
-from ..classes.jacobian_dict import JacobianDict
+from ..classes import SteadyStateDict, ImpulseDict, JacobianDict
 from ..utilities.function import ExtendedFunction, ExtendedParallelFunction
 from ..utilities.ordered_set import OrderedSet
 from ..utilities.bijection import Bijection

@@ -5,14 +5,12 @@ from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 from copy import deepcopy
 
-from ..classes.steady_state_dict import SteadyStateDict, UserProvidedSS
-from ..classes.impulse_dict import ImpulseDict
-from ..classes.jacobian_dict import JacobianDict, FactoredJacobianDict
 from .support.steady_state import provide_solver_default, solve_for_unknowns, compute_target_values
 from .support.parent import Parent
 from ..utilities import misc
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
+from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
 
 Array = Any
 

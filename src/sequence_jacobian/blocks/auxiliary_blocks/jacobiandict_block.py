@@ -1,8 +1,7 @@
 """A simple wrapper for JacobianDicts to be embedded in DAGs"""
 
 from ..block import Block
-from ...classes.impulse_dict import ImpulseDict
-from ...classes.jacobian_dict import JacobianDict
+from ...classes import ImpulseDict, JacobianDict
 
 class JacobianDictBlock(JacobianDict, Block):
     """A wrapper for nested dicts/JacobianDicts passed directly into DAGs to ensure method compatibility"""

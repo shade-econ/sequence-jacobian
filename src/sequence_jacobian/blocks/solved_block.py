@@ -1,7 +1,7 @@
 from .block import Block
 from .simple_block import simple
 from .support.parent import Parent
-from ..classes.jacobian_dict import FactoredJacobianDict
+from ..classes import FactoredJacobianDict
 from ..utilities.ordered_set import OrderedSet
 
 
