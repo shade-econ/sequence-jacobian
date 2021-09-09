@@ -11,7 +11,7 @@ from ..jacobian.classes import JacobianDict
 from .support.bijection import Bijection
 from ..utilities.function import ExtendedFunction, ExtendedParallelFunction
 from ..utilities.ordered_set import OrderedSet
-from .support.het_support import ForwardShockableTransition, ExpectationShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition
+from .support.het_support import ForwardShockableTransition, ExpectationShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition, Transition
 
 
 def het(exogenous, policy, backward, backward_init=None):
@@ -140,11 +140,8 @@ class HetBlock(Block):
         self.update_with_hetinputs(ss)
         self.initialize_backward(ss)
 
-        # run backward iteration
-        ss = self.policy_ss(ss, tol=backward_tol, maxit=backward_maxit)
-
-        # run forward iteration
-        Dbeg, D = self.dist_ss(ss, forward_tol, forward_maxit)
+        ss = self.backward_steady_state(ss, tol=backward_tol, maxit=backward_maxit)
+        Dbeg, D = self.forward_steady_state(ss, forward_tol, forward_maxit)
         ss.update({'Dbeg': Dbeg, "D": D})
 
         self.update_with_hetoutputs(ss)
@@ -244,15 +241,15 @@ class HetBlock(Block):
         # compute curlyY and curlyD (backward iteration) for each input i
         curlyYs, curlyDs = {}, {}
         for i in inputs:
-            curlyYs[i], curlyDs[i] = self.backward_iteration_fakenews(i, outputs, T, differentiable_back_step_fun,
+            curlyYs[i], curlyDs[i] = self.backward_fakenews(i, outputs, T, differentiable_back_step_fun,
                                                                       differentiable_hetinputs, differentiable_hetoutputs,
                                                                       law_of_motion, exog_by_output)
 
         # step 2 of fake news algorithm
-        # compute prediction vectors curlyP (forward iteration) for each outcome o
+        # compute expectation vectors curlyE for each outcome o
         curlyPs = {}
         for o in outputs:
-            curlyPs[o] = self.forward_iteration_fakenews(ss[o], T-1, law_of_motion)
+            curlyPs[o] = self.expectation_vectors(ss[o], T-1, law_of_motion)
 
         # steps 3-4 of fake news algorithm
         # make fake news matrix and Jacobian for each outcome-input pair
@@ -323,12 +320,10 @@ class HetBlock(Block):
         if self.hetoutputs is not None:
             d.update(self.hetoutputs(d))
 
-    '''Part 3: components of ss():
-        - policy_ss : backward iteration to get steady-state policies and other outcomes
-        - dist_ss   : forward iteration to get steady-state distribution and compute aggregates
-    '''
+    '''Steady-state backward and forward methods'''
 
-    def policy_ss(self, ss, tol=1E-8, maxit=5000):
+    def backward_steady_state(self, ss, tol=1E-8, maxit=5000):
+        """Backward iteration to get steady-state policies and other outcomes"""
         ss = ss.copy()
         exog = self.make_exog_law_of_motion(ss)
 
@@ -353,7 +348,8 @@ class HetBlock(Block):
 
         return ss
 
-    def dist_ss(self, ss, tol=1E-10, maxit=100_000):
+    def forward_steady_state(self, ss, tol=1E-10, maxit=100_000):
+        """Forward iteration to get steady-state distribution"""
         exog = self.make_exog_law_of_motion(ss)
         endog = self.make_endog_law_of_motion(ss)
         
@@ -390,58 +386,12 @@ class HetBlock(Block):
         # "D" is after the exogenous shock, Dbeg is before it
         return Dbeg, D
 
-    '''Part 4: components of jac(), corresponding to *4 steps of fake news algorithm* in paper
-        - Step 1: backward_step_fakenews and backward_iteration_fakenews to get curlyYs and curlyDs
-        - Step 2: forward_iteration_fakenews to get curlyPs
-        - Step 3: build_F to get fake news matrix from curlyYs, curlyDs, curlyPs
-        - Step 4: J_from_F to get Jacobian from fake news matrix
-    '''
+    '''Jacobian calculation: four parts of fake news algorithm'''
 
-    def backward_step_fakenews(self, din_dict, output_list, differentiable_back_step_fun,
-                               differentiable_hetoutput, law_of_motion: ForwardShockableTransition,
-                               exog: Dict[str, ExpectationShockableTransition], maybe_exog_shock=False):
-
-        Dbeg, D = law_of_motion[0].Dss, law_of_motion[1].Dss
-                               
-        # shock perturbs outputs
-        shocked_outputs = differentiable_back_step_fun.diff(din_dict)
-        curlyV = {k: law_of_motion[0].expectation(shocked_outputs[k]) for k in self.back_iter_vars}
-
-        # if there might be a shock to exogenous processes, figure out what it is
-        if maybe_exog_shock:
-            shocks_to_exog = [din_dict.get(k, None) for k in self.exogenous]
-        else:
-            shocks_to_exog = None
-
-        # perturbation to exog and outputs outputs affects distribution tomorrow
-        policy_shock = [shocked_outputs[k] for k in self.policy]
-        if len(policy_shock) == 1:
-            policy_shock = policy_shock[0]
-        curlyD = law_of_motion.forward_shock([shocks_to_exog, policy_shock])
-
-        # and also affect aggregate outcomes today
-        if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
-            shocked_outputs.update(differentiable_hetoutput.diff({**shocked_outputs, **din_dict}))
-        curlyY = {k: np.vdot(D, shocked_outputs[k]) for k in output_list}
-
-        # add effects from perturbation to exog on beginning-of-period expectations in curlyV and curlyY
-        if maybe_exog_shock:
-            for k in curlyV:
-                shock = exog[k].expectation_shock(shocks_to_exog)  # this does not work
-                if shock is not None:
-                    curlyV[k] += shock
-            
-            for k in curlyY:
-                shock = exog[k].expectation_shock(shocks_to_exog)
-                # maybe could be more efficient since we don't need to calculate pointwise?
-                if shock is not None:
-                    curlyY[k] += np.vdot(Dbeg, shock)
-
-        return curlyV, curlyD, curlyY
-
-    def backward_iteration_fakenews(self, input_shocked, output_list, T, differentiable_back_step_fun,
+    def backward_fakenews(self, input_shocked, output_list, T, differentiable_back_step_fun,
                             differentiable_hetinput, differentiable_hetoutput,
                             law_of_motion: ForwardShockableTransition, exog: Dict[str, ExpectationShockableTransition]):
+        """Part 1 of fake news algorithm: calculate curlyY and curlyD in response to fake news shock"""
 
         din_dict = {input_shocked: 1}
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
@@ -470,11 +420,11 @@ class HetBlock(Block):
 
         return curlyYs, curlyDs
 
-    def forward_iteration_fakenews(self, o_ss, T, law_of_motion: ForwardShockableTransition):
-        """Iterate transpose forward T steps to get full set of curlyEs for a given outcome."""
+    def expectation_vectors(self, o_ss, T, law_of_motion: Transition):
+        """Part 2 of fake news algorithm: calculate expectation vectors curlyE"""
         curlyEs = np.empty((T,) + o_ss.shape)
 
-        # initialize with beginning-of-period expectation of policy
+        # initialize with beginning-of-period expectation of steady-state policy
         curlyEs[0, ...] = utils.misc.demean(law_of_motion[0].expectation(o_ss))
         for t in range(1, T):
             # we demean so that curlyEs converge to zero (better numerically), in theory no effect
@@ -483,6 +433,7 @@ class HetBlock(Block):
 
     @staticmethod
     def build_F(curlyYs, curlyDs, curlyEs):
+        """Part 3 of fake news algorithm: build fake news matrix from curlyY, curlyD, curlyE"""
         T = curlyDs.shape[0]
         Tpost = curlyEs.shape[0] - T + 2
         F = np.empty((Tpost + T - 1, T))
@@ -492,12 +443,54 @@ class HetBlock(Block):
 
     @staticmethod
     def J_from_F(F):
+        """Part 4 of fake news algorithm: recursively build Jacobian from fake news matrix"""
         J = F.copy()
         for t in range(1, J.shape[1]):
             J[1:, t] += J[:-1, t - 1]
         return J
 
-    '''Part 5: helpers for .jac and .ajac: preliminary processing'''
+    def backward_step_fakenews(self, din_dict, output_list, differentiable_back_step_fun,
+                               differentiable_hetoutput, law_of_motion: ForwardShockableTransition,
+                               exog: Dict[str, ExpectationShockableTransition], maybe_exog_shock=False):
+        """Support for part 1 of fake news algorithm: single backward step in response to shock"""
+
+        Dbeg, D = law_of_motion[0].Dss, law_of_motion[1].Dss
+                               
+        # shock perturbs outputs
+        shocked_outputs = differentiable_back_step_fun.diff(din_dict)
+        curlyV = {k: law_of_motion[0].expectation(shocked_outputs[k]) for k in self.back_iter_vars}
+
+        # if there might be a shock to exogenous processes, figure out what it is
+        if maybe_exog_shock:
+            shocks_to_exog = [din_dict.get(k, None) for k in self.exogenous]
+        else:
+            shocks_to_exog = None
+
+        # perturbation to exog and outputs outputs affects distribution tomorrow
+        policy_shock = [shocked_outputs[k] for k in self.policy]
+        if len(policy_shock) == 1:
+            policy_shock = policy_shock[0]
+        curlyD = law_of_motion.forward_shock([shocks_to_exog, policy_shock])
+
+        # and also affect aggregate outcomes today
+        if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
+            shocked_outputs.update(differentiable_hetoutput.diff({**shocked_outputs, **din_dict}))
+        curlyY = {k: np.vdot(D, shocked_outputs[k]) for k in output_list}
+
+        # add effects from perturbation to exog on beginning-of-period expectations in curlyV and curlyY
+        if maybe_exog_shock:
+            for k in curlyV:
+                shock = exog[k].expectation_shock(shocks_to_exog)
+                if shock is not None:
+                    curlyV[k] += shock
+            
+            for k in curlyY:
+                shock = exog[k].expectation_shock(shocks_to_exog)
+                # maybe could be more efficient since we don't need to calculate pointwise?
+                if shock is not None:
+                    curlyY[k] += np.vdot(Dbeg, shock)
+
+        return curlyV, curlyD, curlyY
 
     def jac_backward_prelim(self, ss, h, exog):
         differentiable_hetinputs = None
