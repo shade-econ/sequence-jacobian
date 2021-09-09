@@ -334,7 +334,7 @@ def partial_ss_step2(tax, w, U, N, muw, frisch):
 def two_asset_ss(beta_guess=0.976, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1,
                  muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi2=2, epsI=4, omega=0.005, kappaw=0.1,
                  phi=1.5, nZ=3, nB=50, nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92,
-                 verbose=True):
+                 tol=1e-12, verbose=True):
     """Solve steady state of full GE model. Calibrate (beta, vphi, chi1, alpha, mup, Z) to hit targets for
        (r, tot_wealth, Bh, K, Y=N=1).
     """
@@ -375,7 +375,7 @@ def two_asset_ss(beta_guess=0.976, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10
         return np.array([asset_mkt, out['B'] - Bh])
 
     # solve for beta, vphi, omega
-    (beta, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, chi1_guess]), verbose=verbose)
+    (beta, chi1), _ = utils.solvers.broyden_solver(res, np.array([beta_guess, chi1_guess]), tol=tol, verbose=verbose)
     calibration['beta'], calibration['chi1'] = beta, chi1
 
     # extra evaluation for reporting

@@ -9,8 +9,7 @@ from copy import deepcopy
 
 from sequence_jacobian.utilities.ordered_set import OrderedSet
 
-from .steady_state.drivers import steady_state as ss
-from .steady_state.support import provide_solver_default
+from .steady_state.support import provide_solver_default, solve_for_unknowns, compute_target_values
 from .steady_state.classes import SteadyStateDict, UserProvidedSS
 from .jacobian.classes import JacobianDict, FactoredJacobianDict
 from .blocks.support.impulse import ImpulseDict
@@ -75,16 +74,21 @@ class Block(abc.ABC, metaclass=ABCMeta):
         pass
 
     def steady_state(self, calibration: Union[SteadyStateDict, UserProvidedSS], 
-                     dissolve: Optional[List[str]] = [], **kwargs) -> SteadyStateDict:
+                     dissolve: Optional[List[str]] = [], evaluate_helpers: bool = False,
+                     **kwargs) -> SteadyStateDict:
         """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
-        # special handling: add all unknowns of dissolved blocks to inputs
-        inputs = self.inputs.copy()
+        # Special handling: 1) Find inputs/outputs of the Block w/o helpers blocks
+        #                   2) Add all unknowns of dissolved blocks to inputs
+        if not evaluate_helpers:
+            inputs = self.inputs_orig.copy() if hasattr(self, "inputs_orig") else self.inputs.copy()
+        else:
+            inputs = self.inputs.copy()
         if isinstance(self, Parent):
             for k in dissolve:
                 inputs |= self.get_attribute(k, 'unknowns').keys()
 
         calibration = SteadyStateDict(calibration)[inputs]
-        kwargs['dissolve'] = dissolve
+        kwargs['dissolve'], kwargs['evaluate_helpers'] = dissolve, evaluate_helpers
 
         return self.M @ self._steady_state(self.M.inv @ calibration, **{k: v for k, v in kwargs.items() if k in self.ss_valid_input_kwargs})
 
@@ -157,14 +161,48 @@ class Block(abc.ABC, metaclass=ABCMeta):
 
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
-                           targets: Union[Array, Dict[str, Union[str, Real]]],
-                           solver: Optional[str] = "", **kwargs) -> SteadyStateDict:
+                           targets: Union[Array, Dict[str, Union[str, Real]]], dissolve: Optional[List] = [],
+                           helper_blocks: Optional[List] = [], helper_targets: Optional[Dict] = {},
+                           solver: Optional[str] = "", solver_kwargs: Optional[Dict] = {},
+                           block_kwargs: Optional[Dict] = {}, ttol: Optional[float] = 1e-12, ctol: Optional[float] = 1e-9,
+                           verbose: Optional[bool] = False, check_consistency: Optional[bool] = True,
+                           constrained_method: Optional[str] = "linear_continuation",
+                           constrained_kwargs: Optional[Dict] = {}):
         """Evaluate a general equilibrium steady state of Block given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
-        blocks = self.blocks if hasattr(self, "blocks") else [self]
+        if helper_blocks is not None:
+            if helper_targets is None:
+                raise ValueError("Must provide the dict of targets and their values that the `helper_blocks` solve"
+                                 " in the `helper_targets` keyword argument.")
+            else:
+                from .steady_state.support import augment_dag_w_helper_blocks
+                dag, ss, unknowns_to_solve, targets_to_solve = augment_dag_w_helper_blocks(self, calibration, unknowns,
+                                                                                           targets, helper_blocks,
+                                                                                           helper_targets)
+        else:
+            dag, ss, unknowns_to_solve, targets_to_solve = self, SteadyStateDict(calibration), unknowns, targets
+
         solver = solver if solver else provide_solver_default(unknowns)
-        return ss(blocks, calibration, unknowns, targets, solver=solver, **kwargs)
+
+        def residual(unknown_values, unknowns_keys=unknowns_to_solve.keys(), targets=targets_to_solve,
+                     evaluate_helpers=True):
+            ss.update(misc.smart_zip(unknowns_keys, unknown_values))
+            ss.update(dag.steady_state(ss, dissolve=dissolve, evaluate_helpers=evaluate_helpers, **block_kwargs))
+            return compute_target_values(targets, ss)
+
+        unknowns_solved = solve_for_unknowns(residual, unknowns_to_solve, solver, solver_kwargs, tol=ttol, verbose=verbose,
+                                             constrained_method=constrained_method, constrained_kwargs=constrained_kwargs)
+
+        if helper_blocks and helper_targets and check_consistency:
+            # Add in the unknowns solved analytically by helper blocks and re-evaluate the DAG without helpers
+            unknowns_solved.update({k: ss[k] for k in unknowns if k not in unknowns_solved})
+            cresid = np.max(abs(residual(unknowns_solved.values(), unknowns_keys=unknowns_solved.keys(),
+                                         targets=targets, evaluate_helpers=False)))
+            if cresid > ctol:
+                raise RuntimeError(f"Target value residual {cresid} exceeds ctol specified for checking"
+                                   f" the consistency of the DAG without redirection.")
+        return ss
 
     def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                                 inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
