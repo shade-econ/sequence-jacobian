@@ -1,6 +1,5 @@
 import numpy as np
 import sequence_jacobian as sj
-from sequence_jacobian.utilities.multidim import multiply_ith_dimension
 from sequence_jacobian import het, simple, combine
 
 

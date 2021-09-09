@@ -5,7 +5,7 @@ import numpy as np
 from sequence_jacobian import combine
 from sequence_jacobian.models import rbc
 from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
-from sequence_jacobian.steady_state.classes import SteadyStateDict
+from sequence_jacobian import SteadyStateDict
 
 
 def test_jacobian_dict_block_impulses(rbc_dag):

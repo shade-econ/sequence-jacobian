@@ -1,10 +1,8 @@
-"""Various classes to support the computation of steady states"""
-
 from copy import deepcopy
 
 from ..utilities.misc import dict_diff
 from ..utilities.ordered_set import OrderedSet
-from ..blocks.support.bijection import Bijection
+from ..utilities.bijection import Bijection
 
 import numpy as np
 

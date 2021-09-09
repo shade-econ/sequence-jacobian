@@ -1,4 +1,4 @@
-from ...utilities.ordered_set import OrderedSet
+from .ordered_set import OrderedSet
 
 class Bijection:
     def __init__(self, map):

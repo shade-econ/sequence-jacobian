@@ -6,8 +6,8 @@ import scipy.optimize as opt
 from numbers import Real
 from functools import partial
 
-from .classes import SteadyStateDict
-from ..utilities import misc, solvers
+from ...classes.steady_state_dict import SteadyStateDict
+from ...utilities import misc, solvers
 
 
 
@@ -16,7 +16,7 @@ def augment_dag_w_helper_blocks(dag, calibration, unknowns, targets, helper_bloc
     to solve the provided set of helper targets analytically, reducing the number of unknowns/targets that need
     to be solved for numerically.
     """
-    from ..blocks.auxiliary_blocks.calibration_block import CalibrationBlock
+    from ..auxiliary_blocks.calibration_block import CalibrationBlock
 
     targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
     helper_targets = {t: targets[t] for t in helper_targets} if isinstance(helper_targets, list) else helper_targets

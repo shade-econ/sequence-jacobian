@@ -4,10 +4,9 @@ import numpy as np
 import pytest
 
 from sequence_jacobian import het
-from sequence_jacobian.steady_state.classes import SteadyStateDict
-from sequence_jacobian.blocks.support.impulse import ImpulseDict
-from sequence_jacobian.blocks.support.bijection import Bijection
-
+from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
+from sequence_jacobian.classes.impulse_dict import ImpulseDict
+from sequence_jacobian.utilities.bijection import Bijection
 
 def test_impulsedict(krusell_smith_dag):
     ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag

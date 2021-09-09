@@ -4,7 +4,7 @@ import scipy.optimize as opt
 from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.het_block import het
-from ..steady_state.classes import SteadyStateDict
+from ..classes.steady_state_dict import SteadyStateDict
 
 
 '''Part 1: HA block'''

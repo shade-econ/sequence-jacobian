@@ -2,15 +2,14 @@ import copy
 import numpy as np
 from typing import Optional, Dict
 
-from .support.impulse import ImpulseDict
-from .support.bijection import Bijection
-from ..primitives import Block
+from .block import Block
 from .. import utilities as utils
-from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict
-from .support.bijection import Bijection
+from ..classes.steady_state_dict import SteadyStateDict
+from ..classes.impulse_dict import ImpulseDict
+from ..classes.jacobian_dict import JacobianDict
 from ..utilities.function import ExtendedFunction, ExtendedParallelFunction
 from ..utilities.ordered_set import OrderedSet
+from ..utilities.bijection import Bijection
 from .support.het_support import ForwardShockableTransition, ExpectationShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition, Transition
 
 

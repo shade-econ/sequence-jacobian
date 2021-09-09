@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from sequence_jacobian.jacobian.classes import JacobianDict
+from sequence_jacobian.classes.jacobian_dict import JacobianDict
 
 
 def test_ks_jac(krusell_smith_dag):

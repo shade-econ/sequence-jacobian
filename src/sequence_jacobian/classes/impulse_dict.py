@@ -3,10 +3,9 @@
 import numpy as np
 from copy import deepcopy
 
-from sequence_jacobian.utilities.ordered_set import OrderedSet
-
-from ...steady_state.classes import SteadyStateDict
-from .bijection import Bijection
+from ..utilities.ordered_set import OrderedSet
+from ..utilities.bijection import Bijection
+from .steady_state_dict import SteadyStateDict
 
 
 class ImpulseDict:

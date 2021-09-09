@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from sequence_jacobian import simple
-from sequence_jacobian.steady_state.classes import SteadyStateDict
+from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
 
 
 @simple

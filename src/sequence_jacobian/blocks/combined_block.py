@@ -2,14 +2,11 @@
 
 from copy import deepcopy
 
-from ..primitives import Block
-from ..utilities.misc import dict_diff
+from .block import Block
 from ..utilities.graph import block_sort, find_intermediate_inputs
-from ..utilities.graph import topological_sort
-from ..utilities.ordered_set import OrderedSet
-from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
-from ..blocks.parent import Parent
-from ..jacobian.classes import JacobianDict
+from .auxiliary_blocks.jacobiandict_block import JacobianDictBlock
+from .support.parent import Parent
+from ..classes.jacobian_dict import JacobianDict
 
 
 def combine(blocks, name="", model_alias=False):

@@ -1,10 +1,8 @@
-from sequence_jacobian.utilities.ordered_set import OrderedSet
-
-from ..primitives import Block
-from ..blocks.simple_block import simple
-from ..blocks.parent import Parent
-
-from ..jacobian.classes import FactoredJacobianDict
+from .block import Block
+from .simple_block import simple
+from .support.parent import Parent
+from ..classes.jacobian_dict import FactoredJacobianDict
+from ..utilities.ordered_set import OrderedSet
 
 
 def solved(unknowns, targets, solver=None, solver_kwargs={}, name=""):

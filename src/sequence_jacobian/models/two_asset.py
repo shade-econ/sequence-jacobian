@@ -392,7 +392,7 @@ def two_asset_ss(beta_guess=0.976, chi1_guess=6.5, r=0.0125, tot_wealth=14, K=10
 
     ss.internal["household"].update({"chi": chi})
     ss.update({'pi': 0, 'piw': 0, 'Q': 1, 'Y': 1, 'N': 1, 'mc': mc, 'K': K, 'Z': Z, 'I': I, 'w': w, 'tax': tax,
-               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'Chi': Chi, 'phi': phi, 'wealth': tot_wealth,
+               'div': div, 'p': p, 'r': r, 'Bg': Bg, 'G': G, 'CHI': Chi, 'phi': phi, 'wealth': tot_wealth,
                'beta': beta, 'vphi': vphi, 'omega': omega, 'alpha': alpha, 'delta': delta, 'mup': mup, 'muw': muw,
                'frisch': frisch, 'epsI': epsI, 'a_grid': a_grid, 'b_grid': b_grid, 'e_grid': e_grid,
                'k_grid': k_grid, 'Pi': Pi, 'kappap': kappap, 'kappaw': kappaw, 'pshare': pshare, 'rstar': r, 'i': r,

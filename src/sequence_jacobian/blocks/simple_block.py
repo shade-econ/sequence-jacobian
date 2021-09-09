@@ -5,10 +5,11 @@ import numpy as np
 from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
-from .support.impulse import ImpulseDict
-from ..primitives import Block
-from ..steady_state.classes import SteadyStateDict
-from ..jacobian.classes import JacobianDict, SimpleSparse, ZeroMatrix
+from .block import Block
+from ..classes.steady_state_dict import SteadyStateDict
+from ..classes.impulse_dict import ImpulseDict
+from ..classes.jacobian_dict import JacobianDict
+from ..classes.sparse_jacobians import SimpleSparse, ZeroMatrix
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
 

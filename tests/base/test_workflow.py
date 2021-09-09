@@ -1,7 +1,7 @@
 import numpy as np
 import sequence_jacobian as sj
 from sequence_jacobian import het, simple, solved, combine, create_model 
-from sequence_jacobian.blocks.support.impulse import ImpulseDict
+from sequence_jacobian.classes.impulse_dict import ImpulseDict
 
 '''Part 1: Household block'''
 
@@ -123,13 +123,13 @@ def test_all():
     dag0 = create_model([hh, interest_rates, fiscal, mkt_clearing], name='HANK')
     ss0 = dag0.solve_steady_state(calibration, solver='hybr',
                                   unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-                                  targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+                                  targets={'asset_mkt': 0.0, 'tau': 0.334, 'MPC': 0.25})
 
     # DAG with SolvedBlock `fiscal_solved`
     dag1 = create_model([hh, interest_rates, fiscal_solved, mkt_clearing], name='HANK')
     ss1 = dag1.solve_steady_state(calibration, solver='hybr', dissolve=['fiscal_solved'],
                                   unknowns={'beta': .95, 'G': 0.2, 'B': 2.0},
-                                  targets={'asset_mkt': 0.0, 'tau': 0.334, 'Mpc': 0.25})
+                                  targets={'asset_mkt': 0.0, 'tau': 0.334, 'MPC': 0.25})
 
     assert all(np.allclose(ss0[k], ss1[k]) for k in ss0)
 
@@ -137,16 +137,18 @@ def test_all():
     Js = {'household': household.jacobian(ss1, inputs=['Y', 'rpost', 'tau', 'transfer'], outputs=['C', 'A'], T=300)}
 
     # Linear impulse responses from Jacobian vs directly
-    G = dag1.solve_jacobian(ss1, inputs=['r'], outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'],
+    G = dag1.solve_jacobian(ss1, inputs=['r'], outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'],
                             unknowns=['Y'], targets=['asset_mkt'], T=300, Js=Js)
     shock = ImpulseDict({'r': 1E-4 * 0.9 ** np.arange(300)})
     td_lin1 = G @ shock
     td_lin2 = dag1.solve_impulse_linear(ss1, unknowns=['Y'], targets=['asset_mkt'],
-                                       inputs=shock, outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'], Js=Js)
+                                       inputs=shock, outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js)
     assert all(np.allclose(td_lin1[k], td_lin2[k]) for k in td_lin1)
 
     # Nonlinear vs linear impulses
     td_nonlin = dag1.solve_impulse_nonlinear(ss1, unknowns=['Y'], targets=['asset_mkt'],
-                                             inputs=shock, outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'], Js=Js)
+                                             inputs=shock, outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js)
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
-    assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'Mpc')
+    assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'MPC')
+
+test_all()

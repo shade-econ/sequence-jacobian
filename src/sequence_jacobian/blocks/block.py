@@ -1,75 +1,31 @@
 """Primitives to provide clarity and structure on blocks/models work"""
 
-import abc
 import numpy as np
-from abc import ABCMeta as NativeABCMeta
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 from copy import deepcopy
 
-from sequence_jacobian.utilities.ordered_set import OrderedSet
+from ..classes.steady_state_dict import SteadyStateDict, UserProvidedSS
+from ..classes.impulse_dict import ImpulseDict
+from ..classes.jacobian_dict import JacobianDict, FactoredJacobianDict
+from .support.steady_state import provide_solver_default, solve_for_unknowns, compute_target_values
+from .support.parent import Parent
+from ..utilities import misc
+from ..utilities.bijection import Bijection
+from ..utilities.ordered_set import OrderedSet
 
-from .steady_state.support import provide_solver_default, solve_for_unknowns, compute_target_values
-from .steady_state.classes import SteadyStateDict, UserProvidedSS
-from .jacobian.classes import JacobianDict, FactoredJacobianDict
-from .blocks.support.impulse import ImpulseDict
-from .blocks.support.bijection import Bijection
-from .blocks.parent import Parent
-from .utilities import misc
-
-# Basic types
 Array = Any
 
-
-###############################################################################
-# Because abc doesn't implement "abstract attribute"s
-# https://stackoverflow.com/questions/23831510/abstract-attribute-not-property
-class DummyAttribute:
-    pass
-
-
-def abstract_attribute(obj=None):
-    if obj is None:
-        obj = DummyAttribute()
-    obj.__is_abstract_attribute__ = True
-    return obj
-
-
-class ABCMeta(NativeABCMeta):
-
-    def __call__(cls, *args, **kwargs):
-        instance = NativeABCMeta.__call__(cls, *args, **kwargs)
-        abstract_attributes = {
-            name
-            for name in dir(instance)
-            if getattr(getattr(instance, name), '__is_abstract_attribute__', False)
-        }
-        if abstract_attributes:
-            raise NotImplementedError(
-                "Cannot instantiate abstract class `{}` with"
-                " abstract attributes: `{}`.\n"
-                "Define concrete implementations of these attributes in the child class prior to preceding.".format(
-                    cls.__name__,
-                    '`, `'.join(abstract_attributes)
-                )
-            )
-        return instance
-###############################################################################
-
-
-class Block(abc.ABC, metaclass=ABCMeta):
+class Block:
     """The abstract base class for all `Block` objects."""
 
-    #@abc.abstractmethod
     def __init__(self):
         self.M = Bijection({})
         self.ss_valid_input_kwargs = misc.input_kwarg_list(self._steady_state)
 
-    @abstract_attribute
     def inputs(self):
         pass
 
-    @abstract_attribute
     def outputs(self):
         pass
 
@@ -176,7 +132,7 @@ class Block(abc.ABC, metaclass=ABCMeta):
                 raise ValueError("Must provide the dict of targets and their values that the `helper_blocks` solve"
                                  " in the `helper_targets` keyword argument.")
             else:
-                from .steady_state.support import augment_dag_w_helper_blocks
+                from .support.steady_state import augment_dag_w_helper_blocks
                 dag, ss, unknowns_to_solve, targets_to_solve = augment_dag_w_helper_blocks(self, calibration, unknowns,
                                                                                            targets, helper_blocks,
                                                                                            helper_targets)
@@ -277,14 +233,14 @@ class Block(abc.ABC, metaclass=ABCMeta):
         H_Z = self.jacobian(ss, inputs, targets, T, Js).pack(T)
         U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, inputs, T)
 
-        from . import combine
+        from sequence_jacobian import combine
         self_with_unknowns = combine([U_Z, self])
         return self_with_unknowns.jacobian(ss, inputs, unknowns | outputs, T, Js)
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:
             name = self.name + "_solved"
-        from .blocks.solved_block import SolvedBlock
+        from .solved_block import SolvedBlock
         return SolvedBlock(self, name, unknowns, targets, solver, solver_kwargs)
 
     def remap(self, map):

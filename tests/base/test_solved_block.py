@@ -1,7 +1,7 @@
 import numpy as np
 from sequence_jacobian import simple, solved
-from sequence_jacobian.steady_state.classes import SteadyStateDict
-from sequence_jacobian.jacobian.classes import FactoredJacobianDict
+from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
+from sequence_jacobian.classes.jacobian_dict import FactoredJacobianDict
 
 
 @simple
