@@ -55,7 +55,7 @@ class SolvedBlock(Block, Parent):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], unknowns=None, solver=None, ttol=1e-9, ctol=1e-9, verbose=False):
+    def _steady_state(self, calibration, dissolve=[], unknowns=None, solver="", ttol=1e-9, ctol=1e-9, verbose=False):
         if self.name in dissolve:
             solver = "solved"
             unknowns = {k: v for k, v in calibration.items() if k in self.unknowns}
@@ -64,11 +64,11 @@ class SolvedBlock(Block, Parent):
         # unknown values akin to the steady_state method of Block
         if unknowns is None:
             unknowns = self.unknowns
-        if solver is None:
+        if not solver:
             solver = self.solver
 
         return self.block.solve_steady_state(calibration, unknowns, self.targets, solver=solver,
-                                          ttol=ttol, ctol=ctol, verbose=verbose)
+                                             ttol=ttol, ctol=ctol, verbose=verbose)
 
     def _impulse_nonlinear(self, ss, inputs, outputs, Js):
         return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),

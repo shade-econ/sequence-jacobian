@@ -1,16 +1,15 @@
 """CombinedBlock class and the combine function to generate it"""
 
 from copy import deepcopy
-import numpy as np
 
-from .support.impulse import ImpulseDict
 from ..primitives import Block
-from .. import utilities as utils
+from ..utilities.misc import dict_diff
+from ..utilities.graph import block_sort, find_intermediate_inputs
+from ..utilities.graph import topological_sort
+from ..utilities.ordered_set import OrderedSet
 from ..blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from ..blocks.parent import Parent
-from ..steady_state.support import provide_solver_default
 from ..jacobian.classes import JacobianDict
-from ..steady_state.classes import SteadyStateDict
 
 
 def combine(blocks, name="", model_alias=False):
@@ -29,12 +28,12 @@ class CombinedBlock(Block, Parent):
     # To users: Do *not* manually change the attributes via assignment. Instantiating a
     #   CombinedBlock has some automated features that are inferred from initial instantiation but not from
     #   re-assignment of attributes post-instantiation.
-    def __init__(self, blocks, name="", model_alias=False):
+    def __init__(self, blocks, name="", model_alias=False, sorted_indices=None, intermediate_inputs=None):
         super().__init__()
 
         self._blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
-        self._sorted_indices = utils.graph.block_sort(blocks)
-        self._required = utils.graph.find_outputs_that_are_intermediate_inputs(blocks)
+        self._sorted_indices = block_sort(blocks) if sorted_indices is None else sorted_indices
+        self._required = find_intermediate_inputs(blocks) if intermediate_inputs is None else intermediate_inputs
         self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices]
 
         if not name:
@@ -61,18 +60,14 @@ class CombinedBlock(Block, Parent):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], helper_blocks=None, **kwargs):
-        if helper_blocks is None:
-            helper_blocks = []
-
-        topsorted = utils.graph.block_sort(self.blocks, calibration=calibration, helper_blocks=helper_blocks)
-        blocks_all = self.blocks + helper_blocks
+    def _steady_state(self, calibration, dissolve=[], **kwargs):
+        """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
 
         ss = deepcopy(calibration)
-        for i in topsorted:
+        for block in self.blocks:
             # TODO: make this inner_dissolve better, clumsy way to dispatch dissolve only to correct children
-            inner_dissolve = [k for k in dissolve if self.descendants[k] == blocks_all[i].name]
-            outputs = blocks_all[i].steady_state(ss, dissolve=inner_dissolve, **kwargs)
+            inner_dissolve = [k for k in dissolve if self.descendants[k] == block.name]
+            outputs = block.steady_state(ss, dissolve=inner_dissolve, **kwargs)
             ss.update(outputs)
 
         return ss
@@ -135,16 +130,6 @@ class CombinedBlock(Block, Parent):
             total_Js.update(J @ total_Js)
 
         return total_Js[original_outputs, :]
-
-    def solve_steady_state(self, calibration, unknowns, targets, solver=None, helper_blocks=None,
-                           sort_blocks=False, **kwargs):
-        if solver is None:
-            solver = provide_solver_default(unknowns)
-        if helper_blocks and sort_blocks is False:
-            sort_blocks = True
-
-        return super().solve_steady_state(calibration, unknowns, targets, solver=solver,
-                                          helper_blocks=helper_blocks, sort_blocks=sort_blocks, **kwargs)
 
 
 # Useful type aliases

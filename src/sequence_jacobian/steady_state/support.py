@@ -1,24 +1,41 @@
 """Various lower-level functions to support the computation of steady states"""
 
 import warnings
-from numbers import Real
 import numpy as np
+import scipy.optimize as opt
+from numbers import Real
+from functools import partial
+
+from .classes import SteadyStateDict
+from ..utilities import misc, solvers
 
 
-def instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targets,
-                                            block_kwargs, solver_kwargs, constrained_kwargs):
+
+def augment_dag_w_helper_blocks(dag, calibration, unknowns, targets, helper_blocks, helper_targets):
+    """For a given DAG (either an individual Block or CombinedBlock), add a set of helper blocks, which help
+    to solve the provided set of helper targets analytically, reducing the number of unknowns/targets that need
+    to be solved for numerically.
+    """
+    from ..blocks.auxiliary_blocks.calibration_block import CalibrationBlock
+
+    targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
+    helper_targets = {t: targets[t] for t in helper_targets} if isinstance(helper_targets, list) else helper_targets
+    helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
+
+    unknowns_to_solve = misc.dict_diff(unknowns, helper_unknowns)
+    targets_to_solve = misc.dict_diff(targets, helper_targets)
+
+    ss = SteadyStateDict({**calibration, **helper_targets})
+    blocks = dag.blocks if hasattr(dag, "blocks") else [dag]
+    dag_augmented = CalibrationBlock(blocks + helper_blocks, helper_blocks=helper_blocks, calibration=ss)
+
+    return dag_augmented, ss, unknowns_to_solve, targets_to_solve
+
+
+def instantiate_steady_state_mutable_kwargs(dissolve, block_kwargs, solver_kwargs, constrained_kwargs):
     """Instantiate mutable types from `None` default values in the steady_state function"""
     if dissolve is None:
         dissolve = []
-    if helper_blocks is None and helper_targets is None:
-        helper_blocks = []
-        helper_targets = []
-    elif helper_blocks is not None and helper_targets is None:
-        raise ValueError("If the user has provided `helper_blocks`, the kwarg `helper_targets` must be specified"
-                         " indicating which target variables are handled by the `helper_blocks`.")
-    elif helper_blocks is None and helper_targets is not None:
-        raise ValueError("If the user has provided `helper_targets`, the kwarg `helper_blocks` must be specified"
-                         " indicating which helper blocks handle the `helper_targets`")
     if block_kwargs is None:
         block_kwargs = {}
     if solver_kwargs is None:
@@ -26,7 +43,7 @@ def instantiate_steady_state_mutable_kwargs(dissolve, helper_blocks, helper_targ
     if constrained_kwargs is None:
         constrained_kwargs = {}
 
-    return dissolve, helper_blocks, helper_targets, block_kwargs, solver_kwargs, constrained_kwargs
+    return dissolve, block_kwargs, solver_kwargs, constrained_kwargs
 
 
 def provide_solver_default(unknowns):
@@ -84,15 +101,159 @@ def compute_target_values(targets, potential_args):
             target_values[i] = potential_args[t] - potential_args[v]
         else:
             target_values[i] = potential_args[t] - v
-        # TODO: Implement feature to allow for an arbitrary explicit function expression as a potential target value
-        #   e.g. targets = {"goods_mkt": "Y - C - I"}, so long as the expression is only comprise of generic numerical
-        #   operators and variables solved for along the DAG prior to reaching the target.
 
     # Univariate solvers require float return values (and not lists)
     if len(targets) == 1:
         return target_values[0]
     else:
         return target_values
+
+
+def compare_steady_states(ss_ref, ss_comp, tol=1e-8, name_map=None, internal=True, check_same_keys=True, verbose=False):
+    """Check if two steady state dicts (can be flat dicts or SteadyStateDict objects) are the same up to a tolerance"""
+    if name_map is None:
+        name_map = {}
+
+    valid = True
+
+    # Compare the steady state values present in both ss_ref and ss_comp
+    if internal:
+        if not hasattr(ss_ref, "internal") or not hasattr(ss_comp, "internal"):
+            warnings.warn("The provided steady state dicts do not both have .internal attrs. Will only compare"
+                          " top-level values")
+            ds_to_check = [(ss_ref, ss_comp, "toplevel")]
+        else:
+            ds_to_check = [(ss_ref, ss_comp, "toplevel")] + [(ss_ref.internal[i], ss_comp.internal[i], i + "_internal") for i in ss_ref.internal]
+    else:
+        ds_to_check = [(ss_ref, ss_comp, "toplevel")]
+
+    for ds in ds_to_check:
+        d_ref, d_comp, level = ds
+        for key_ref in d_ref.keys():
+            if key_ref in d_comp.keys():
+                key_comp = key_ref
+            elif key_ref in name_map:
+                key_comp = name_map[key_ref]
+            else:
+                continue
+
+            if np.isscalar(d_ref[key_ref]):
+                resid = abs(d_ref[key_ref] - d_comp[key_comp])
+            else:
+                resid = np.linalg.norm(d_ref[key_ref].ravel() - d_comp[key_comp].ravel(), np.inf)
+            if verbose:
+                print(f"{key_ref} resid: {resid}")
+            else:
+                if not np.all(np.isclose(resid, 0., atol=tol)):
+                    valid = False
+
+        # Show the steady state values present in only one of d_ref or d_comp, i.e. if there are missing keys
+        if check_same_keys:
+            d_ref_incl_mapped = set(d_ref.keys()) - set(name_map.keys())
+            d_comp_incl_mapped = set(d_comp.keys()) - set(name_map.values())
+            diff_keys = d_ref_incl_mapped.symmetric_difference(d_comp_incl_mapped)
+            if diff_keys:
+                if verbose:
+                    print(f"At level '{level}', the keys present only one of the two steady state dicts are {diff_keys}")
+                valid = False
+
+    return valid
+
+
+def solve_for_unknowns(residual, unknowns, solver, solver_kwargs, residual_kwargs=None,
+                       constrained_method="linear_continuation", constrained_kwargs=None,
+                       tol=2e-12, verbose=False):
+    """Given a residual function (constructed within steady_state) and a set of bounds or initial values for
+    the set of unknowns, solve for the root.
+
+    residual: `function`
+        A function to be supplied to a numerical solver that takes unknown values as arguments
+        and returns computed targets.
+    unknowns: `dict`
+        Refer to the `steady_state` function docstring for the "unknowns" variable
+    targets: `dict`
+        Refer to the `steady_state` function docstring for the "targets" variable
+    tol: `float`
+        The absolute convergence tolerance of the computed target to the desired target value in the numerical solver
+    solver: `str`
+        Refer to the `steady_state` function docstring for the "solver" variable
+    solver_kwargs:
+        Refer to the `steady_state` function docstring for the "solver_kwargs" variable
+
+    return: The root[s] of the residual function as either a scalar (float) or a list of floats
+    """
+    if residual_kwargs is None:
+        residual_kwargs = {}
+
+    scipy_optimize_uni_solvers = ["bisect", "brentq", "brenth", "ridder", "toms748", "newton", "secant", "halley"]
+    scipy_optimize_multi_solvers = ["hybr", "lm", "broyden1", "broyden2", "anderson", "linearmixing", "diagbroyden",
+                                    "excitingmixing", "krylov", "df-sane"]
+
+    # Wrap kwargs into the residual function
+    residual_f = partial(residual, **residual_kwargs)
+
+    if solver is None:
+        raise RuntimeError("Must provide a numerical solver from the following set: brentq, broyden, solved")
+    elif solver in scipy_optimize_uni_solvers:
+        initial_values_or_bounds = extract_univariate_initial_values_or_bounds(unknowns)
+        result = opt.root_scalar(residual_f, method=solver, xtol=tol,
+                                 **initial_values_or_bounds, **solver_kwargs)
+        if not result.converged:
+            raise ValueError(f"Steady-state solver, {solver}, did not converge.")
+        unknown_solutions = result.root
+    elif solver in scipy_optimize_multi_solvers:
+        initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
+        # If no bounds were provided
+        if not bounds:
+            result = opt.root(residual_f, initial_values,
+                              method=solver, tol=tol, **solver_kwargs)
+        else:
+            constrained_residual = constrained_multivariate_residual(residual_f, bounds, verbose=verbose,
+                                                                     method=constrained_method,
+                                                                     **constrained_kwargs)
+            result = opt.root(constrained_residual, initial_values,
+                              method=solver, tol=tol, **solver_kwargs)
+        if not result.success:
+            raise ValueError(f"Steady-state solver, {solver}, did not converge."
+                             f" The termination status is {result.status}.")
+        unknown_solutions = list(result.x)
+    # TODO: Implement a more general interface for custom solvers, so we don't need to add new elifs at this level
+    #  everytime a new custom solver is implemented.
+    elif solver == "broyden_custom":
+        initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
+        # If no bounds were provided
+        if not bounds:
+            unknown_solutions, _ = solvers.broyden_solver(residual_f, initial_values,
+                                                          tol=tol, verbose=verbose, **solver_kwargs)
+        else:
+            constrained_residual = constrained_multivariate_residual(residual_f, bounds, verbose=verbose,
+                                                                     method=constrained_method,
+                                                                     **constrained_kwargs)
+            unknown_solutions, _ = solvers.broyden_solver(constrained_residual, initial_values,
+                                                          verbose=verbose, tol=tol, **solver_kwargs)
+        unknown_solutions = list(unknown_solutions)
+    elif solver == "newton_custom":
+        initial_values, bounds = extract_multivariate_initial_values_and_bounds(unknowns)
+        # If no bounds were provided
+        if not bounds:
+            unknown_solutions, _ = solvers.newton_solver(residual_f, initial_values,
+                                                         tol=tol, verbose=verbose, **solver_kwargs)
+        else:
+            constrained_residual = constrained_multivariate_residual(residual_f, bounds, verbose=verbose,
+                                                                     method=constrained_method,
+                                                                     **constrained_kwargs)
+            unknown_solutions, _ = solvers.newton_solver(constrained_residual, initial_values,
+                                                         tol=tol, verbose=verbose, **solver_kwargs)
+        unknown_solutions = list(unknown_solutions)
+    elif solver == "solved":
+        # If the model either doesn't require a numerical solution or is being evaluated at a candidate solution
+        # simply call residual_f once to populate the `ss_values` dict
+        residual_f(unknowns.values())
+        unknown_solutions = unknowns.values()
+    else:
+        raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
+
+    return dict(misc.smart_zip(unknowns.keys(), unknown_solutions))
 
 
 def subset_helper_block_unknowns(unknowns_all, helper_blocks, helper_targets):
