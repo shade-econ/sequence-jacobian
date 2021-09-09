@@ -1,12 +1,11 @@
 """Class definition of a simple block"""
 
-import warnings
 import numpy as np
 from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .block import Block
-from ..classes.steady_state_dict import SteadyStateDict, ImpulseDict, JacobianDict, SimpleSparse, ZeroMatrix
+from ..classes import SteadyStateDict, ImpulseDict, JacobianDict, SimpleSparse, ZeroMatrix
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
 
