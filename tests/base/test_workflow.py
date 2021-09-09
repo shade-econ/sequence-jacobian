@@ -14,23 +14,6 @@ def household_init(a_grid, y, rpost, sigma):
 
 @het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
 def household(Va_p, a_grid, y, rpost, beta, sigma):
-    """
-    Backward step in simple incomplete market model. Assumes CRRA utility.
-    Parameters
-    ----------
-    Va_p    : array (E, A), marginal value of assets tomorrow (backward iterator)
-    Pi_p    : array (E, E), Markov matrix for skills tomorrow
-    a_grid  : array (A), asset grid
-    y       : array (E), non-financial income
-    rpost   : scalar, ex-post return on assets
-    beta    : scalar, discount factor
-    sigma   : scalar, utility parameter
-    Returns
-    -------
-    Va    : array (E, A), marginal value of assets today
-    a     : array (E, A), asset policy today
-    c     : array (E, A), consumption policy today
-    """
     c_nextgrid = (beta * Va_p) ** (-1 / sigma)
     coh = (1 + rpost) * a_grid[np.newaxis, :] + y[:, np.newaxis]
     a = sj.utilities.interpolate.interpolate_y(c_nextgrid + a_grid, coh, a_grid)  # (x, xq, y)
@@ -167,4 +150,3 @@ def test_all():
                                              inputs=shock, outputs=['Y', 'C', 'Mpc', 'asset_mkt', 'goods_mkt'], Js=Js)
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
     assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'Mpc')
-

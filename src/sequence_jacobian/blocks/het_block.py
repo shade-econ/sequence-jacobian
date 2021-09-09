@@ -428,7 +428,7 @@ class HetBlock(Block):
         # add effects from perturbation to exog on beginning-of-period expectations in curlyV and curlyY
         if maybe_exog_shock:
             for k in curlyV:
-                shock = exog[k].expectation_shock(shocks_to_exog)
+                shock = exog[k].expectation_shock(shocks_to_exog)  # this does not work
                 if shock is not None:
                     curlyV[k] += shock
             
@@ -444,6 +444,7 @@ class HetBlock(Block):
                             differentiable_hetinput, differentiable_hetoutput,
                             law_of_motion: ForwardShockableTransition, exog: Dict[str, ExpectationShockableTransition]):
 
+        # TODO: what if input_shocked enters both hetinput and backward_step_fun?
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
             # if input_shocked is an input to hetinput, take numerical diff to get response
             din_dict = differentiable_hetinput.diff2({input_shocked: 1})
