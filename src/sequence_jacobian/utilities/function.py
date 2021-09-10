@@ -20,22 +20,12 @@ def input_list(f):
     return OrderedSet(inspect.signature(f).parameters)
 
 
-def input_arg_list(f):
-    """Return list of function positional arguments *only*"""
-    arg_list = []
-    for p in inspect.signature(f).parameters.values():
-        if p.default == p.empty:
-            arg_list.append(p.name)
-    return OrderedSet(arg_list)
-
-
-def input_kwarg_list(f):
-    """Return list of function keyword arguments *only*"""
-    kwarg_list = []
+def input_defaults(f):
+    defaults = {}
     for p in inspect.signature(f).parameters.values():
         if p.default != p.empty:
-            kwarg_list.append(p.name)
-    return OrderedSet(kwarg_list)
+            defaults[p.name] = p.default
+    return defaults
 
 
 def output_list(f):

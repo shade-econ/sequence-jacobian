@@ -8,7 +8,7 @@ from copy import deepcopy
 from .support.steady_state import provide_solver_default, solve_for_unknowns, compute_target_values
 from .support.parent import Parent
 from ..utilities import misc
-from ..utilities.function import input_list, input_kwarg_list
+from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
@@ -21,18 +21,12 @@ class Block:
     def __init__(self):
         self.M = Bijection({})
 
-        self.steady_state_options = input_list(self._steady_state) - ['calibration', 'dissolve', 'evaluate_helpers', 'options']
-
-        standard = ['ss', 'inputs', 'outputs', 'T', 'Js', 'options']
-        self.impulse_nonlinear_options = input_list(self._impulse_nonlinear) - standard
-        self.impulse_linear_options = input_list(self._impulse_linear) - standard
-        self.jacobian_options = input_list(self._jacobian) - standard
-
-        if isinstance(self, Parent):
-            self.partial_jacobians_options = input_list(self._partial_jacobians) - standard
+        self.steady_state_options = self.input_defaults_smart('_steady_state')
+        self.impulse_nonlinear_options = self.input_defaults_smart('_impulse_nonlinear')
+        self.impulse_linear_options = self.input_defaults_smart('_impulse_linear')
+        self.jacobian_options = self.input_defaults_smart('_jacobian')
+        self.partial_jacobians_options = self.input_defaults_smart('_partial_jacobians')
     
-        self.ss_valid_input_kwargs = input_kwarg_list(self._steady_state)
-
     def inputs(self):
         pass
 
@@ -41,7 +35,7 @@ class Block:
 
     def steady_state(self, calibration: Union[SteadyStateDict, UserProvidedSS], 
                      dissolve: List[str] = [], evaluate_helpers: bool = False,
-                     options: Dict[str, dict] = {}, **kwargs) -> SteadyStateDict:
+                     helper_targets: dict = {}, options: Dict[str, dict] = {}, **kwargs) -> SteadyStateDict:
         """Evaluate a partial equilibrium steady state of Block given a `calibration`."""
         # Special handling: 1) Find inputs/outputs of the Block w/o helpers blocks
         #                   2) Add all unknowns of dissolved blocks to inputs
@@ -56,7 +50,10 @@ class Block:
         calibration = SteadyStateDict(calibration)[inputs]
         own_options = self.get_options(options, kwargs, 'steady_state')
         if isinstance(self, Parent):
-            return self.M @ self._steady_state(self.M.inv @ calibration, dissolve=dissolve, evaluate_helpers=evaluate_helpers, options=options, **own_options)
+            if hasattr(self, 'i_am_calibration_block'):
+                own_options['evaluate_helpers'] = evaluate_helpers
+                own_options['helper_targets'] = helper_targets
+            return self.M @ self._steady_state(self.M.inv @ calibration, dissolve=dissolve, options=options, **own_options)
         else:
             return self.M @ self._steady_state(self.M.inv @ calibration, **own_options)
 
@@ -125,8 +122,7 @@ class Block:
         
         # if it's a leaf, call Jacobian method, don't supply Js
         if not isinstance(self, Parent):
-            # TODO should this be remapped?
-            return self._jacobian(ss, inputs, outputs, T, **own_options)
+            return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, T, **own_options)
         
         # otherwise remap own J (currently needed for SolvedBlock only)
         Js = Js.copy()
@@ -134,21 +130,21 @@ class Block:
             Js[self.name] = self.M.inv @ Js[self.name]
         return self.M @ self._jacobian(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, T=T, Js=Js, options=options, **own_options)
 
+    solve_steady_state_options = dict(solver="", solver_kwargs={}, ttol=1e-12, ctol=1e-9, verbose=False,
+                                check_consistency=True, constrained_method="linear_continuation", constrained_kwargs={})
+
     def solve_steady_state(self, calibration: Dict[str, Union[Real, Array]],
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]], dissolve: List = [],
                            helper_blocks: List = [], helper_targets: Dict = {},
-                           options: Dict[str, dict] = {},
-                           solver: str = "", solver_kwargs: Dict = {},
-                           ttol: float = 1e-12, ctol: float = 1e-9,
-                           verbose: bool = False, check_consistency: bool = True,
-                           constrained_method: str = "linear_continuation",
-                           constrained_kwargs: Dict = {},  **kwargs):
+                           options: Dict[str, dict] = {}, **kwargs):
         """Evaluate a general equilibrium steady state of Block given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
-        if helper_blocks is not None:
-            if helper_targets is None:
+        opts = self.get_options(options, kwargs, 'solve_steady_state')
+
+        if helper_blocks:
+            if not helper_targets:
                 raise ValueError("Must provide the dict of targets and their values that the `helper_blocks` solve"
                                  " in the `helper_targets` keyword argument.")
             else:
@@ -159,33 +155,32 @@ class Block:
         else:
             dag, ss, unknowns_to_solve, targets_to_solve = self, SteadyStateDict(calibration), unknowns, targets
 
-        solver = solver if solver else provide_solver_default(unknowns)
+        solver = opts['solver'] if opts['solver'] else provide_solver_default(unknowns)
 
         def residual(unknown_values, unknowns_keys=unknowns_to_solve.keys(), targets=targets_to_solve,
                      evaluate_helpers=True):
             ss.update(misc.smart_zip(unknowns_keys, unknown_values))
-            kwargs['evaluate_helpers'] = evaluate_helpers
-            ss.update(dag.steady_state(ss, dissolve=dissolve, options=options, **kwargs))
+            ss.update(dag.steady_state(ss, dissolve=dissolve, options=options, evaluate_helpers=evaluate_helpers, **kwargs))
             return compute_target_values(targets, ss)
 
-        unknowns_solved = solve_for_unknowns(residual, unknowns_to_solve, solver, solver_kwargs, tol=ttol, verbose=verbose,
-                                             constrained_method=constrained_method, constrained_kwargs=constrained_kwargs)
+        unknowns_solved = solve_for_unknowns(residual, unknowns_to_solve, solver, opts['solver_kwargs'], tol=opts['ttol'], verbose=opts['verbose'],
+                                             constrained_method=opts['constrained_method'], constrained_kwargs=opts['constrained_kwargs'])
 
-        if helper_blocks and helper_targets and check_consistency:
+        if helper_blocks and helper_targets and opts['check_consistency']:
             # Add in the unknowns solved analytically by helper blocks and re-evaluate the DAG without helpers
             unknowns_solved.update({k: ss[k] for k in unknowns if k not in unknowns_solved})
             cresid = np.max(abs(residual(unknowns_solved.values(), unknowns_keys=unknowns_solved.keys(),
                                          targets=targets, evaluate_helpers=False)))
-            if cresid > ctol:
+            if cresid > opts['ctol']:
                 raise RuntimeError(f"Target value residual {cresid} exceeds ctol specified for checking"
                                    f" the consistency of the DAG without redirection.")
         return ss
 
+    solve_impulse_nonlinear_options = dict(tol=1E-8, maxit=30, verbose=True)
+
     def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                                 inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
-                                Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, 
-                                tol: float = 1E-8, maxit: int = 30,
-                                verbose: bool = True, **kwargs) -> ImpulseDict:
+                                Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of shocks in `inputs` 
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the `targets` that must hold in general equilibrium"""
@@ -198,23 +193,29 @@ class Block:
         H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs)
         H_U_factored = FactoredJacobianDict(H_U, T)
 
+        opts = self.get_options(options, kwargs, 'solve_impulse_nonlinear')
+
         # Newton's method
         U = ImpulseDict({k: np.zeros(T) for k in unknowns})
-        for it in range(maxit):
+        if opts['verbose']:
+            print(f'Solving {self.name} for {unknowns} to hit {targets}')
+        for it in range(opts['maxit']):
             results = self.impulse_nonlinear(ss, inputs | U, outputs | targets, Js, options, **kwargs)
             errors = {k: np.max(np.abs(results[k])) for k in targets}
-            if verbose:
+            if opts['verbose']:
                 print(f'On iteration {it}')
                 for k in errors:
                     print(f'   max error for {k} is {errors[k]:.2E}')
-            if all(v < tol for v in errors.values()):
+            if all(v < opts['tol'] for v in errors.values()):
                 break
             else:
                 U += H_U_factored.apply(results)
         else:
-            raise ValueError(f'No convergence after {maxit} backward iterations!')
+            raise ValueError(f'No convergence after {opts["maxit"]} backward iterations!')
 
         return results | U
+
+    solve_impulse_linear_options = {}
 
     def solve_impulse_linear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                              inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
@@ -234,6 +235,8 @@ class Block:
         dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, T)
 
         return self.impulse_linear(ss, dU | inputs, outputs, Js, options, **kwargs)
+
+    solve_jacobian_options = {}
 
     def solve_jacobian(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                        inputs: List[str], outputs: Optional[List[str]] = None, T: Optional[int] = None,
@@ -292,16 +295,18 @@ class Block:
         return OrderedSet(inputs), OrderedSet(outputs)
 
     def get_options(self, options: dict, kwargs, method):
-        if self.name in options:
-            options = {**options[self.name], **kwargs}
-        else:
-            options = kwargs
-    
-        return {k: v for k, v in options.items() if k in getattr(self, method + "_options")}
+        own_options = getattr(self, method + "_options")
 
-    solve_jacobian_options = OrderedSet([])
-    solve_impulse_linear_options = OrderedSet([])
-    solve_impulse_nonlinear_options = OrderedSet(['tol', 'maxit', 'verbose'])
-    solve_steady_state_options = (input_list(solve_steady_state) - 
-                    ['self', 'calibration', 'unknowns', 'targets', 'dissolve', 'helper_blocks', 'helper_targets'])
-    
+        if self.name in options:
+            merged = {**own_options, **options[self.name], **kwargs}
+        else:
+            merged = {**own_options, **kwargs}
+        
+        return {k: merged[k] for k in own_options}
+
+    def input_defaults_smart(self, methodname):
+        method = getattr(self, methodname, None)
+        if method is None:
+            return {}
+        else:
+            return input_defaults(method)

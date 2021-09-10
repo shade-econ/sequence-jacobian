@@ -150,5 +150,3 @@ def test_all():
                                              inputs=shock, outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js)
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
     assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'MPC')
-
-test_all()

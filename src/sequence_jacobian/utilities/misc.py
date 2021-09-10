@@ -140,4 +140,4 @@ def logsum(vfun, lam):
     return VE
 
 
-from .function import (input_list, input_arg_list, input_kwarg_list, output_list)
+#from .function import (input_list, output_list)

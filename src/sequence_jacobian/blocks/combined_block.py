@@ -57,7 +57,7 @@ class CombinedBlock(Block, Parent):
         else:
             return f"<CombinedBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], **kwargs):
+    def _steady_state(self, calibration, dissolve, **kwargs):
         """Evaluate a partial equilibrium steady state of the CombinedBlock given a `calibration`"""
 
         ss = calibration.copy()

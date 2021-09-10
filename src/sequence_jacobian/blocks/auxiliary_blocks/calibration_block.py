@@ -9,6 +9,8 @@ class CalibrationBlock(CombinedBlock):
     """A CalibrationBlock is a Block object, which includes a set of 'helper' blocks to be used for altering
     the behavior of .steady_state and .solve_steady_state methods. In practice, the common use-case for an
     CalibrationBlock is to help .solve_steady_state solve for a subset of the unknowns/targets analytically."""
+    i_am_calibration_block = True
+
     def __init__(self, blocks, helper_blocks, calibration, name=""):
         sorted_indices, inputs, outputs = block_sort_w_helpers(blocks, helper_blocks, calibration, return_io=True)
         intermediate_inputs = find_intermediate_inputs_w_helpers(blocks, helper_blocks=helper_blocks)
@@ -24,7 +26,7 @@ class CalibrationBlock(CombinedBlock):
     def __repr__(self):
         return f"<CalibrationBlock '{self.name}'>"
 
-    def _steady_state(self, calibration, dissolve=[], helper_targets={}, evaluate_helpers=True, **block_kwargs):
+    def _steady_state(self, calibration, dissolve, helper_targets, evaluate_helpers, **block_kwargs):
         """Evaluate a partial equilibrium steady state of the RedirectedBlock given a `calibration`"""
         ss = calibration.copy()
         helper_outputs = {}
