@@ -86,7 +86,7 @@ class Block:
         if isinstance(self, Parent):
             return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, options, **own_options)
         else:
-            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, **own_options)
+            return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, **own_options)
 
     def partial_jacobians(self, ss: SteadyStateDict, inputs: Optional[List[str]] = None, outputs: Optional[List[str]] = None,
                           T: Optional[int] = None, Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs):
@@ -138,11 +138,12 @@ class Block:
                            unknowns: Dict[str, Union[Real, Tuple[Real, Real]]],
                            targets: Union[Array, Dict[str, Union[str, Real]]], dissolve: List = [],
                            helper_blocks: List = [], helper_targets: Dict = {},
+                           options: Dict[str, dict] = {},
                            solver: str = "", solver_kwargs: Dict = {},
                            ttol: float = 1e-12, ctol: float = 1e-9,
                            verbose: bool = False, check_consistency: bool = True,
                            constrained_method: str = "linear_continuation",
-                           constrained_kwargs: Dict = {}, options: Dict[str, dict] = {}, **kwargs):
+                           constrained_kwargs: Dict = {},  **kwargs):
         """Evaluate a general equilibrium steady state of Block given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
@@ -182,9 +183,9 @@ class Block:
 
     def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                                 inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
-                                Js: Dict[str, JacobianDict] = {},
+                                Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, 
                                 tol: float = 1E-8, maxit: int = 30,
-                                verbose: bool = True, options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
+                                verbose: bool = True, **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of shocks in `inputs` 
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the `targets` that must hold in general equilibrium"""
@@ -296,7 +297,7 @@ class Block:
         else:
             options = kwargs
     
-        return {k: v for k, v in options.items() if k in self.getattr(method + "_options")}
+        return {k: v for k, v in options.items() if k in getattr(self, method + "_options")}
 
     solve_jacobian_options = OrderedSet([])
     solve_impulse_linear_options = OrderedSet([])
