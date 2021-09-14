@@ -42,7 +42,7 @@ def test_block_consistency(block, ss):
 
     # now if we put in constant inputs, td should give us the same!
     td_results = block.impulse_nonlinear(ss_results, {k: np.zeros(20) for k in ss.keys()})
-    for v in td_results.impulse.values():
+    for v in td_results.values():
         assert np.all(v == 0)
 
     # now get the Jacobian
@@ -57,8 +57,8 @@ def test_block_consistency(block, ss):
     td_up = block.impulse_nonlinear(ss_results, {i: h*shock for i, shock in all_shocks.items()})
     td_dn = block.impulse_nonlinear(ss_results, {i: -h*shock for i, shock in all_shocks.items()})
     
-    linear_impulses = {o: (td_up.impulse[o] - td_dn.impulse[o])/(2*h) for o in td_up.impulse}
-    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in td_up.impulse}
+    linear_impulses = {o: (td_up[o] - td_dn[o])/(2*h) for o in td_up}
+    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in td_up}
 
     for o in linear_impulses:
         assert np.all(np.abs(linear_impulses[o] - linear_impulses_from_jac[o]) < 1E-5)

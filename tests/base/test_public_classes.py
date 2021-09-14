@@ -22,7 +22,7 @@ def test_impulsedict(krusell_smith_dag):
 
     # Merge method
     temp = ir_lin[['C', 'K']] | ir_lin[['r']]
-    assert list(temp.impulse.keys()) == ['C', 'K', 'r']
+    assert list(temp.keys()) == ['C', 'K', 'r']
 
     # SS and scalar multiplication
     dC1 = 100 * ir_lin['C'] / ss['C']
