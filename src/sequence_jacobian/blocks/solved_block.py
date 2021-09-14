@@ -69,9 +69,9 @@ class SolvedBlock(Block, Parent):
 
         return self.block.solve_steady_state(calibration, unknowns, self.targets, options, **kwargs)
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, Js, options, **kwargs):
+    def _impulse_nonlinear(self, ss, inputs, outputs, internals, Js, options, **kwargs):
         return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                                  inputs, outputs - self.unknowns.keys(), Js, options, **kwargs)
+                                                  inputs, outputs - self.unknowns.keys(), internals, Js, options, **kwargs)
 
     def _impulse_linear(self, ss, inputs, outputs, Js, options):
         return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),

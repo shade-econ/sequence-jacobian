@@ -106,29 +106,27 @@ class HetBlock(Block):
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internals},
                                {self.name: {k: ss[k] for k in ss if k in self.internals}})
 
-    def _impulse_nonlinear(self, ssin, inputs, outputs, monotonic=False, returnindividual=False):
+    def _impulse_nonlinear(self, ssin, inputs, outputs, internals, monotonic=False):
         ss = self.extract_ss_dict(ssin)
 
         # identify individual variable paths we want from backward iteration, then run it
         toreturn = self.non_backward_outputs
         if self.hetoutputs is not None:
             toreturn = toreturn | self.hetoutputs.outputs
+        toreturn = (toreturn | internals) - ['D', 'Dbeg']
         
         individual_paths, exog_path = self.backward_nonlinear(ss, inputs, toreturn)
 
-        # run forward iteration to get path of distribution (both Dbeg - what to do with this? - and D)
-        Dbeg_path, D_path = self.forward_nonlinear(ss, individual_paths, exog_path)
+        # run forward iteration to get path of distribution, add to individual_paths
+        self.forward_nonlinear(ss, individual_paths, exog_path)
 
         # obtain aggregates of all outputs, made uppercase
-        aggregates = {o.upper(): utils.optimized_routines.fast_aggregate(D_path, individual_paths[o])
-                      for o in individual_paths}
+        aggregates = {o: utils.optimized_routines.fast_aggregate(
+                        individual_paths['D'], individual_paths[self.M_outputs.inv @ o]) for o in outputs}
 
-        # return either this, or also include distributional information
-        # TODO: rethink this when dealing with internals, including Dbeg
-        if returnindividual:
-            return ImpulseDict({**aggregates, **individual_paths, 'D': D_path}) - ssin
-        else:
-            return ImpulseDict(aggregates)[outputs] - ssin
+        # obtain internals
+        internals_dict = {self.name: {k: individual_paths[k] for k in internals}}
+        return ImpulseDict(aggregates, internals_dict, inputs.T) - ssin
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
@@ -243,7 +241,7 @@ class HetBlock(Block):
 
     def backward_nonlinear(self, ss, inputs, toreturn):
         T = inputs.T
-        individual_paths = {k: np.empty((T,) + ss['D'].shape) for k in toreturn}
+        individual_paths = {k: np.empty((T,) + ss[k].shape) for k in toreturn}
 
         backdict = ss.copy()
         exog = self.make_exog_law_of_motion(backdict)
@@ -286,7 +284,8 @@ class HetBlock(Block):
                 Dbeg = endog.forward(D_path[t, ...])
                 Dbeg_path[t+1, ...] = Dbeg # make this optional
 
-        return Dbeg_path, D_path
+        individual_paths['D'] = D_path
+        individual_paths['Dbeg'] = Dbeg_path
 
     '''Jacobian calculation: four parts of fake news algorithm, plus support methods'''
 

@@ -25,7 +25,9 @@ class Bijection:
         return self.map.get(k, k)
 
     def __matmul__(self, x):
-        if isinstance(x, Bijection):
+        if isinstance(x, str):
+            return self[x]
+        elif isinstance(x, Bijection):
             # compose self: v -> u with x: w -> v
             # assume everything missing in either is the identity
             M = {}
@@ -50,7 +52,9 @@ class Bijection:
             return NotImplemented
 
     def __rmatmul__(self, x):
-        if isinstance(x, dict):
+        if isinstance(x, str):
+            return self[x]
+        elif isinstance(x, dict):
             return {self[k]: v for k, v in x.items()}
         elif isinstance(x, list):
             return [self[k] for k in x]

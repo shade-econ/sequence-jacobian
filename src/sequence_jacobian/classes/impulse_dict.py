@@ -22,46 +22,62 @@ class ImpulseDict(ResultDict):
             self.T = (T if T is not None else self.infer_length())
 
     def __add__(self, other):
-        if isinstance(other, (float, int)):
-            return type(self)({k: v + other for k, v in self.toplevel.items()})
-        elif isinstance(other, (SteadyStateDict, ImpulseDict)):
-            return type(self)({k: v + other[k] for k, v in self.toplevel.items()})
-        else:
-            return NotImplementedError('Only a number or a SteadyStateDict can be added from an ImpulseDict.')
+        return self.binary_operation(other, lambda a, b: a + b)
+
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __sub__(self, other):
-        if isinstance(other, (float, int)):
-            return type(self)({k: v - other for k, v in self.toplevel.items()})
-        elif isinstance(other, (SteadyStateDict, ImpulseDict)):
-            return type(self)({k: v - other[k] for k, v in self.toplevel.items()})
-        else:
-            return NotImplementedError('Only a number or a SteadyStateDict can be subtracted from an ImpulseDict.')
+        return self.binary_operation(other, lambda a, b: a - b)
+
+    def __rsub__(self, other):
+        return self.binary_operation(other, lambda a, b: b - a)
 
     def __mul__(self, other):
-        if isinstance(other, (float, int)):
-            return type(self)({k: v * other for k, v in self.toplevel.items()})
-        elif isinstance(other, (SteadyStateDict, ImpulseDict)):
-            return type(self)({k: v * other[k] for k, v in self.toplevel.items()})
-        else:
-            return NotImplementedError('An ImpulseDict can only be multiplied by a number or a SteadyStateDict.')
+        return self.binary_operation(other, lambda a, b: a * b)
 
     def __rmul__(self, other):
-        if isinstance(other, (float, int)):
-            return type(self)({k: v * other for k, v in self.toplevel.items()})
-        elif isinstance(other, SteadyStateDict):
-            return type(self)({k: v * other[k] for k, v in self.toplevel.items()})
-        else:
-            return NotImplementedError('An ImpulseDict can only be multiplied by a number or a SteadyStateDict.')
+        return self.__mul__(other)
 
     def __truediv__(self, other):
-        if isinstance(other, (float, int)):
-            return type(self)({k: v / other for k, v in self.toplevel.items()})
-        # ImpulseDict[['C, 'Y']] / ss[['C', 'Y']]: matches steady states; don't divide by zero
-        elif isinstance(other, SteadyStateDict):
-            return type(self)({k: v / other[k] if not np.isclose(other[k], 0) else v for k, v in self.toplevel.items()})
-        else:
-            return NotImplementedError('An ImpulseDict can only be divided by a number or a SteadyStateDict.')
+        return self.binary_operation(other, lambda a, b: a / b)
 
+    def __rtruediv__(self, other):
+        return self.binary_operation(other, lambda a, b: b / a)
+
+    def __neg__(self):
+        return self.unary_operation(lambda a: -a)
+
+    def __pos__(self):
+        return self
+
+    def __abs__(self):
+        return self.unary_operation(lambda a: abs(a))
+
+    def binary_operation(self, other, op):
+        if isinstance(other, (SteadyStateDict, ImpulseDict)):
+            toplevel = {k: op(v, other[k]) for k, v in self.toplevel.items()}
+            internals = {}
+            for b in self.internals:
+                other_internals = other.internals[b]
+                internals[b] = {k: op(v, other_internals[k]) for k, v in self.internals[b].items()} 
+            return ImpulseDict(toplevel, internals, self.T)
+        elif isinstance(other, (float, int)):
+            toplevel = {k: op(v, other) for k, v in self.toplevel.items()}
+            internals = {}
+            for b in self.internals:
+                internals[b] = {k: op(v, other) for k, v in self.internals[b].items()} 
+            return ImpulseDict(toplevel, internals, self.T)
+        else:
+            return NotImplementedError(f'Can only perform operations with ImpulseDicts and other ImpulseDicts, SteadyStateDicts, or numbers, not {type(other).__name__}')
+
+    def unary_operation(self, op):
+        toplevel = {k: op(v) for k, v in self.toplevel.items()}
+        internals = {}
+        for b in self.internals:
+            internals[b] = {k: op(v) for k, v in self.internals[b].items()} 
+        return ImpulseDict(toplevel, internals, self.T)
+        
     def pack(self):
         T = self.T
         bigv = np.empty(T*len(self.toplevel))

@@ -147,7 +147,9 @@ def test_all():
 
     # Nonlinear vs linear impulses
     td_nonlin = dag1.solve_impulse_nonlinear(ss1, unknowns=['Y'], targets=['asset_mkt'],
-                                             inputs=shock, outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js)
+                                             inputs=shock, outputs=['Y', 'C', 'A', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js, internals=['household'])
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
     assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'MPC')
 
+    # See if D change matches up with aggregate assets
+    assert np.allclose(np.sum(td_nonlin.internals['household']['D']*td_nonlin.internals['household']['a'], axis=(1,2)), td_nonlin['A'])

@@ -58,7 +58,7 @@ class Block:
             return self.M @ self._steady_state(self.M.inv @ calibration, **own_options)
 
     def impulse_nonlinear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict],
-                          outputs: Optional[List[str]] = None,
+                          outputs: Optional[List[str]] = None, internals: Union[Dict[str, List[str]], List[str]] = {},
                           Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
         """Calculate a partial equilibrium, non-linear impulse response of `outputs` to a set of shocks in `inputs`
         around a steady state `ss`."""
@@ -68,7 +68,9 @@ class Block:
         
         # SolvedBlocks may use Js and may be nested in a CombinedBlock 
         if isinstance(self, Parent):
-            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, options, **own_options)
+            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, internals, Js, options, **own_options)
+        elif hasattr(self, 'internals'):
+            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, self.internals_to_report(internals), **own_options)
         else:
             return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, **own_options)
 
@@ -180,7 +182,8 @@ class Block:
 
     def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                                 inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
-                                Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
+                                internals: Union[Dict[str, List[str]], List[str]] = {}, Js: Dict[str, JacobianDict] = {}, 
+                                options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of shocks in `inputs` 
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the `targets` that must hold in general equilibrium"""
@@ -200,7 +203,7 @@ class Block:
         if opts['verbose']:
             print(f'Solving {self.name} for {unknowns} to hit {targets}')
         for it in range(opts['maxit']):
-            results = self.impulse_nonlinear(ss, inputs | U, outputs | targets, Js, options, **kwargs)
+            results = self.impulse_nonlinear(ss, inputs | U, outputs | targets, internals, Js, options, **kwargs)
             errors = {k: np.max(np.abs(results[k])) for k in targets}
             if opts['verbose']:
                 print(f'On iteration {it}')
@@ -310,3 +313,14 @@ class Block:
             return {}
         else:
             return input_defaults(method)
+
+    def internals_to_report(self, internals):
+        if self.name in internals:
+            if isinstance(internals, dict):
+                # if internals is a dict, we've specified which internals we want from each block
+                return internals[self.name]
+            else:
+                # otherwise internals is some kind of iterable or set, and if we're in it, we want everything
+                return self.internals
+        else:
+            return []

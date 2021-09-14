@@ -5,7 +5,7 @@ from copy import deepcopy
 from .block import Block
 from .auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from .support.parent import Parent
-from ..classes import JacobianDict
+from ..classes import ImpulseDict, JacobianDict
 from ..utilities.graph import block_sort, find_intermediate_inputs
 
 
@@ -69,18 +69,18 @@ class CombinedBlock(Block, Parent):
 
         return ss
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, Js, options):
+    def _impulse_nonlinear(self, ss, inputs, outputs, internals, Js, options):
         original_outputs = outputs
         outputs = (outputs | self._required) - ss._vector_valued()
 
-        irf_nonlin_partial_eq = inputs.copy()
+        impulses = inputs.copy()
         for block in self.blocks:
-            input_args = {k: v for k, v in irf_nonlin_partial_eq.items() if k in block.inputs}
+            input_args = {k: v for k, v in impulses.items() if k in block.inputs}
 
             if input_args:  # If this block is actually perturbed
-                irf_nonlin_partial_eq.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, Js, options))
+                impulses.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, internals, Js, options))
 
-        return irf_nonlin_partial_eq[original_outputs]
+        return ImpulseDict({k: impulses.toplevel[k] for k in original_outputs}, impulses.internals, impulses.T)
 
     def _impulse_linear(self, ss, inputs, outputs, Js, options):
         original_outputs = outputs
