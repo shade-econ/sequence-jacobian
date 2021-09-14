@@ -69,8 +69,8 @@ def test_equivalence():
 
     assert np.isclose(ss_multidim['A'], ss_onedim['A']) and np.isclose(ss_multidim['C'], ss_onedim['C'])
 
-    D_onedim = ss_onedim.internal['household_onedim']['D']
-    D_multidim = ss_multidim.internal['household_multidim']['D']
+    D_onedim = ss_onedim.internals['household_onedim']['D']
+    D_multidim = ss_multidim.internals['household_multidim']['D']
 
     assert np.allclose(D_onedim, D_multidim.reshape(*D_onedim.shape))
 

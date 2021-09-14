@@ -46,7 +46,7 @@ def test_bijection():
     assert (mymap2 @ mymap)['a'] == 'a2'
 
     # composition with SteadyStateDict
-    ss = SteadyStateDict({'a': 2.0, 'b': 1.0}, internal={})
+    ss = SteadyStateDict({'a': 2.0, 'b': 1.0})
     ss_remapped = ss @ mymap
     assert isinstance(ss_remapped, SteadyStateDict)
     assert ss_remapped['a1'] == ss['a'] and ss_remapped['b1'] == ss['b']

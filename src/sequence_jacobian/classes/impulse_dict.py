@@ -9,16 +9,16 @@ from ..utilities.bijection import Bijection
 from .steady_state_dict import SteadyStateDict
 
 class ImpulseDict(ResultDict):
-    def __init__(self, data, internal=None, T=None):
+    def __init__(self, data, internals=None, T=None):
         if isinstance(data, ImpulseDict):
-            if internal is not None or T is not None:
+            if internals is not None or T is not None:
                 raise ValueError('Supplying ImpulseDict and also internal or T to constructor not allowed')
             super().__init__(data)
             self.T = data.T
         else:
             if not isinstance(data, dict):
                 raise ValueError('ImpulseDicts are initialized with a `dict` of top-level impulse responses.')
-            super().__init__(data, internal)
+            super().__init__(data, internals)
             self.T = (T if T is not None else self.infer_length())
 
     def __add__(self, other):

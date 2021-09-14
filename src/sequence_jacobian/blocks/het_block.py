@@ -31,12 +31,12 @@ class HetBlock(Block):
         self.M_outputs = Bijection({o: o.upper() for o in self.non_backward_outputs})
         self.inputs = self.backward_fun.inputs - [k + '_p' for k in self.backward]
         self.inputs |= self.exogenous
-        self.internal = OrderedSet(['D', 'Dbeg']) | self.exogenous | self.backward_fun.outputs
+        self.internals = OrderedSet(['D', 'Dbeg']) | self.exogenous | self.backward_fun.outputs
 
         # store "original" copies of these for use whenever we process new hetinputs/hetoutputs
         self.original_inputs = self.inputs
         self.original_outputs = self.outputs
-        self.original_internal = self.internal
+        self.original_internals = self.internals
         self.original_M_outputs = self.M_outputs
 
         # A HetBlock can have heterogeneous inputs and heterogeneous outputs, henceforth `hetinput` and `hetoutput`.
@@ -103,8 +103,8 @@ class HetBlock(Block):
         aggregates = {o.upper(): np.vdot(D, ss[o]) for o in toreturn}
         ss.update(aggregates)
 
-        return SteadyStateDict({k: ss[k] for k in ss if k not in self.internal},
-                               {self.name: {k: ss[k] for k in ss if k in self.internal}})
+        return SteadyStateDict({k: ss[k] for k in ss if k not in self.internals},
+                               {self.name: {k: ss[k] for k in ss if k in self.internals}})
 
     def _impulse_nonlinear(self, ssin, inputs, outputs, monotonic=False, returnindividual=False):
         ss = self.extract_ss_dict(ssin)
@@ -415,22 +415,22 @@ class HetBlock(Block):
             self = copy.copy(self)
         inputs = self.original_inputs.copy()
         outputs = self.original_outputs.copy()
-        internal = self.original_internal.copy()
+        internals = self.original_internals.copy()
 
         if hetoutputs is not None:
             inputs |= (hetoutputs.inputs - self.backward_fun.outputs - ['D'])
             outputs |= [o.upper() for o in hetoutputs.outputs]
             self.M_outputs = Bijection({o: o.upper() for o in hetoutputs.outputs}) @ self.original_M_outputs
-            internal |= hetoutputs.outputs
+            internals |= hetoutputs.outputs
 
         if hetinputs is not None:
             inputs |= hetinputs.inputs
             inputs -= hetinputs.outputs
-            internal |= hetinputs.outputs
+            internals |= hetinputs.outputs
 
         self.inputs = inputs
         self.outputs = outputs
-        self.internal = internal
+        self.internals = internals
 
         self.hetinputs = hetinputs
         self.hetoutputs = hetoutputs
@@ -468,8 +468,8 @@ class HetBlock(Block):
     def extract_ss_dict(self, ss):
         if isinstance(ss, SteadyStateDict):
             ssnew = ss.toplevel.copy()
-            if self.name in ss.internal:
-                ssnew.update(ss.internal[self.name])
+            if self.name in ss.internals:
+                ssnew.update(ss.internals[self.name])
             return ssnew
         else:
             return ss.copy()

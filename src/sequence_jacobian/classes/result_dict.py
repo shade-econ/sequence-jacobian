@@ -3,19 +3,19 @@ import copy
 from ..utilities.bijection import Bijection
 
 class ResultDict:
-    def __init__(self, data, internal=None):
+    def __init__(self, data, internals=None):
         if isinstance(data, ResultDict):
-            if internal is not None:
-                raise ValueError(f'Supplying {type(self).__name__} and also internal to constructor not allowed')
+            if internals is not None:
+                raise ValueError(f'Supplying {type(self).__name__} and also internals to constructor not allowed')
             self.toplevel = data.toplevel.copy()
-            self.internal = data.internal.copy()
+            self.internals = data.internals.copy()
         else:
             self.toplevel: dict = data.copy()
-            self.internal: dict = {} if internal is None else internal.copy()
+            self.internals: dict = {} if internals is None else internals.copy()
         
     def __repr__(self):
-        if self.internal:
-            return f"<{type(self).__name__}: {list(self.toplevel.keys())}, internal={list(self.internal.keys())}>"
+        if self.internals:
+            return f"<{type(self).__name__}: {list(self.toplevel.keys())}, internals={list(self.internals.keys())}>"
         else:
             return f"<{type(self).__name__}: {list(self.toplevel.keys())}>"
 
@@ -70,7 +70,7 @@ class ResultDict:
     def update(self, rdict):
         if isinstance(rdict, ResultDict):
             self.toplevel.update(rdict.toplevel)
-            self.internal.update(rdict.internal)
+            self.internals.update(rdict.internals)
         else:
             self.toplevel.update(dict(rdict))
     

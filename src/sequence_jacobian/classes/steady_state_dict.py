@@ -13,7 +13,7 @@ Array = Any
 
 class SteadyStateDict(ResultDict):
     def difference(self, data_to_remove):
-        return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), deepcopy(self.internal))
+        return SteadyStateDict(dict_diff(self.toplevel, data_to_remove), deepcopy(self.internals))
 
     def _vector_valued(self):
         return OrderedSet([k for k, v in self.toplevel.items() if np.size(v) > 1])
