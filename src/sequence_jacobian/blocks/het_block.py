@@ -40,11 +40,11 @@ class HetBlock(Block):
         self.original_M_outputs = self.M_outputs
 
         # A HetBlock can have heterogeneous inputs and heterogeneous outputs, henceforth `hetinput` and `hetoutput`.
-        # See docstring for methods `add_hetinput` and `add_hetoutput` for more details.
-        self.hetinputs = hetinputs
-        self.hetoutputs = hetoutputs
-        if hetinputs is not None or hetoutputs is not None:
-            self.process_hetinputs_hetoutputs(hetinputs, hetoutputs, tocopy=False)
+        if hetinputs is not None:
+            hetinputs = ExtendedParallelFunction(hetinputs)
+        if hetoutputs is not None:
+            hetoutputs = ExtendedParallelFunction(hetoutputs)
+        self.process_hetinputs_hetoutputs(hetinputs, hetoutputs, tocopy=False)
 
         if len(self.policy) > 2:
             raise ValueError(f"More than two endogenous policies in {self.name}, not yet supported")

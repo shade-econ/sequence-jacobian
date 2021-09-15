@@ -1,7 +1,8 @@
-from sequence_jacobian.utilities.ordered_set import OrderedSet
 import re
 import inspect
 import numpy as np
+
+from sequence_jacobian.utilities.ordered_set import OrderedSet
 
 # TODO: fix this, have it twice (main version in misc) due to circular import problem
 # let's make everything point to here for input_list, etc. so that this is unnecessary
@@ -189,7 +190,7 @@ class ExtendedParallelFunction(ExtendedFunction):
         raise NotImplementedError
 
     def add(self, f):
-        if isinstance(f, function) or isinstance(f, ExtendedFunction):
+        if inspect.isfunction(f) or isinstance(f, ExtendedFunction):
             return ExtendedParallelFunction(list(self.functions.values()) + [f])
         else:
             # otherwise assume f is iterable

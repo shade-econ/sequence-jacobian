@@ -3,13 +3,13 @@
 import numpy as np
 
 from sequence_jacobian import combine
-from sequence_jacobian.models import rbc
+from sequence_jacobian.examples import rbc
 from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from sequence_jacobian import SteadyStateDict
 
 
 def test_jacobian_dict_block_impulses(rbc_dag):
-    rbc_model, exogenous, unknowns, _, ss = rbc_dag
+    rbc_model, ss, unknowns, _, exogenous = rbc_dag
 
     T = 10
     J_pe = rbc_model.jacobian(ss, inputs=unknowns + exogenous, T=10)
@@ -29,7 +29,7 @@ def test_jacobian_dict_block_impulses(rbc_dag):
 
 
 def test_jacobian_dict_block_combine(rbc_dag):
-    _, exogenous, _, _, ss = rbc_dag
+    _, ss, _, _, exogenous = rbc_dag
 
     J_firm = rbc.firm.jacobian(ss, inputs=exogenous)
     blocks_w_jdict = [rbc.household, J_firm, rbc.mkt_clearing]

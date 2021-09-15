@@ -3,8 +3,8 @@
 import numpy as np
 
 def test_ks_jac(krusell_smith_dag):
-    ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
-    household, firm, mkt_clearing, _, _ = ks_model._blocks_unsorted
+    ks_model, ss, unknowns, targets, exogenous = krusell_smith_dag
+    household, firm, *_ = ks_model._blocks_unsorted
     T = 10
 
     # Automatically calculate the general equilibrium Jacobian
@@ -56,7 +56,7 @@ def test_ks_jac(krusell_smith_dag):
 
 
 def test_fake_news_v_direct_method(one_asset_hank_dag):
-    hank_model, _, _, _, ss = one_asset_hank_dag
+    hank_model, ss, *_ = one_asset_hank_dag
 
     household = hank_model['household']
     T = 40

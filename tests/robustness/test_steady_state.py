@@ -3,15 +3,14 @@
 import pytest
 import numpy as np
 
-from sequence_jacobian.models import hank, two_asset
+from sequence_jacobian.examples import hank, two_asset
 
 
 # Filter out warnings when the solver is trying to search in bad regions
 @pytest.mark.filterwarnings("ignore:.*invalid value encountered in.*:RuntimeWarning")
 def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_dag):
-    hank_model, _, _, _, ss = one_asset_hank_dag
-
-    helper_blocks = [hank.partial_steady_state_solution]
+    hank_model, ss, *_ = one_asset_hank_dag
+    helper_blocks = [hank.partial_ss_solution]
 
     calibration = {"r": 0.005, "rstar": 0.005, "eis": 0.5, "frisch": 0.5, "B_Y": 5.6, "mu": 1.2,
                    "rho_s": 0.966, "sigma_s": 0.5, "kappa": 0.1, "phi": 1.5, "Y": 1, "Z": 1, "L": 1,
@@ -28,8 +27,7 @@ def test_hank_steady_state_w_bad_init_guesses_and_bounds(one_asset_hank_dag):
 
 @pytest.mark.filterwarnings("ignore:.*invalid value encountered in.*:RuntimeWarning")
 def test_two_asset_steady_state_w_bad_init_guesses_and_bounds(two_asset_hank_dag):
-    two_asset_model, _, _, _, ss = two_asset_hank_dag
-
+    two_asset_model, ss, *_ = two_asset_hank_dag
     helper_blocks = [two_asset.partial_ss_step1, two_asset.partial_ss_step2]
 
     # Steady State

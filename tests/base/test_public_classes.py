@@ -9,7 +9,7 @@ from sequence_jacobian.classes.impulse_dict import ImpulseDict
 from sequence_jacobian.utilities.bijection import Bijection
 
 def test_impulsedict(krusell_smith_dag):
-    ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
+    ks_model, ss, unknowns, targets, _ = krusell_smith_dag
     T = 200
 
     # Linearized impulse responses as deviations

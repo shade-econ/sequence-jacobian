@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
-from sequence_jacobian.models import krusell_smith
+from sequence_jacobian.examples import krusell_smith
 
 def test_jacobian_h(krusell_smith_dag):
-    dag, *_, ss = krusell_smith_dag
+    dag, ss, *_ = krusell_smith_dag
     hh = dag['household']
 
     lowacc = hh.jacobian(ss, inputs=['r'], outputs=['C'], T=10, h=0.05)
@@ -26,8 +26,9 @@ def test_jacobian_h(krusell_smith_dag):
 
 def test_jacobian_steady_state(krusell_smith_dag):
     dag = krusell_smith_dag[0]
-    calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "rho": 0.966, "sigma": 0.5, "L": 1.0,
-                   "nS": 2, "nA": 10, "amax": 200, "r": 0.01, 'beta': 0.96, "Z": 0.85, "K": 3.}
+    calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "rho": 0.966, "sigma": 0.5,
+                   "L": 1.0, "nS": 2, "nA": 10, "amax": 200, "r": 0.01, 'beta': 0.96,
+                   "Z": 0.85, "K": 3.}
 
     pytest.raises(ValueError, dag.steady_state, calibration, options={'household': {'backward_maxit': 10}})
 
@@ -36,25 +37,16 @@ def test_jacobian_steady_state(krusell_smith_dag):
     assert ss1['A'] == ss2['A']
 
 
-
 def test_steady_state_solution(krusell_smith_dag):
-    dag, _, unknowns, targets, _ = krusell_smith_dag
-    helper_blocks = [krusell_smith.firm_steady_state_solution]
+    dag, *_ = krusell_smith_dag
+    helper_blocks = [krusell_smith.firm_ss_solution]
 
-    calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "rho": 0.966, "sigma": 0.5, "L": 1.0,
-                   "nS": 2, "nA": 10, "amax": 200, "r": 0.01}
+    calibration = {"eis": 1, "delta": 0.025, "alpha": 0.11, "rho": 0.966, "sigma": 0.5,
+                   "L": 1.0, "nS": 2, "nA": 10, "amax": 200, "r": 0.01}
     unknowns_ss = {"beta": (0.98 / 1.01, 0.999 / 1.01), "Z": 0.85, "K": 3.}
     targets_ss = {"asset_mkt": 0., "Y": 1., "r": 0.01}
 
-    pytest.raises(RuntimeError, dag.solve_steady_state, calibration, unknowns_ss, targets_ss, solver="brentq",
-                                helper_blocks=helper_blocks, helper_targets=["Y", "r"], ttol=1E-2, ctol=1E-9)
-
-    # ss = dag.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="brentq",
-    #                             helper_blocks=helper_blocks, helper_targets=["Y", "r"], verbose=False)
-
-    # assert not capsys.readouterr().out
-
-    # ss = dag.solve_steady_state(calibration, {**unknowns_ss, 'beta':0.98}, targets_ss, solver="newton_custom",
-    #                             helper_blocks=helper_blocks, helper_targets=["Y", "r"])
-
-    # assert capsys.readouterr().out
+    pytest.raises(RuntimeError, dag.solve_steady_state, calibration,
+                                unknowns_ss, targets_ss, solver="brentq",
+                                helper_blocks=helper_blocks, helper_targets=["Y", "r"],
+                                ttol=1E-2, ctol=1E-9)

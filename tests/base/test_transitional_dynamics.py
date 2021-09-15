@@ -3,13 +3,14 @@
 import numpy as np
 
 from sequence_jacobian import combine
-from sequence_jacobian.models import two_asset
+from sequence_jacobian.examples import two_asset
+from sequence_jacobian.examples.hetblocks import household_twoasset as hh
 
 
 # TODO: Figure out a more robust way to check similarity of the linear and non-linear solution.
 #   As of now just checking that the tolerance for difference (by infinity norm) is below a manually checked threshold
 def test_rbc_td(rbc_dag):
-    rbc_model, exogenous, unknowns, targets, ss = rbc_dag
+    rbc_model, ss, unknowns, targets, exogenous = rbc_dag
 
     T, impact, rho, news = 30, 0.01, 0.8, 10
     G = rbc_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
@@ -30,7 +31,7 @@ def test_rbc_td(rbc_dag):
 
 
 def test_ks_td(krusell_smith_dag):
-    ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
+    ks_model, ss, unknowns, targets, exogenous = krusell_smith_dag
 
     T = 30
     G = ks_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
@@ -46,7 +47,7 @@ def test_ks_td(krusell_smith_dag):
 
 
 def test_hank_td(one_asset_hank_dag):
-    hank_model, exogenous, unknowns, targets, ss = one_asset_hank_dag
+    hank_model, ss, unknowns, targets, exogenous = one_asset_hank_dag
 
     T = 30
     household = hank_model._blocks_unsorted[0]
@@ -66,7 +67,7 @@ def test_hank_td(one_asset_hank_dag):
 
 # TODO: needs to compute Jacobian of hetoutput `Chi`
 def test_two_asset_td(two_asset_hank_dag):
-    two_asset_model, exogenous, unknowns, targets, ss = two_asset_hank_dag
+    two_asset_model, ss, unknowns, targets, exogenous = two_asset_hank_dag
 
     T = 30
     household = two_asset_model._blocks_unsorted[0]
@@ -86,12 +87,14 @@ def test_two_asset_td(two_asset_hank_dag):
 
 
 def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
-    two_asset_model, exogenous, unknowns, targets, ss = two_asset_hank_dag
+    two_asset_model, ss, unknowns, targets, exogenous = two_asset_hank_dag
 
-    blocks_simple = [two_asset.household, two_asset.make_grids,
-                     two_asset.pricing, two_asset.arbitrage, two_asset.labor, two_asset.investment,
-                     two_asset.dividend, two_asset.taylor, two_asset.fiscal, two_asset.share_value,
-                     two_asset.finance, two_asset.wage, two_asset.union, two_asset.mkt_clearing]
+    household = hh.household.add_hetinputs([two_asset.income])
+    blocks_simple = [household, two_asset.make_grids, two_asset.pricing, two_asset.arbitrage,
+                     two_asset.labor, two_asset.investment, two_asset.dividend,
+                     two_asset.taylor, two_asset.fiscal, two_asset.share_value,
+                     two_asset.finance, two_asset.wage, two_asset.union,
+                     two_asset.mkt_clearing]
     two_asset_model_simple = combine(blocks_simple, name="Two-Asset HANK w/ SimpleBlocks")
     unknowns_simple = ["r", "w", "Y", "pi", "p", "Q", "K"]
     targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
