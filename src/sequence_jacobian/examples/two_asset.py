@@ -74,8 +74,8 @@ def wage(pi, w):
 
 
 @simple
-def union(piw, N, tax, w, U, kappaw, muw, vphi, frisch, beta):
-    wnkpc = kappaw * (vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * N * U / muw) + beta * \
+def union(piw, N, tax, w, UCE, kappaw, muw, vphi, frisch, beta):
+    wnkpc = kappaw * (vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * N * UCE / muw) + beta * \
             (1 + piw(+1)).apply(np.log) - (1 + piw).apply(np.log)
     return wnkpc
 
@@ -130,10 +130,10 @@ def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
 
 
 @simple
-def partial_ss_step2(tax, w, U, N, muw, frisch):
+def partial_ss_step2(tax, w, UCE, N, muw, frisch):
     """Solves for (vphi) to hit (wnkpc)."""
-    vphi = (1 - tax) * w * U / muw / N ** (1 + 1 / frisch)
-    wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * U / muw
+    vphi = (1 - tax) * w * UCE / muw / N ** (1 + 1 / frisch)
+    wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * UCE / muw
     return vphi, wnkpc
 
 

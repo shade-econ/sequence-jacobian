@@ -96,16 +96,13 @@ def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb,
     # solve out budget constraint to get consumption and marginal utility
     c = addouter(z_grid, (1 + rb) * b_grid, (1 + ra) * a_grid) - Psi - a - b
     uc = c ** (-1 / eis)
-
-    # TODO: maken into hetoutpout
-    # for GE wage Phillips curve we'll need endowment-weighted utility too
-    u = e_grid[:, np.newaxis, np.newaxis] * uc
+    uce = e_grid[:, np.newaxis, np.newaxis] * uc
 
     # update derivatives of value function using envelope conditions
     Va = (1 + ra - Psi2) * uc
     Vb = (1 + rb) * uc
 
-    return Va, Vb, a, b, c, u
+    return Va, Vb, a, b, c, uce
 
 
 '''Supporting functions for HA block'''

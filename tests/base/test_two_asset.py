@@ -7,10 +7,10 @@ from sequence_jacobian import utilities as utils
 
 
 def test_hank_ss():
-    A, B, U = hank_ss_singlerun()
+    A, B, UCE = hank_ss_singlerun()
     assert np.isclose(A, 12.526539492650361)
     assert np.isclose(B, 1.0840860793350566)
-    assert np.isclose(U, 4.5102870939550055)
+    assert np.isclose(UCE, 4.5102870939550055)
 
 
 def hank_ss_singlerun(beta=0.976, r=0.0125, tot_wealth=14, K=10, delta=0.02, Bg=2.8, G=0.2,
@@ -43,7 +43,7 @@ def hank_ss_singlerun(beta=0.976, r=0.0125, tot_wealth=14, K=10, delta=0.02, Bg=
 
     out = hh.household.steady_state(calibration)
     
-    return out['A'], out['B'], out['U']
+    return out['A'], out['B'], out['UCE']
 
 
 def test_Psi():

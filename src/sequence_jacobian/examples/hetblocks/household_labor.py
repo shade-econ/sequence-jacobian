@@ -15,33 +15,28 @@ def household_init(a_grid, e_grid, r, w, eis, T):
 
 
 @het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
-def household(Va_p, a_grid, e_grid, T, w, r, beta, eis, frisch, vphi):
+def household(Va_p, a_grid, we, T, r, beta, eis, frisch, vphi):
     '''Single backward step via EGM.'''
-    # TODO: ws shoukld be hetinput
-    ws = w * e_grid
     uc_nextgrid = beta * Va_p
-    c_nextgrid, n_nextgrid = cn(uc_nextgrid, ws[:, np.newaxis], eis, frisch, vphi)
+    c_nextgrid, n_nextgrid = cn(uc_nextgrid, we[:, np.newaxis], eis, frisch, vphi)
 
-    lhs = c_nextgrid - ws[:, np.newaxis] * n_nextgrid + a_grid[np.newaxis, :] - T[:, np.newaxis]
+    lhs = c_nextgrid - we[:, np.newaxis] * n_nextgrid + a_grid[np.newaxis, :] - T[:, np.newaxis]
     rhs = (1 + r) * a_grid
     c = utils.interpolate.interpolate_y(lhs, rhs, c_nextgrid)
     n = utils.interpolate.interpolate_y(lhs, rhs, n_nextgrid)
 
-    a = rhs + ws[:, np.newaxis] * n + T[:, np.newaxis] - c
+    a = rhs + we[:, np.newaxis] * n + T[:, np.newaxis] - c
     iconst = np.nonzero(a < a_grid[0])
     a[iconst] = a_grid[0]
 
     if iconst[0].size != 0 and iconst[1].size != 0:
-        c[iconst], n[iconst] = solve_cn(ws[iconst[0]],
+        c[iconst], n[iconst] = solve_cn(we[iconst[0]],
                                         rhs[iconst[1]] + T[iconst[0]] - a_grid[0],
                                         eis, frisch, vphi, Va_p[iconst])
 
     Va = (1 + r) * c ** (-1 / eis)
     
-    # TODO: make hetoutput
-    n_e = e_grid[:, np.newaxis] * n
-
-    return Va, a, c, n, n_e
+    return Va, a, c, n
 
 
 '''Supporting functions for HA block'''

@@ -1,6 +1,3 @@
-import scipy.optimize as opt
-
-from .. import utilities as utils
 from ..blocks.simple_block import simple
 from ..blocks.combined_block import create_model
 from .hetblocks.household_sim import household
@@ -25,11 +22,11 @@ def mkt_clearing(K, A, Y, C, delta):
 
 @simple
 def firm_ss_solution(r, Y, L, delta, alpha):
+    '''Solve for (Z, K) given targets for (Y, r).'''
     rk = r + delta
-    w = (1 - alpha) * Y / L
     K = alpha * Y / rk
     Z = Y / K ** alpha / L ** (1 - alpha)
-    return w, K, Z
+    return K, Z
 
 
 '''Part 2: DAG'''
