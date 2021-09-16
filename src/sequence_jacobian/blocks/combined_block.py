@@ -86,7 +86,6 @@ class CombinedBlock(Block, Parent):
         original_outputs = outputs
         outputs = (outputs | self._required) - ss._vector_valued()
         
-        #irf_lin_partial_eq = inputs.copy()
         irf_lin_partial_eq = deepcopy(inputs)
         for block in self.blocks:
             input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs} 

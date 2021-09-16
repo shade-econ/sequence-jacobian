@@ -7,9 +7,9 @@ from ...blocks.het_block import het
 from ... import utilities as utils
 
 
-def household_init(a_grid, e_grid, r, w, eis, T):
+def household_init(a_grid, we, r, eis, T):
     fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
-    coh = (1 + r) * a_grid[np.newaxis, :] + w * e_grid[:, np.newaxis] + T[:, np.newaxis]
+    coh = (1 + r) * a_grid[np.newaxis, :] + we[:, np.newaxis] + T[:, np.newaxis]
     Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
     return fininc, Va
 

@@ -1,6 +1,7 @@
+from .. import utilities as utils
 from ..blocks.simple_block import simple
-from ..blocks.combined_block import create_model
-from .hetblocks.household_sim import household
+from ..blocks.combined_block import create_model, combine
+from .hetblocks import household_sim as hh
 
 
 '''Part 1: Blocks'''
@@ -29,11 +30,26 @@ def firm_ss_solution(r, Y, L, delta, alpha):
     return K, Z
 
 
-'''Part 2: DAG'''
+'''Part 2: Embed HA block'''
+
+@simple
+def make_grids(rho, sigma, nS, amax, nA):
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
+    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    return e_grid, Pi, a_grid
+
+
+def income(w, e_grid):
+    y = w * e_grid
+    return y
+
+
+'''Part 3: DAG'''
 
 def dag():
     # Combine blocks
-    blocks = [household, firm, mkt_clearing]
+    household = hh.household.add_hetinputs([income])
+    blocks = [household, firm, make_grids, mkt_clearing]
     helper_blocks = [firm_ss_solution]
     ks_model = create_model(blocks, name="Krusell-Smith")
 

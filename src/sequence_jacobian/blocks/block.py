@@ -216,7 +216,7 @@ class Block:
         else:
             raise ValueError(f'No convergence after {opts["maxit"]} backward iterations!')
 
-        return results | U
+        return results | U | inputs
 
     solve_impulse_linear_options = {}
 
@@ -237,7 +237,7 @@ class Block:
         dH = self.impulse_linear(ss, inputs, targets, Js, options, **kwargs).pack()
         dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, T)
 
-        return self.impulse_linear(ss, dU | inputs, outputs, Js, options, **kwargs)
+        return self.impulse_linear(ss, dU | inputs, outputs, Js, options, **kwargs) | dU | inputs
 
     solve_jacobian_options = {}
 
