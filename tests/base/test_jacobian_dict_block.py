@@ -17,7 +17,7 @@ def test_jacobian_dict_block_impulses(rbc_dag):
 
     J_block_Z = J_block.jacobian(SteadyStateDict({}), ["Z"])
     for o in J_block_Z.outputs:
-        assert np.all(J_block[o]["Z"] == J_block_Z[o]["Z"])
+        assert np.all(J_block[o].get("Z") == J_block_Z[o].get("Z"))
 
     dZ = 0.8 ** np.arange(T)
 

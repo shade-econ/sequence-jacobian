@@ -49,55 +49,6 @@ class IdentityMatrix:
         return 'IdentityMatrix'
 
 
-class ZeroMatrix:
-    """Simple zero matrix class, cheaper than using actual np.zeros((T,T)) matrix,
-    use in common case where some outputs don't depend on inputs"""
-    __array_priority__ = 10_000
-
-    def sparse(self):
-        return SimpleSparse({(0, 0): 0})
-
-    def matrix(self, T):
-        return np.zeros((T,T))
-
-    def __matmul__(self, other):
-        if isinstance(other, np.ndarray) and other.ndim == 1:
-            return np.zeros_like(other)
-        else:
-            return self
-
-    def __rmatmul__(self, other):
-        return self @ other
-
-    def __mul__(self, a):
-        return self
-
-    def __rmul__(self, a):
-        return self
-
-    # copies seem inefficient here, try to live without them
-    def __add__(self, x):
-        return x
-
-    def __radd__(self, x):
-        return x
-
-    def __sub__(self, x):
-        return -x
-
-    def __rsub__(self, x):
-        return x
-
-    def __neg__(self):
-        return self
-
-    def __pos__(self):
-        return self
-
-    def __repr__(self):
-        return 'ZeroMatrix'
-
-
 class SimpleSparse:
     """Efficient representation of sparse linear operators, which are linear combinations of basis
     operators represented by pairs (i, m), where i is the index of diagonal on which there are 1s

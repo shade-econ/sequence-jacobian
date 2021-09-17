@@ -98,3 +98,15 @@ class ImpulseDict(ResultDict):
         if length != min(lengths):
             raise ValueError(f'Building ImpulseDict with inconsistent lengths {max(lengths)} and {min(lengths)}')
         return length
+
+    def get(self, k):
+        """Like __getitem__ but with default of zero impulse"""
+        if isinstance(k, str):
+            return self.toplevel.get(k, np.zeros(self.T))
+        elif isinstance(k, tuple):
+            raise TypeError(f'Key {k} to {type(self).__name__} cannot be tuple')
+        else:
+            try:
+                return type(self)({ki: self.toplevel.get(ki, np.zeros(self.T)) for ki in k})
+            except TypeError:
+                raise TypeError(f'Key {k} to {type(self).__name__} needs to be a string or an iterable (list, set, etc) of strings')

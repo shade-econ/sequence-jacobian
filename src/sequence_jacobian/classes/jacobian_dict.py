@@ -6,12 +6,12 @@ from ..utilities.misc import factor, factored_solve
 from ..utilities.ordered_set import OrderedSet
 from ..utilities.bijection import Bijection
 from .impulse_dict import ImpulseDict
-from .sparse_jacobians import ZeroMatrix, IdentityMatrix, SimpleSparse, make_matrix
+from .sparse_jacobians import IdentityMatrix, SimpleSparse, make_matrix
 from typing import Any, Dict, Union
 
 Array = Any
 
-Jacobian = Union[np.ndarray, ZeroMatrix, IdentityMatrix, SimpleSparse]
+Jacobian = Union[np.ndarray, IdentityMatrix, SimpleSparse]
 
 class NestedDict:
     def __init__(self, nesteddict, outputs: OrderedSet=None, inputs: OrderedSet=None, name: str=None):
@@ -68,11 +68,11 @@ class NestedDict:
                     return self.nesteddict[o][i]
                 else:
                     # case 2b: one output, multiple inputs, return dict
-                    return {ii: self.nesteddict[o][ii] for ii in i}
+                    return subdict(self.nesteddict[o], i)
             else:
                 # case 2c: multiple outputs, one or more inputs, return NestedDict with outputs o and inputs i
                 i = (i,) if isinstance(i, str) else i
-                return type(self)({oo: {ii: self.nesteddict[oo][ii] for ii in i} for oo in o}, o, i)
+                return type(self)({oo: subdict(self.nesteddict[oo], i) for oo in o}, o, i)
         elif isinstance(x, OrderedSet) or isinstance(x, list) or isinstance(x, set):
             # case 3: assume that list or set refers just to outputs, get all of those
             return type(self)({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
@@ -112,6 +112,11 @@ def deduplicate(mylist):
     return list(dict.fromkeys(mylist))
 
 
+def subdict(d, ks):
+    """Return subdict of d with only keys in ks (if some ks are not in d, ignore them)"""
+    return {k: d[k] for k in ks if k in d}
+
+
 class JacobianDict(NestedDict):
     def __init__(self, nesteddict, outputs=None, inputs=None, name=None, T=None, check=False):
         if check:
@@ -121,11 +126,7 @@ class JacobianDict(NestedDict):
 
     @staticmethod
     def identity(ks):
-        return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks).complete()
-
-    def complete(self):
-        # TODO: think about when and whether we want to use this
-        return super().complete(ZeroMatrix())
+        return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks)
 
     def addinputs(self):
         """Add any inputs that were not already in output list as outputs, with the identity"""
@@ -164,19 +165,22 @@ class JacobianDict(NestedDict):
         m_list = tuple(set(self.inputs) & set(J.outputs))
         i_list = J.inputs
 
-        J_om = self.complete().nesteddict
-        J_mi = J.complete().nesteddict
+        J_om = self.nesteddict
+        J_mi = J.nesteddict
         J_oi = {}
 
         for o in o_list:
             J_oi[o] = {}
             for i in i_list:
-                Jout = ZeroMatrix()
+                Jout = None
                 for m in m_list:
-                    J_om[o][m]
-                    J_mi[m][i]
-                    Jout += J_om[o][m] @ J_mi[m][i]
-                J_oi[o][i] = Jout
+                    if m in J_om[o] and i in J_mi[m]:
+                        if Jout is None:
+                            Jout = J_om[o][m] @ J_mi[m][i]
+                        else:
+                            Jout += J_om[o][m] @ J_mi[m][i]
+                if Jout is not None:
+                    J_oi[o][i] = Jout
 
         return JacobianDict(J_oi, o_list, i_list)
 
@@ -185,13 +189,15 @@ class JacobianDict(NestedDict):
         x = ImpulseDict(x)
 
         inputs = x.keys() & set(self.inputs)
-        J_oi = self.complete().nesteddict
+        J_oi = self.nesteddict
         y = {}
 
         for o in self.outputs:
             y[o] = np.zeros(x.T)
+            J_i = J_oi[o]
             for i in inputs:
-                y[o] += J_oi[o][i] @ x[i]
+                if i in J_i:
+                    y[o] += J_i[i] @ x[i]
 
         return ImpulseDict(y, T=x.T)
 
@@ -208,7 +214,11 @@ class JacobianDict(NestedDict):
         J = np.empty((len(self.outputs) * T, len(self.inputs) * T))
         for iO, O in enumerate(self.outputs):
             for iI, I in enumerate(self.inputs):
-                J[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = make_matrix(self[O, I], T)
+                J_OI = self[O].get(I)
+                if J_OI is not None:
+                    J[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = make_matrix(J_OI, T)
+                else:
+                    J[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))] = 0
         return J
 
     @staticmethod

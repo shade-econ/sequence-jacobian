@@ -234,7 +234,7 @@ class Block:
         Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, T, Js, options, **kwargs)
 
         H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
-        dH = self.impulse_linear(ss, inputs, targets, Js, options, **kwargs).pack()
+        dH = self.impulse_linear(ss, inputs, targets, Js, options, **kwargs).get(targets).pack() # .get(targets) fills in zeros
         dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, T)
 
         return self.impulse_linear(ss, dU | inputs, outputs, Js, options, **kwargs) | dU | inputs

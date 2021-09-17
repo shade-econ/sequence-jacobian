@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from .support.simple_displacement import ignore, Displace, AccumulatedDerivative
 from .block import Block
-from ..classes import SteadyStateDict, ImpulseDict, JacobianDict, SimpleSparse, ZeroMatrix
+from ..classes import SteadyStateDict, ImpulseDict, JacobianDict, SimpleSparse
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
 
@@ -71,16 +71,14 @@ class SimpleBlock(Block):
         # Because we computed the Jacobian of all outputs with respect to each shock (invertedJ[i][o]),
         # we need to loop back through to have J[o][i] to map for a given output `o`, shock `i`,
         # the Jacobian curlyJ^{o,i}.
-        J = {o: {} for o in self.outputs}
-        for o in self.outputs:
+        J = {o: {} for o in outputs}
+        for o in outputs:
             for i in inputs:
-                # Keep zeros, so we can inspect supplied Jacobians for completeness
-                if not invertedJ[i][o] or invertedJ[i][o].iszero:
-                    J[o][i] = ZeroMatrix()
-                else:
+                # drop zeros from JacobianDict
+                if invertedJ[i][o] and not invertedJ[i][o].iszero:
                     J[o][i] = invertedJ[i][o]
 
-        return JacobianDict(J, name=self.name, T=T)[outputs, :]
+        return JacobianDict(J, outputs, inputs, self.name, T)
 
     def compute_single_shock_J(self, ss, i):
         input_args = {i: ignore(ss[i]) for i in self.inputs}
