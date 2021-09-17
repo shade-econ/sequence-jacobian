@@ -1,5 +1,4 @@
 import numpy as np
-import sequence_jacobian as sj
 from sequence_jacobian import simple, solved, combine, create_model, markov_rouwenhorst, agrid 
 from sequence_jacobian.classes.impulse_dict import ImpulseDict
 from sequence_jacobian.examples.hetblocks import household_sim as hh
@@ -75,7 +74,7 @@ def fiscal(B, G, rb, w, N, transfer, rho_B):
 # Use this to test zero impulse once we have it
 @simple
 def real_bonds(r):
-    rb = r(-1)
+    rb = r
     return rb
 
 
@@ -103,7 +102,6 @@ def union_ss(atw, UCE, muw, N, nu, kappaw, beta, pi):
     wnkpc = kappaw * N * (vphi * N ** nu - atw * UCE / muw) + \
         beta * (1 + pi(+1)).apply(np.log) - (1 + pi).apply(np.log)
     return wnkpc, vphi
-
 
 
 '''Tests'''

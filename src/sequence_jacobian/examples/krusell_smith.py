@@ -80,6 +80,7 @@ def aggregate(A_patient, A_impatient, C_patient, C_impatient, mass_patient):
 
 def remapped_dag():
     # Create 2 versions of the household block using `remap`
+    household = hh.household.add_hetinputs([income])
     to_map = ['beta', *household.outputs]
     hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('hh_patient')
     hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('hh_impatient')
