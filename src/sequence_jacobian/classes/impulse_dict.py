@@ -21,6 +21,9 @@ class ImpulseDict(ResultDict):
             super().__init__(data, internals)
             self.T = (T if T is not None else self.infer_length())
 
+    def __getitem__(self, k):
+        return super().__getitem__(k, T=self.T)
+
     def __add__(self, other):
         return self.binary_operation(other, lambda a, b: a + b)
 
@@ -90,7 +93,7 @@ class ImpulseDict(ResultDict):
         impulse = {}
         for i, o in enumerate(outputs):
             impulse[o] = bigv[i*T:(i+1)*T]
-        return ImpulseDict(impulse)
+        return ImpulseDict(impulse, T=T)
 
     def infer_length(self):
         lengths = [len(v) for v in self.toplevel.values()]
@@ -107,6 +110,6 @@ class ImpulseDict(ResultDict):
             raise TypeError(f'Key {k} to {type(self).__name__} cannot be tuple')
         else:
             try:
-                return type(self)({ki: self.toplevel.get(ki, np.zeros(self.T)) for ki in k})
+                return type(self)({ki: self.toplevel.get(ki, np.zeros(self.T)) for ki in k}, T=self.T)
             except TypeError:
                 raise TypeError(f'Key {k} to {type(self).__name__} needs to be a string or an iterable (list, set, etc) of strings')

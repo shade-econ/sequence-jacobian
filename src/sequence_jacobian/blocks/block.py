@@ -64,15 +64,17 @@ class Block:
         around a steady state `ss`."""
         own_options = self.get_options(options, kwargs, 'impulse_nonlinear')
         inputs = ImpulseDict(inputs)
-        _, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
+        actual_outputs, inputs_as_outputs = self.process_outputs(ss, self.make_ordered_set(inputs), self.make_ordered_set(outputs))
         
         # SolvedBlocks may use Js and may be nested in a CombinedBlock 
         if isinstance(self, Parent):
-            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, internals, Js, options, **own_options)
+            out = self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ actual_outputs, internals, Js, options, **own_options)
         elif hasattr(self, 'internals'):
-            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, self.internals_to_report(internals), **own_options)
+            out = self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ actual_outputs, self.internals_to_report(internals), **own_options)
         else:
-            return self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, **own_options)
+            out = self.M @ self._impulse_nonlinear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ actual_outputs, **own_options)
+
+        return inputs[inputs_as_outputs] | out
 
     def impulse_linear(self, ss: SteadyStateDict, inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None, 
                        Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
@@ -80,12 +82,14 @@ class Block:
         around a steady state `ss`."""
         own_options = self.get_options(options, kwargs, 'impulse_linear')
         inputs = ImpulseDict(inputs)
-        _, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
+        actual_outputs, inputs_as_outputs = self.process_outputs(ss, self.make_ordered_set(inputs), self.make_ordered_set(outputs))
 
         if isinstance(self, Parent):
-            return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, options, **own_options)
+            out = self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ actual_outputs, Js, options, **own_options)
         else:
-            return self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ outputs, Js, **own_options)
+            out = self.M @ self._impulse_linear(self.M.inv @ ss, self.M.inv @ inputs, self.M.inv @ actual_outputs, Js, **own_options)
+
+        return inputs[inputs_as_outputs] | out
 
     def partial_jacobians(self, ss: SteadyStateDict, inputs: Optional[List[str]] = None, outputs: Optional[List[str]] = None,
                           T: Optional[int] = None, Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs):
@@ -115,8 +119,10 @@ class Block:
     def jacobian(self, ss: SteadyStateDict, inputs: List[str], outputs: Optional[List[str]] = None,
                  T: Optional[int] = None, Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> JacobianDict:
         """Calculate a partial equilibrium Jacobian to a set of `input` shocks at a steady state `ss`."""
-        inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
         own_options = self.get_options(options, kwargs, 'jacobian')
+        inputs = self.make_ordered_set(inputs)
+        outputs, _ = self.process_outputs(ss, {}, self.make_ordered_set(outputs))
+        #outputs = self.make_ordered_set(outputs) if outputs is not None else self.outputs
 
         # if you have a J for this block that has everything you need, use it
         if (self.name in Js) and isinstance(Js[self.name], JacobianDict) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
@@ -188,11 +194,14 @@ class Block:
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the `targets` that must hold in general equilibrium"""
         inputs = ImpulseDict(inputs)
-        input_names, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
         unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
+
+        input_names = self.make_ordered_set(inputs)
+        actual_outputs, inputs_as_outputs = self.process_outputs(ss, input_names | unknowns, self.make_ordered_set(outputs))
+
         T = inputs.T
 
-        Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, T, Js, options, **kwargs)
+        Js = self.partial_jacobians(ss, input_names | unknowns, (actual_outputs | targets) - unknowns, T, Js, options, **kwargs)
         H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs)
         H_U_factored = FactoredJacobianDict(H_U, T)
 
@@ -203,7 +212,7 @@ class Block:
         if opts['verbose']:
             print(f'Solving {self.name} for {unknowns} to hit {targets}')
         for it in range(opts['maxit']):
-            results = self.impulse_nonlinear(ss, inputs | U, outputs | targets, internals, Js, options, **kwargs)
+            results = self.impulse_nonlinear(ss, inputs | U, actual_outputs | targets, internals, Js, options, **kwargs)
             errors = {k: np.max(np.abs(results[k])) for k in targets}
             if opts['verbose']:
                 print(f'On iteration {it}')
@@ -216,7 +225,7 @@ class Block:
         else:
             raise ValueError(f'No convergence after {opts["maxit"]} backward iterations!')
 
-        return results | U | inputs
+        return (inputs | U)[inputs_as_outputs] | results
 
     solve_impulse_linear_options = {}
 
@@ -227,34 +236,33 @@ class Block:
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the target conditions that must hold in general equilibrium"""
         inputs = ImpulseDict(inputs)
-        input_names, outputs = self.default_inputs_outputs(ss, inputs.keys(), outputs)
         unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
+
+        input_names = self.make_ordered_set(inputs)
+        actual_outputs, inputs_as_outputs = self.process_outputs(ss, input_names | unknowns, self.make_ordered_set(outputs))
+
         T = inputs.T
 
-        Js = self.partial_jacobians(ss, input_names | unknowns, (outputs | targets) - unknowns, T, Js, options, **kwargs)
+        Js = self.partial_jacobians(ss, input_names | unknowns, (actual_outputs | targets) - unknowns, T, Js, options, **kwargs)
 
         H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
         dH = self.impulse_linear(ss, inputs, targets, Js, options, **kwargs).get(targets).pack() # .get(targets) fills in zeros
         dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, T)
 
-        return self.impulse_linear(ss, dU | inputs, outputs, Js, options, **kwargs) | dU | inputs
+        return (inputs | dU)[inputs_as_outputs] | self.impulse_linear(ss, dU | inputs, actual_outputs, Js, options, **kwargs)
 
     solve_jacobian_options = {}
 
     def solve_jacobian(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
-                       inputs: List[str], outputs: Optional[List[str]] = None, T: Optional[int] = None,
+                       inputs: List[str], outputs: Optional[List[str]] = None, T: int = 300,
                        Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> JacobianDict:
         """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
         at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
-        # TODO: do we really want this? is T just optional because we want it to come after outputs in docstring?
-        if T is None:
-            T = 300
+        inputs, unknowns = self.make_ordered_set(inputs), self.make_ordered_set(unknowns)
+        actual_outputs, unknowns_as_outputs = self.process_outputs(ss, unknowns, self.make_ordered_set(outputs))
 
-        inputs, outputs = self.default_inputs_outputs(ss, inputs, outputs)
-        unknowns, targets = OrderedSet(unknowns), OrderedSet(targets)
-
-        Js = self.partial_jacobians(ss, inputs | unknowns, (outputs | targets) - unknowns, T, Js, options, **kwargs)
+        Js = self.partial_jacobians(ss, inputs | unknowns, (actual_outputs | targets) - unknowns, T, Js, options, **kwargs)
         
         H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
         H_Z = self.jacobian(ss, inputs, targets, T, Js, options, **kwargs).pack(T)
@@ -262,7 +270,7 @@ class Block:
 
         from sequence_jacobian import combine
         self_with_unknowns = combine([U_Z, self])
-        return self_with_unknowns.jacobian(ss, inputs, unknowns | outputs, T, Js, options, **kwargs)
+        return self_with_unknowns.jacobian(ss, inputs, unknowns_as_outputs | actual_outputs, T, Js, options, **kwargs)
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:
@@ -296,6 +304,23 @@ class Block:
         if outputs is None:
             outputs = self.outputs - ss._vector_valued()
         return OrderedSet(inputs), OrderedSet(outputs)
+
+    def process_outputs(self, ss, inputs: OrderedSet, outputs: Optional[OrderedSet]):
+        if outputs is None:
+            actual_outputs = self.outputs - ss._vector_valued()
+            inputs_as_outputs = inputs
+        else:
+            actual_outputs = outputs & self.outputs
+            inputs_as_outputs = outputs & inputs
+        
+        return actual_outputs, inputs_as_outputs
+
+    @staticmethod
+    def make_ordered_set(x):
+        if x is not None and not isinstance(x, OrderedSet):
+            return OrderedSet(x)
+        else:
+            return x
 
     def get_options(self, options: dict, kwargs, method):
         own_options = getattr(self, method + "_options")

@@ -57,8 +57,8 @@ def test_block_consistency(block, ss):
     td_up = block.impulse_nonlinear(ss_results, {i: h*shock for i, shock in all_shocks.items()})
     td_dn = block.impulse_nonlinear(ss_results, {i: -h*shock for i, shock in all_shocks.items()})
     
-    linear_impulses = {o: (td_up[o] - td_dn[o])/(2*h) for o in td_up}
-    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in td_up}
+    linear_impulses = {o: (td_up[o] - td_dn[o])/(2*h) for o in block.outputs}
+    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in block.outputs}
 
     for o in linear_impulses:
         assert np.all(np.abs(linear_impulses[o] - linear_impulses_from_jac[o]) < 1E-5)

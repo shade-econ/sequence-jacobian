@@ -22,14 +22,14 @@ class ResultDict:
     def __iter__(self):
         return iter(self.toplevel)
 
-    def __getitem__(self, k):
+    def __getitem__(self, k, **kwargs):
         if isinstance(k, str):
             return self.toplevel[k]
         elif isinstance(k, tuple):
             raise TypeError(f'Key {k} to {type(self).__name__} cannot be tuple')
         else:
             try:
-                return type(self)({ki: self.toplevel[ki] for ki in k})
+                return type(self)({ki: self.toplevel[ki] for ki in k}, **kwargs)
             except TypeError:
                 raise TypeError(f'Key {k} to {type(self).__name__} needs to be a string or an iterable (list, set, etc) of strings')
     

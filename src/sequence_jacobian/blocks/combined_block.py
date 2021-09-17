@@ -80,20 +80,20 @@ class CombinedBlock(Block, Parent):
             if input_args:  # If this block is actually perturbed
                 impulses.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, internals, Js, options))
 
-        return ImpulseDict({k: impulses.toplevel[k] for k in original_outputs}, impulses.internals, impulses.T)
+        return ImpulseDict({k: impulses.toplevel[k] for k in original_outputs if k in impulses.toplevel}, impulses.internals, impulses.T)
 
     def _impulse_linear(self, ss, inputs, outputs, Js, options):
         original_outputs = outputs
         outputs = (outputs | self._required) - ss._vector_valued()
         
-        irf_lin_partial_eq = deepcopy(inputs)
+        impulses = inputs.copy()
         for block in self.blocks:
-            input_args = {k: v for k, v in irf_lin_partial_eq.items() if k in block.inputs} 
+            input_args = {k: v for k, v in impulses.items() if k in block.inputs} 
 
             if input_args:  # If this block is actually perturbed
-                irf_lin_partial_eq.update(block.impulse_linear(ss, input_args, outputs & block.outputs, Js, options))
+                impulses.update(block.impulse_linear(ss, input_args, outputs & block.outputs, Js, options))
 
-        return irf_lin_partial_eq[original_outputs]
+        return ImpulseDict({k: impulses.toplevel[k] for k in original_outputs if k in impulses.toplevel}, T=impulses.T)
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js, options):
         vector_valued = ss._vector_valued()
