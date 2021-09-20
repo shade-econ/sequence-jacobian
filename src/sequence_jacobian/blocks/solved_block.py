@@ -71,11 +71,11 @@ class SolvedBlock(Block, Parent):
 
     def _impulse_nonlinear(self, ss, inputs, outputs, internals, Js, options, **kwargs):
         return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                                  inputs, outputs - self.unknowns.keys(), internals, Js, options, **kwargs)
+                                                  inputs, outputs, internals, Js, options, **kwargs)
 
     def _impulse_linear(self, ss, inputs, outputs, Js, options):
         return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                               inputs, outputs - self.unknowns.keys(), Js, options)
+                                               inputs, outputs, Js, options)
 
     def _jacobian(self, ss, inputs, outputs, T, Js, options):
         return self.block.solve_jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
