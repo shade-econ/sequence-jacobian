@@ -156,58 +156,14 @@ def test_all():
         G[k] = dag[k].solve_jacobian(ss[k], unknowns, targets, inputs=['G'], T=300, Js=Js[k])
         td_lin1[k] = G[k] @ shock
         td_lin2[k] = dag[k].solve_impulse_linear(ss[k], unknowns, targets, shock, Js=Js[k])
-
         assert all(np.allclose(td_lin1[k][i], td_lin2[k][i]) for i in td_lin1[k])
 
     # Nonlinear vs linear impulses
-    td_nonlin = dag['ha'].solve_impulse_nonlinear(ss['ha'], unknowns, targets, inputs=shock*1E-4,
+    td_nonlin = dag['ha'].solve_impulse_nonlinear(ss['ha'], unknowns, targets, inputs=shock*1E-2,
         Js=Js, internals=['household_ha'])
     assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
-    assert all(np.allclose(td_lin1['ha'][k]*1E-4, td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1['ha'] if k != 'MPC')
 
     # See if D change matches up with aggregate assets
-    assert np.allclose(np.sum(td_nonlin.internals['household_ha']['D']*td_nonlin.internals['household_ha']['a'], axis=(1, 2)), td_nonlin['A'])
-
-
-def test_all_old():
-    # Assemble HA block (want to test nesting)
-    household = hh.household.add_hetinputs([income])
-    household = household.add_hetoutputs([mpcs])
-    household = combine([household, make_grids], name='HH')
-
-    # Assemble DAG (for transition dynamics)
-    dag = create_model([household, firm, fiscal, mkt_clearing], name='HANK')
-    unknowns = ['N']
-    targets = ['asset_mkt']
-
-    # Solve steady state
-    calibration = {'N': 1.0, 'Z': 1.0, 'r': 0.005, 'eis': 0.5, 'nu': 0.5,
-                   'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3, 'amin': 0.0, 'amax': 200,
-                   'nA': 100, 'transfer': 0.143, 'rho_B': 0.0}
-    
-    ss = dag.solve_steady_state(calibration, dissolve=['fiscal'], solver='hybr',
-            unknowns={'beta': 0.96, 'B': 3.0, 'G': 0.2},
-            targets={'asset_mkt': 0.0, 'MPC': 0.25, 'tau': 0.334})
-
-    # Precompute HA Jacobian
-    Js = {'household': household.jacobian(ss, inputs=['N', 'atw', 'r', 'transfer'],
-                                             outputs=['C', 'A'], T=300)}
-
-    # Linear impulse responses from Jacobian vs directly
-    G = dag.solve_jacobian(ss, inputs=['r'], outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'],
-                           unknowns=['N'], targets=['asset_mkt'], T=300, Js=Js)
-    shock = ImpulseDict({'r': 1E-4 * 0.9 ** np.arange(300)})
-    td_lin1 = G @ shock
-    td_lin2 = dag.solve_impulse_linear(ss, unknowns=['N'], targets=['asset_mkt'],
-                                       inputs=shock, outputs=['Y', 'C', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js)
-    assert all(np.allclose(td_lin1[k], td_lin2[k]) for k in td_lin1)
-
-    # Nonlinear vs linear impulses
-    td_nonlin = dag.solve_impulse_nonlinear(ss, unknowns=['N'], targets=['asset_mkt'],
-                                             inputs=shock, outputs=['Y', 'C', 'A', 'MPC', 'asset_mkt', 'goods_mkt'], Js=Js, internals=['household'])
-    assert np.max(np.abs(td_nonlin['goods_mkt'])) < 1E-8
-    assert all(np.allclose(td_lin1[k], td_nonlin[k], atol=1E-6, rtol=1E-6) for k in td_lin1 if k != 'MPC')
-
-    # See if D change matches up with aggregate assets 
-    assert np.allclose(np.sum(td_nonlin.internals['household']['D']*td_nonlin.internals['household']['a'], axis=(1,2)), td_nonlin['A'])
-    assert np.allclose(np.sum(td_nonlin.internals['household']['D']*td_nonlin.internals['household']['c'], axis=(1,2)), td_nonlin['C'])
+    td_nonlin_lvl = td_nonlin + ss['ha']
+    td_A = np.sum(td_nonlin_lvl.internals['household_ha']['a'] * td_nonlin_lvl.internals['household_ha']['D'], axis=(1, 2))
+    assert np.allclose(td_A - ss['ha']['A'], td_nonlin['A'])
