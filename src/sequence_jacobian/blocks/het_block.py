@@ -106,8 +106,11 @@ class HetBlock(Block):
         return SteadyStateDict({k: ss[k] for k in ss if k not in self.internals},
                                {self.name: {k: ss[k] for k in ss if k in self.internals}})
 
-    def _impulse_nonlinear(self, ssin, inputs, outputs, internals, monotonic=False):
+    def _impulse_nonlinear(self, ssin, inputs, outputs, internals, ss_initial, monotonic=False):
         ss = self.extract_ss_dict(ssin)
+        if ss_initial is not None:
+            # only effect of distinct initial ss on hetblock is different initial distribution
+            ss['Dbeg'] = ss_initial['Dbeg']
 
         # identify individual variable paths we want from backward iteration, then run it
         toreturn = self.non_backward_outputs

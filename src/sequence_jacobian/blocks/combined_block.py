@@ -69,7 +69,7 @@ class CombinedBlock(Block, Parent):
 
         return ss
 
-    def _impulse_nonlinear(self, ss, inputs, outputs, internals, Js, options):
+    def _impulse_nonlinear(self, ss, inputs, outputs, internals, Js, options, ss_initial):
         original_outputs = outputs
         outputs = (outputs | self._required) - ss._vector_valued()
 
@@ -77,8 +77,10 @@ class CombinedBlock(Block, Parent):
         for block in self.blocks:
             input_args = {k: v for k, v in impulses.items() if k in block.inputs}
 
-            if input_args:  # If this block is actually perturbed
-                impulses.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, internals, Js, options))
+            if input_args or ss_initial is not None:
+                # If this block is actually perturbed, or we start from different initial ss
+                # TODO: be more selective about ss_initial here - did any inputs change that matter for this one block?
+                impulses.update(block.impulse_nonlinear(ss, input_args, outputs & block.outputs, internals, Js, options, ss_initial))
 
         return ImpulseDict({k: impulses.toplevel[k] for k in original_outputs if k in impulses.toplevel}, impulses.internals, impulses.T)
 

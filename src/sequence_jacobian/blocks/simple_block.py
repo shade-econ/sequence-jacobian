@@ -45,16 +45,25 @@ class SimpleBlock(Block):
         outputs = self.f.wrapped_call(ss, preprocess=ignore, postprocess=misc.numeric_primitive)
         return SteadyStateDict({**ss, **outputs})
 
-    def _impulse_nonlinear(self, ss, inputs, outputs):
+    def _impulse_nonlinear(self, ss, inputs, outputs, ss_initial):
+        if ss_initial is None:
+            ss_initial = ss
+            ss_initial_flag = False
+        else:
+            ss_initial_flag = True
+
         input_args = {}
         for k, v in inputs.items():
             if np.isscalar(v):
                 raise ValueError(f'Keyword argument {k}={v} is scalar, should be time path.')
-            input_args[k] = Displace(v + ss[k], ss=ss[k], name=k)
+            input_args[k] = Displace(v + ss[k], ss[k], ss_initial[k], k)
 
         for k in self.inputs:
             if k not in input_args:
-                input_args[k] = ignore(ss[k])
+                if not ss_initial_flag or (ss_initial_flag and np.array_equal(ss_initial[k], ss[k])):
+                    input_args[k] = ignore(ss[k])
+                else:
+                    input_args[k] = Displace(np.full(inputs.T, ss[k]), ss[k], ss_initial[k], k)
 
         return ImpulseDict(make_impulse_uniform_length(self.f(input_args)))[outputs] - ss
 

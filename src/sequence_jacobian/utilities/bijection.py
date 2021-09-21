@@ -25,7 +25,9 @@ class Bijection:
         return self.map.get(k, k)
 
     def __matmul__(self, x):
-        if isinstance(x, str):
+        if x is None:
+            return None
+        elif isinstance(x, str):
             return self[x]
         elif isinstance(x, Bijection):
             # compose self: v -> u with x: w -> v

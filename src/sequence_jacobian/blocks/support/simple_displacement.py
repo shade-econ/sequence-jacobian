@@ -276,14 +276,17 @@ class Displace(np.ndarray):
     """This class makes time displacements of a time path, given the steady-state value.
     Needed for SimpleBlock.td()"""
 
-    def __new__(cls, x, ss=None, name='UNKNOWN'):
+    def __new__(cls, x, ss=None, ss_initial=None, name='UNKNOWN'):
         obj = np.asarray(x).view(cls)
         obj.ss = ss
+        obj.ss_initial = ss_initial
         obj.name = name
         return obj
 
     def __array_finalize__(self, obj):
+        # note by Matt: not sure what this does?
         self.ss = getattr(obj, "ss", None)
+        self.ss_initial = getattr(obj, "ss_initial", None)
         self.name = getattr(obj, "name", "UNKNOWN")
 
     def __repr__(self):
@@ -291,162 +294,161 @@ class Displace(np.ndarray):
 
     # TODO: Implemented a very preliminary generalization of Displace to higher-dimensional (>1) ndarrays
     #   however the rigorous operator overloading/testing has not been checked for higher dimensions.
-    #   Should also implement some checks for the dimension of .ss, to ensure that it's always N-1
-    #   where we also assume that the *last* dimension is the time dimension
+    #   (Matt: fixed so that it's the first dimension that is time dimension, consistent with everything else)
     def __call__(self, index):
         if index != 0:
             if self.ss is None:
                 raise KeyError(f'Trying to call {self.name}({index}), but steady-state {self.name} not given!')
             newx = np.zeros(np.shape(self))
             if index > 0:
-                newx[..., :-index] = numeric_primitive(self)[..., index:]
-                newx[..., -index:] = self.ss
+                newx[:-index] = numeric_primitive(self)[index:]
+                newx[-index:] = self.ss
             else:
-                newx[..., -index:] = numeric_primitive(self)[..., :index]
-                newx[..., :-index] = self.ss
-            return Displace(newx, ss=self.ss)
+                newx[-index:] = numeric_primitive(self)[:index]
+                newx[:-index] = self.ss_initial
+            return Displace(newx, self.ss, self.ss_initial)
         else:
             return self
 
     def apply(self, f, **kwargs):
-        return Displace(f(numeric_primitive(self), **kwargs), ss=f(self.ss))
+        return Displace(f(numeric_primitive(self), **kwargs), ss=f(self.ss), ss_initial=f(self.ss_initial))
 
     def __pos__(self):
         return self
 
     def __neg__(self):
-        return Displace(-numeric_primitive(self), ss=-self.ss)
+        return Displace(-numeric_primitive(self), ss=-self.ss, ss_initial=-self.ss_initial)
 
     def __add__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(self) + numeric_primitive(other),
-                            ss=self.ss + other.ss)
+                            ss=self.ss + other.ss, ss_initial=self.ss_initial + other.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(self) + numeric_primitive(other),
-                            ss=self.ss + numeric_primitive(other))
+                            ss=self.ss + numeric_primitive(other), ss_initial=self.ss_initial + numeric_primitive(other))
         else:
             # TODO: See if there is a different, systematic way we want to handle this case.
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(self) + numeric_primitive(other),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __radd__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(other) + numeric_primitive(self),
-                            ss=other.ss + self.ss)
+                            ss=other.ss + self.ss, ss_initial=other.ss_initial + self.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(other) + numeric_primitive(self),
-                            ss=numeric_primitive(other) + self.ss)
+                            ss=numeric_primitive(other) + self.ss, ss_initial=numeric_primitive(other) + self.ss_initial)
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(other) + numeric_primitive(self),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __sub__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(self) - numeric_primitive(other),
-                            ss=self.ss - other.ss)
+                            ss=self.ss - other.ss, ss_initial=self.ss_initial - other.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(self) - numeric_primitive(other),
-                            ss=self.ss - numeric_primitive(other))
+                            ss=self.ss - numeric_primitive(other), ss_initial=self.ss_initial - numeric_primitive(other))
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(self) - numeric_primitive(other),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __rsub__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(other) - numeric_primitive(self),
-                            ss=other.ss - self.ss)
+                            ss=other.ss - self.ss, ss_initial=other.ss_initial - self.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(other) - numeric_primitive(self),
-                            ss=numeric_primitive(other) - self.ss)
+                            ss=numeric_primitive(other) - self.ss, ss_initial=numeric_primitive(other) - self.ss_initial)
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(other) - numeric_primitive(self),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __mul__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(self) * numeric_primitive(other),
-                            ss=self.ss * other.ss)
+                            ss=self.ss * other.ss, ss_initial=self.ss_initial * other.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(self) * numeric_primitive(other),
-                            ss=self.ss * numeric_primitive(other))
+                            ss=self.ss * numeric_primitive(other), ss_initial=self.ss_initial * numeric_primitive(other))
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(self) * numeric_primitive(other),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __rmul__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(other) * numeric_primitive(self),
-                            ss=other.ss * self.ss)
+                            ss=other.ss * self.ss, ss_initial=other.ss_initial * self.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(other) * numeric_primitive(self),
-                            ss=numeric_primitive(other) * self.ss)
+                            ss=numeric_primitive(other) * self.ss, ss_initial=numeric_primitive(other) * self.ss_initial)
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(other) * numeric_primitive(self),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __truediv__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(self) / numeric_primitive(other),
-                            ss=self.ss / other.ss)
+                            ss=self.ss / other.ss, ss_initial=self.ss_initial / other.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(self) / numeric_primitive(other),
-                            ss=self.ss / numeric_primitive(other))
+                            ss=self.ss / numeric_primitive(other), ss_initial=self.ss_initial / numeric_primitive(other))
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(self) / numeric_primitive(other),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __rtruediv__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(other) / numeric_primitive(self),
-                            ss=other.ss / self.ss)
+                            ss=other.ss / self.ss, ss_initial=other.ss_initial / self.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(other) / numeric_primitive(self),
-                            ss=numeric_primitive(other) / self.ss)
+                            ss=numeric_primitive(other) / self.ss, ss_initial=numeric_primitive(other) / self.ss_initial)
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(other) / numeric_primitive(self),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __pow__(self, power):
         if isinstance(power, Displace):
             return Displace(numeric_primitive(self) ** numeric_primitive(power),
-                            ss=self.ss ** power.ss)
+                            ss=self.ss ** power.ss, ss_initial=self.ss_initial ** power.ss_initial)
         elif np.isscalar(power):
             return Displace(numeric_primitive(self) ** numeric_primitive(power),
-                            ss=self.ss ** numeric_primitive(power))
+                            ss=self.ss ** numeric_primitive(power), ss_initial=self.ss_initial ** numeric_primitive(power))
         else:
             warn("\n" + f"Applying operation to {power}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(self) ** numeric_primitive(power),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
     def __rpow__(self, other):
         if isinstance(other, Displace):
             return Displace(numeric_primitive(other) ** numeric_primitive(self),
-                            ss=other.ss ** self.ss)
+                            ss=other.ss ** self.ss, ss_initial=other.ss_initial ** self.ss_initial)
         elif np.isscalar(other):
             return Displace(numeric_primitive(other) ** numeric_primitive(self),
-                            ss=numeric_primitive(other) ** self.ss)
+                            ss=numeric_primitive(other) ** self.ss, ss_initial=numeric_primitive(other) ** self.ss_initial)
         else:
             warn("\n" + f"Applying operation to {other}, a vector, and {self}, a Displace." + "\n" +
                  f"The resulting Displace object will retain the steady-state value of the original Displace object.")
             return Displace(numeric_primitive(other) ** numeric_primitive(self),
-                            ss=self.ss)
+                            ss=self.ss, ss_initial=self.ss_initial)
 
 
 class AccumulatedDerivative:
