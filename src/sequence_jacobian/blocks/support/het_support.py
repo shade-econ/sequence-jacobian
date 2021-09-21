@@ -1,7 +1,7 @@
 import numpy as np
 from . import het_compiled
 from ...utilities.discretize import stationary as general_stationary
-from ...utilities.interpolate import interpolate_coord_robust
+from ...utilities.interpolate import interpolate_coord_robust, interpolate_coord
 from ...utilities.multidim import multiply_ith_dimension
 from typing import Optional, Sequence, Any, List, Tuple, Union
 
@@ -39,8 +39,11 @@ class ExpectationShockableTransition(Transition):
 
 
 
-def lottery_1d(a, a_grid):
-    return PolicyLottery1D(*interpolate_coord_robust(a_grid, a), a_grid)
+def lottery_1d(a, a_grid, monotonic=False):
+    if not monotonic:
+        return PolicyLottery1D(*interpolate_coord_robust(a_grid, a), a_grid)
+    else:
+        return PolicyLottery1D(*interpolate_coord(a_grid, a), a_grid)
     
 
 class PolicyLottery1D(Transition):
@@ -81,9 +84,14 @@ class ForwardShockablePolicyLottery1D(PolicyLottery1D, ForwardShockableTransitio
         return het_compiled.forward_policy_shock_1d(self.Dss, self.i, pi_shock).reshape(self.shape)
 
 
-def lottery_2d(a, b, a_grid, b_grid):
-    return PolicyLottery2D(*interpolate_coord_robust(a_grid, a),
+def lottery_2d(a, b, a_grid, b_grid, monotonic=False):
+    if not monotonic:
+        return PolicyLottery2D(*interpolate_coord_robust(a_grid, a),
                            *interpolate_coord_robust(b_grid, b), a_grid, b_grid)
+    if monotonic:
+        # right now we have no monotonic 2D examples, so this shouldn't be called
+        return PolicyLottery2D(*interpolate_coord(a_grid, a),
+                           *interpolate_coord(b_grid, b), a_grid, b_grid)
 
 
 class PolicyLottery2D(Transition):

@@ -118,7 +118,7 @@ class HetBlock(Block):
         individual_paths, exog_path = self.backward_nonlinear(ss, inputs, toreturn)
 
         # run forward iteration to get path of distribution, add to individual_paths
-        self.forward_nonlinear(ss, individual_paths, exog_path)
+        self.forward_nonlinear(ss, individual_paths, exog_path, monotonic)
 
         # obtain aggregates of all outputs, made uppercase
         aggregates = {o: utils.optimized_routines.fast_aggregate(
@@ -131,7 +131,7 @@ class HetBlock(Block):
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
 
-    def _jacobian(self, ss, inputs, outputs, T, h=1E-4):
+    def _jacobian(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
         ss = self.extract_ss_dict(ss)
         self.update_with_hetinputs(ss)
         outputs = self.M_outputs.inv @ outputs
@@ -139,7 +139,7 @@ class HetBlock(Block):
         # step 0: preliminary processing of steady state
         exog = self.make_exog_law_of_motion(ss)
         endog = self.make_endog_law_of_motion(ss)
-        differentiable_backward_fun, differentiable_hetinputs, differentiable_hetoutputs = self.jac_backward_prelim(ss, h, exog)
+        differentiable_backward_fun, differentiable_hetinputs, differentiable_hetoutputs = self.jac_backward_prelim(ss, h, exog, twosided)
         law_of_motion = CombinedTransition([exog, endog]).forward_shockable(ss['Dbeg'])
         exog_by_output = {k: exog.expectation_shockable(ss[k]) for k in outputs | self.backward}
 
@@ -266,7 +266,7 @@ class HetBlock(Block):
         
         return individual_paths, exog_path[::-1]
 
-    def forward_nonlinear(self, ss, individual_paths, exog_path):
+    def forward_nonlinear(self, ss, individual_paths, exog_path, monotonic):
         T = len(exog_path)
         Dbeg = ss['Dbeg']
 
@@ -275,7 +275,7 @@ class HetBlock(Block):
         D_path = np.empty_like(Dbeg_path)
 
         for t in range(T):
-            endog = self.make_endog_law_of_motion({**ss, **{k: individual_paths[k][t, ...] for k in self.policy}})
+            endog = self.make_endog_law_of_motion({**ss, **{k: individual_paths[k][t, ...] for k in self.policy}}, monotonic)
 
             # now step forward in two, first exogenous this period then endogenous
             D_path[t, ...] = exog_path[t].forward(Dbeg)
@@ -296,7 +296,7 @@ class HetBlock(Block):
         # contemporaneous effect of unit scalar shock to input_shocked
         din_dict = {input_shocked: 1}
         if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
-            din_dict.update(differentiable_hetinput.diff2({input_shocked: 1}))
+            din_dict.update(differentiable_hetinput.diff({input_shocked: 1}))
 
         curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, differentiable_backward_fun,
                                                             differentiable_hetoutput, law_of_motion, exog, True)
@@ -390,20 +390,21 @@ class HetBlock(Block):
 
         return curlyV, curlyD, curlyY
 
-    def jac_backward_prelim(self, ss, h, exog):
+    def jac_backward_prelim(self, ss, h, exog, twosided):
         """Support for part 1 of fake news algorithm: preload differentiable functions"""
         differentiable_hetinputs = None
         if self.hetinputs is not None:
-            differentiable_hetinputs = self.hetinputs.differentiable(ss)
+            # always use two-sided differentiation for hetinputs
+            differentiable_hetinputs = self.hetinputs.differentiable(ss, h, True)
 
         differentiable_hetoutputs = None
         if self.hetoutputs is not None:
-            differentiable_hetoutputs = self.hetoutputs.differentiable(ss)
+            differentiable_hetoutputs = self.hetoutputs.differentiable(ss, h, twosided)
 
         ss = ss.copy()
         for k in self.backward:
             ss[k + '_p'] = exog.expectation(ss[k])
-        differentiable_backward_fun = self.backward_fun.differentiable(ss, h=h)
+        differentiable_backward_fun = self.backward_fun.differentiable(ss, h, twosided)
 
         return differentiable_backward_fun, differentiable_hetinputs, differentiable_hetoutputs
 
@@ -480,9 +481,9 @@ class HetBlock(Block):
     def make_exog_law_of_motion(self, d:dict):
         return CombinedTransition([Markov(d[k], i) for i, k in enumerate(self.exogenous)])
 
-    def make_endog_law_of_motion(self, d: dict):
+    def make_endog_law_of_motion(self, d: dict, monotonic=False):
         if len(self.policy) == 1:
-            return lottery_1d(d[self.policy[0]], d[self.policy[0] + '_grid'])
+            return lottery_1d(d[self.policy[0]], d[self.policy[0] + '_grid'], monotonic)
         else:
             return lottery_2d(d[self.policy[0]], d[self.policy[1]],
-                        d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'])
+                        d[self.policy[0] + '_grid'], d[self.policy[1] + '_grid'], monotonic)

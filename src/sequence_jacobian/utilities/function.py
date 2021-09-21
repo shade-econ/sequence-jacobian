@@ -81,20 +81,30 @@ class ExtendedFunction:
         
         return output_dict
 
-    def differentiable(self, input_dict, h=1E-6, h2=1E-4):
-        return DifferentiableExtendedFunction(self.f, self.name, self.inputs, self.outputs, input_dict, h, h2)
+    def differentiable(self, input_dict, h=1E-5, twosided=False):
+        return DifferentiableExtendedFunction(self.f, self.name, self.inputs, self.outputs, input_dict, h, twosided)
 
 
 class DifferentiableExtendedFunction(ExtendedFunction):
-    def __init__(self, f, name, inputs, outputs, input_dict, h=1E-6, h2=1E-4):
+    def __init__(self, f, name, inputs, outputs, input_dict, h=1E-5, twosided=False):
         self.f, self.name, self.inputs, self.outputs = f, name, inputs, outputs
         self.input_dict = input_dict
         self.output_dict = None # lazy evaluation of outputs for one-sided diff
         self.h = h
-        self.h2 = h2
+        self.default_twosided = twosided
 
 
-    def diff(self, shock_dict, h=None, hide_zeros=False):
+    def diff(self, shock_dict, h=None, hide_zeros=False, twosided=None):
+        if twosided is None:
+            twosided = self.default_twosided
+
+        if not twosided:
+            return self.diff1(shock_dict, h, hide_zeros)
+        else:
+            return self.diff2(shock_dict, h, hide_zeros)
+
+
+    def diff1(self, shock_dict, h=None, hide_zeros=False):
         if h is None:
             h = self.h
 
@@ -115,7 +125,7 @@ class DifferentiableExtendedFunction(ExtendedFunction):
 
     def diff2(self, shock_dict, h=None, hide_zeros=False):
         if h is None:
-            h = self.h2
+            h = self.h
 
         shocked_input_dict_up = {**self.input_dict,
             **{k: self.input_dict[k] + h * shock for k, shock in shock_dict.items() if k in self.input_dict}}
@@ -206,24 +216,34 @@ class ExtendedParallelFunction(ExtendedFunction):
     def children(self):
         return OrderedSet(self.functions)
 
-    def differentiable(self, input_dict, h=1E-6, h2=1E-4):
-        return DifferentiableExtendedParallelFunction(self.functions, self.name, self.inputs, self.outputs, input_dict, h, h2)        
+    def differentiable(self, input_dict, h=1E-5, twosided=False):
+        return DifferentiableExtendedParallelFunction(self.functions, self.name, self.inputs, self.outputs, input_dict, h, twosided)        
 
 
 class DifferentiableExtendedParallelFunction(ExtendedParallelFunction, DifferentiableExtendedFunction):
-    def __init__(self, functions, name, inputs, outputs, input_dict, h=1E-6, h2=1E-4):
+    def __init__(self, functions, name, inputs, outputs, input_dict, h=1E-5, twosided=False):
         self.name, self.inputs, self.outputs = name, inputs, outputs
         diff_functions = {}
         for k, f in functions.items():
-            diff_functions[k] = f.differentiable(input_dict, h, h2)
+            diff_functions[k] = f.differentiable(input_dict, h)
         self.diff_functions = diff_functions
+        self.default_twosided = twosided
     
-    def diff(self, shock_dict, h=None, outputs=None, hide_zeros=False):
+    def diff(self, shock_dict, h=None, outputs=None, hide_zeros=False, twosided=False):
+        if twosided is None:
+            twosided = self.default_twosided
+
+        if not twosided:
+            return self.diff1(shock_dict, h, outputs, hide_zeros)
+        else:
+            return self.diff2(shock_dict, h, outputs, hide_zeros)
+
+    def diff1(self, shock_dict, h=None, outputs=None, hide_zeros=False):
         results = {}
         for f in self.diff_functions.values():
             if not f.inputs.isdisjoint(shock_dict):
                 if outputs is None or not f.outputs.isdisjoint(outputs):
-                    results.update(f.diff(shock_dict, h, hide_zeros))
+                    results.update(f.diff1(shock_dict, h, hide_zeros))
         if outputs is not None:
             results = {k: results[k] for k in outputs if k in results}
         return results
