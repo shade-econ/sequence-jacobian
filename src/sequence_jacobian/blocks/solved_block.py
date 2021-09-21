@@ -71,15 +71,15 @@ class SolvedBlock(Block, Parent):
 
     def _impulse_nonlinear(self, ss, inputs, outputs, internals, Js, options, **kwargs):
         return self.block.solve_impulse_nonlinear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                                  inputs, outputs, internals, Js, options, **kwargs)
+                                        inputs, outputs, internals, Js, options, self._get_H_U_factored(Js), **kwargs)
 
     def _impulse_linear(self, ss, inputs, outputs, Js, options):
         return self.block.solve_impulse_linear(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                               inputs, outputs, Js, options)
+                                               inputs, outputs, Js, options, self._get_H_U_factored(Js))
 
     def _jacobian(self, ss, inputs, outputs, T, Js, options):
         return self.block.solve_jacobian(ss, OrderedSet(self.unknowns), OrderedSet(self.targets),
-                                         inputs, outputs, T, Js, options)[outputs]
+                                    inputs, outputs, T, Js, options, self._get_H_U_factored(Js))[outputs]
 
     def _partial_jacobians(self, ss, inputs, outputs, T, Js, options):
         # call it on the child first
@@ -91,3 +91,9 @@ class SolvedBlock(Block, Parent):
         H_U_factored = FactoredJacobianDict(H_U, T)
 
         return {**inner_Js, self.name: H_U_factored}
+
+    def _get_H_U_factored(self, Js):
+        if self.name in Js and isinstance(Js[self.name], FactoredJacobianDict):
+            return Js[self.name]
+        else:
+            return None

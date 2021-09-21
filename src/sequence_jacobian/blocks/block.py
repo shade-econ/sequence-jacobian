@@ -189,7 +189,7 @@ class Block:
     def solve_impulse_nonlinear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                                 inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
                                 internals: Union[Dict[str, List[str]], List[str]] = {}, Js: Dict[str, JacobianDict] = {}, 
-                                options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
+                                options: Dict[str, dict] = {}, H_U_factored: Optional[FactoredJacobianDict] = None, **kwargs) -> ImpulseDict:
         """Calculate a general equilibrium, non-linear impulse response to a set of shocks in `inputs` 
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the `targets` that must hold in general equilibrium"""
@@ -202,8 +202,10 @@ class Block:
         T = inputs.T
 
         Js = self.partial_jacobians(ss, input_names | unknowns, (actual_outputs | targets) - unknowns, T, Js, options, **kwargs)
-        H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs)
-        H_U_factored = FactoredJacobianDict(H_U, T)
+
+        if H_U_factored is None:
+            H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs)
+            H_U_factored = FactoredJacobianDict(H_U, T)
 
         opts = self.get_options(options, kwargs, 'solve_impulse_nonlinear')
 
@@ -231,7 +233,9 @@ class Block:
 
     def solve_impulse_linear(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                              inputs: Union[Dict[str, Array], ImpulseDict], outputs: Optional[List[str]] = None,
-                             Js: Optional[Dict[str, JacobianDict]] = {}, options: Dict[str, dict] = {}, **kwargs) -> ImpulseDict:
+                             Js: Optional[Dict[str, JacobianDict]] = {}, options: Dict[str, dict] = {},
+                             H_U_factored: Optional[FactoredJacobianDict] = None, **kwargs) -> ImpulseDict:
+
         """Calculate a general equilibrium, linear impulse response to a set of shocks in `inputs`
            around a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
            variables to be solved for and the target conditions that must hold in general equilibrium"""
@@ -245,9 +249,13 @@ class Block:
 
         Js = self.partial_jacobians(ss, input_names | unknowns, (actual_outputs | targets) - unknowns, T, Js, options, **kwargs)
 
-        H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
-        dH = self.impulse_linear(ss, inputs, targets, Js, options, **kwargs).get(targets).pack() # .get(targets) fills in zeros
-        dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH), unknowns, T)
+        dH = self.impulse_linear(ss, inputs, targets, Js, options, **kwargs).get(targets) # .get(targets) fills in zeros
+
+        if H_U_factored is None:
+            H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
+            dU = ImpulseDict.unpack(-np.linalg.solve(H_U, dH.pack()), unknowns, T)
+        else:
+            dU = H_U_factored @ dH
 
         return (inputs | dU)[inputs_as_outputs] | self.impulse_linear(ss, dU | inputs, actual_outputs, Js, options, **kwargs)
 
@@ -255,7 +263,8 @@ class Block:
 
     def solve_jacobian(self, ss: SteadyStateDict, unknowns: List[str], targets: List[str],
                        inputs: List[str], outputs: Optional[List[str]] = None, T: int = 300,
-                       Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {}, **kwargs) -> JacobianDict:
+                       Js: Dict[str, JacobianDict] = {}, options: Dict[str, dict] = {},
+                       H_U_factored: Optional[FactoredJacobianDict] = None, **kwargs) -> JacobianDict:
         """Calculate a general equilibrium Jacobian to a set of `exogenous` shocks
         at a steady state `ss`, given a set of `unknowns` and `targets` corresponding to the endogenous
         variables to be solved for and the target conditions that must hold in general equilibrium"""
@@ -264,9 +273,13 @@ class Block:
 
         Js = self.partial_jacobians(ss, inputs | unknowns, (actual_outputs | targets) - unknowns, T, Js, options, **kwargs)
         
-        H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
-        H_Z = self.jacobian(ss, inputs, targets, T, Js, options, **kwargs).pack(T)
-        U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z), unknowns, inputs, T)
+        H_Z = self.jacobian(ss, inputs, targets, T, Js, options, **kwargs)
+
+        if H_U_factored is None:
+            H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
+            U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z.pack(T)), unknowns, inputs, T)
+        else:
+            U_Z = H_U_factored @ H_Z
 
         from sequence_jacobian import combine
         self_with_unknowns = combine([U_Z, self])

@@ -128,8 +128,8 @@ class HetBlock(Block):
         internals_dict = {self.name: {k: individual_paths[k] for k in internals}}
         return ImpulseDict(aggregates, internals_dict, inputs.T) - ssin
 
-    def _impulse_linear(self, ss, inputs, outputs, Js):
-        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js).apply(inputs))
+    def _impulse_linear(self, ss, inputs, outputs, Js, h=1E-4, twosided=False):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js, h=h, twosided=twosided).apply(inputs))
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
         ss = self.extract_ss_dict(ss)

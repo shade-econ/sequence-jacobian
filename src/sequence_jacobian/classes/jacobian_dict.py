@@ -231,6 +231,10 @@ class JacobianDict(NestedDict):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
         return JacobianDict(jacdict, outputs, inputs, T=T)
 
+    def factored(self, T=None):
+        return FactoredJacobianDict(self, T)
+
+
 class FactoredJacobianDict:
     def __init__(self, jacobian_dict: JacobianDict, T=None):
         if jacobian_dict.T is None:
@@ -284,7 +288,7 @@ class FactoredJacobianDict:
 
     def apply(self, x: Union[ImpulseDict, Dict[str, Array]]):
         """Returns -H_U^{-1} @ x"""
-        xsub = ImpulseDict(x)[self.targets].pack()
+        xsub = ImpulseDict(x).get(self.targets).pack()
         out = -factored_solve(self.H_U_factored, xsub)
         return ImpulseDict.unpack(out, self.unknowns, self.T)
 
