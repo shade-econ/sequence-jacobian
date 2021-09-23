@@ -1,7 +1,7 @@
 """Topological sort and related code"""
 
 
-def block_sort(blocks, return_io=False):
+def block_sort(blocks):
     """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort.
 
     Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
@@ -9,36 +9,21 @@ def block_sort(blocks, return_io=False):
 
     blocks: `list`
         A list of the blocks (SimpleBlock, HetBlock, etc.) to sort
-    return_io: `bool`
-        A boolean indicating whether to return the full set of input and output arguments from `blocks`
     """
-    # TODO: Decide whether we want to break out the input and output argument tracking and return to
-    #   a different function... currently it's very convenient to slot it into block_sort directly, but it
-    #   does clutter up the function body
-    if return_io:
-        # step 1: map outputs to blocks for topological sort
-        outmap, outargs = construct_output_map(blocks, return_output_args=True)
+    inmap = get_input_map(blocks)
+    outmap = get_output_map(blocks)
+    adj = get_block_adjacency_list(blocks, inmap)
+    revadj = get_block_reverse_adjacency_list(blocks, outmap)
 
-        # step 2: dependency graph for topological sort and input list
-        dep, inargs = construct_dependency_graph(blocks, outmap, return_input_args=True)
-
-        return topological_sort(dep), inargs, outargs
-    else:
-        # step 1: map outputs to blocks for topological sort
-        outmap = construct_output_map(blocks)
-
-        # step 2: dependency graph for topological sort and input list
-        dep = construct_dependency_graph(blocks, outmap)
-
-        return topological_sort(dep)
+    return topological_sort(adj, revadj)
 
 
-def topological_sort(dep, names=None):
+def topological_sort(adj, revadj, names=None):
     """Given directed graph pointing from each node to the nodes it depends on, topologically sort nodes"""
-
     # get complete set version of dep, and its reversal, and build initial stack of nodes with no dependencies
-    dep, revdep = complete_reverse_graph(dep)
-    nodeps = [n for n in dep if not dep[n]]
+    #dep, revdep = complete_reverse_graph(dep)
+    dep, revdep = revadj, adj
+    nodeps = [n for n, depset in enumerate(dep) if not depset]
     topsorted = []
 
     # Kahn's algorithm: find something with no dependency, delete its edges and update
@@ -60,66 +45,61 @@ def topological_sort(dep, names=None):
     return topsorted
 
 
-def construct_output_map(blocks, return_output_args=False):
-    """Construct a map of outputs to the indices of the blocks that produce them.
-
-    blocks: `list`
-        A list of the blocks (SimpleBlock, HetBlock, etc.) to sort
-    return_output_args: `bool`
-        A boolean indicating whether to track and return the full set of output arguments of all of the blocks
-        in `blocks`
-    """
-    outmap = dict()
-    outargs = set()
+def get_input_map(blocks: list):
+    """inmap[i] gives set of block numbers where i is an input"""
+    inmap = dict()
     for num, block in enumerate(blocks):
-        # Find the relevant set of outputs corresponding to a block
-        if hasattr(block, "outputs"):
-            outputs = block.outputs
-        elif isinstance(block, dict):
-            outputs = block.keys()
-        else:
-            raise ValueError(f'{block} is not recognized as block or does not provide outputs')
+        for i in block.inputs:
+            inset = inmap.setdefault(i, set())
+            inset.add(num)
 
-        for o in outputs:
+    return inmap
+
+
+def get_output_map(blocks: list):
+    """outmap[o] gives unique block number where o is an output"""
+    outmap = dict()
+    for num, block in enumerate(blocks):
+        for o in block.outputs:
             if o in outmap:
                 raise ValueError(f'{o} is output twice')
             outmap[o] = num
 
-    if return_output_args:
-        return outmap, outargs
-    else:
-        return outmap
+    return outmap
 
 
-def construct_dependency_graph(blocks, outmap, return_input_args=False):
-    """Construct a dependency graph dictionary, with block indices as keys and a set of block indices as values, where
-    this set is the set of blocks that the key block is dependent on.
+def get_block_adjacency_list(blocks, inmap):
+    """adj[n] for block number n gives set of block numbers which this block points to"""
+    adj = []
+    for block in blocks:
+        current_adj = set()
+        for o in block.outputs:
+            # for each output, if that output is used as an input by some blocks, add those blocks to adj
+            if o in inmap:
+                current_adj |= inmap[o]
+        adj.append(current_adj)
+    return adj
 
-    outmap is the output map (output to block index mapping) created by construct_output_map.
-    """
 
-    dep = {num: set() for num in range(len(blocks))}
-    inargs = set()
-    for num, block in enumerate(blocks):
-        if hasattr(block, 'inputs'):
-            inputs = block.inputs
-        else:
-            inputs = set(i for o in block for i in block[o])
-        for i in inputs:
+def get_block_reverse_adjacency_list(blocks, outmap):
+    """revadj[n] for block number n gives set of block numbers that point to this block"""
+    revadj = []
+    for block in blocks:
+        current_revadj = set()
+        for i in block.inputs:
             if i in outmap:
-                dep[num].add(outmap[i])
-    if return_input_args:
-        return dep, inargs
-    else:
-        return dep
+                current_revadj.add(outmap[i])
+        revadj.append(current_revadj)
+    return revadj
 
 
-def find_intermediate_inputs(blocks, **kwargs):
+def find_intermediate_inputs(blocks):
+    # TODO: should be deprecated
     """Find outputs of the blocks in blocks that are inputs to other blocks in blocks.
     This is useful to ensure that all of the relevant curlyJ Jacobians (of all inputs to all outputs) are computed.
     """
     required = set()
-    outmap = construct_output_map(blocks, **kwargs)
+    outmap = get_output_map(blocks)
     for num, block in enumerate(blocks):
         if hasattr(block, 'inputs'):
             inputs = block.inputs
@@ -168,7 +148,7 @@ def block_sort_w_helpers(blocks, helper_blocks=None, calibration=None, return_io
         dep, inargs = construct_dependency_graph_w_helpers(blocks, outmap, return_input_args=True, outargs=outargs,
                                                            helper_blocks=helper_blocks, calibration=calibration)
 
-        return topological_sort(dep), inargs, outargs
+        return topological_sort(map_to_list(complete_reverse_graph(dep)), map_to_list(dep)), inargs, outargs
     else:
         # step 1: map outputs to blocks for topological sort
         outmap = construct_output_map_w_helpers(blocks, helper_blocks=helper_blocks)
@@ -176,7 +156,11 @@ def block_sort_w_helpers(blocks, helper_blocks=None, calibration=None, return_io
         # step 2: dependency graph for topological sort and input list
         dep = construct_dependency_graph_w_helpers(blocks, outmap, helper_blocks=helper_blocks, calibration=calibration)
 
-        return topological_sort(dep)
+        return topological_sort(map_to_list(complete_reverse_graph(dep)), map_to_list(dep))
+
+
+def map_to_list(m):
+    return [m[i] for i in range(len(m))]
 
 
 def construct_output_map_w_helpers(blocks, helper_blocks=None, calibration=None, return_output_args=False):
@@ -286,9 +270,7 @@ def complete_reverse_graph(gph):
             n2_edges = revgph.setdefault(n2, set())
             n2_edges.add(n)
 
-    gph_missing_n = revgph.keys() - gph.keys()
-    gph = {**{k: set(v) for k, v in gph.items()}, **{n: set() for n in gph_missing_n}}
-    return gph, revgph
+    return revgph
 
 
 def find_cycle(dep, onlyset=None):

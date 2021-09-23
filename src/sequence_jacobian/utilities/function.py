@@ -2,7 +2,8 @@ import re
 import inspect
 import numpy as np
 
-from sequence_jacobian.utilities.ordered_set import OrderedSet
+from .ordered_set import OrderedSet
+from . import graph
 
 # TODO: fix this, have it twice (main version in misc) due to circular import problem
 # let's make everything point to here for input_list, etc. so that this is unnecessary
@@ -258,3 +259,7 @@ class DifferentiableExtendedParallelFunction(ExtendedParallelFunction, Different
             results = {k: results[k] for k in outputs if k in results}
         return results
 
+
+# class ExtendedCombinedFunction(ExtendedFunction):
+#     def __init__(self, fs, name=None):
+        
