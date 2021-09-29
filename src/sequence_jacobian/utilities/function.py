@@ -146,118 +146,6 @@ def hide_zero_values(d):
     return {k: v for k, v in d.items() if not np.allclose(v, 0)}
 
 
-class ExtendedParallelFunction(ExtendedFunction):
-    def __init__(self, fs, name=None):
-        inputs = OrderedSet([])
-        outputs = OrderedSet([])
-        functions = {}
-        for f in fs:
-            ext_f = ExtendedFunction(f)
-            if not outputs.isdisjoint(ext_f.outputs):
-                raise ValueError(f'Overlap in outputs of ParallelFunction: {ext_f.name} and others both have {outputs & ext_f.outputs}')
-            inputs |= ext_f.inputs
-            outputs |= ext_f.outputs
-
-            if ext_f.name in functions:
-                raise ValueError(f'Overlap in function names of ParallelFunction: {ext_f.name} listed twice')
-            functions[ext_f.name] = ext_f
-
-        self.inputs = inputs
-        self.outputs = outputs
-        self.functions = functions
-
-        if name is None:
-            names = list(functions)
-            if len(names) == 1:
-                self.name = names[0]
-            else:
-                self.name = f'{names[0]}_{names[-1]}'
-        else:
-            self.name = name
-
-    def __call__(self, input_dict, outputs=None):
-        results = {}
-        for f in self.functions.values():
-            if outputs is None or not f.outputs.isdisjoint(outputs): 
-                results.update(f(input_dict))
-        if outputs is not None:
-            results = {k: results[k] for k in outputs}
-        return results
-
-    def call_on_deviations(self, ss, dev_dict, outputs=None):
-        results = {}
-        input_dict = {**ss, **dev_dict}
-        for f in self.functions.values():
-            if not f.inputs.isdisjoint(dev_dict):
-                if outputs is None or not f.outputs.isdisjoint(outputs):
-                    results.update(f(input_dict))
-        if outputs is not None:
-            results = {k: results[k] for k in outputs if k in results}
-        return results
-    
-    def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
-        raise NotImplementedError
-
-    def add(self, f):
-        if inspect.isfunction(f) or isinstance(f, ExtendedFunction):
-            return ExtendedParallelFunction(list(self.functions.values()) + [f])
-        else:
-            # otherwise assume f is iterable
-            return ExtendedParallelFunction(list(self.functions.values()) + list(f))
-        
-    def remove(self, name):
-        if isinstance(name, str):
-            return ExtendedParallelFunction([v for k, v in self.functions.items() if k != name])
-        else:
-            # otherwise assume name is iterable
-            return ExtendedParallelFunction([v for k, v in self.functions.items() if k not in name])
-
-    def children(self):
-        return OrderedSet(self.functions)
-
-    def differentiable(self, input_dict, h=1E-5, twosided=False):
-        return DifferentiableExtendedParallelFunction(self.functions, self.name, self.inputs, self.outputs, input_dict, h, twosided)        
-
-
-class DifferentiableExtendedParallelFunction(ExtendedParallelFunction, DifferentiableExtendedFunction):
-    def __init__(self, functions, name, inputs, outputs, input_dict, h=1E-5, twosided=False):
-        self.name, self.inputs, self.outputs = name, inputs, outputs
-        diff_functions = {}
-        for k, f in functions.items():
-            diff_functions[k] = f.differentiable(input_dict, h)
-        self.diff_functions = diff_functions
-        self.default_twosided = twosided
-    
-    def diff(self, shock_dict, h=None, outputs=None, hide_zeros=False, twosided=False):
-        if twosided is None:
-            twosided = self.default_twosided
-
-        if not twosided:
-            return self.diff1(shock_dict, h, outputs, hide_zeros)
-        else:
-            return self.diff2(shock_dict, h, outputs, hide_zeros)
-
-    def diff1(self, shock_dict, h=None, outputs=None, hide_zeros=False):
-        results = {}
-        for f in self.diff_functions.values():
-            if not f.inputs.isdisjoint(shock_dict):
-                if outputs is None or not f.outputs.isdisjoint(outputs):
-                    results.update(f.diff1(shock_dict, h, hide_zeros))
-        if outputs is not None:
-            results = {k: results[k] for k in outputs if k in results}
-        return results
-
-    def diff2(self, shock_dict, h=None, outputs=None, hide_zeros=False):
-        results = {}
-        for f in self.diff_functions.values():
-            if not f.inputs.isdisjoint(shock_dict):
-                if outputs is None or not f.outputs.isdisjoint(outputs):
-                    results.update(f.diff2(shock_dict, h, hide_zeros))
-        if outputs is not None:
-            results = {k: results[k] for k in outputs if k in results}
-        return results
-
-
 class CombinedExtendedFunction(ExtendedFunction):
     def __init__(self, fs, name=None):
         self.dag = graph.DAG([ExtendedFunction(f) for f in fs])
@@ -311,6 +199,23 @@ class CombinedExtendedFunction(ExtendedFunction):
 
     def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
         raise NotImplementedError
+
+    def add(self, f):
+        if inspect.isfunction(f) or isinstance(f, ExtendedFunction):
+            return CombinedExtendedFunction(list(self.functions.values()) + [f])
+        else:
+            # otherwise assume f is iterable
+            return CombinedExtendedFunction(list(self.functions.values()) + list(f))
+        
+    def remove(self, name):
+        if isinstance(name, str):
+            return CombinedExtendedFunction([v for k, v in self.functions.items() if k != name])
+        else:
+            # otherwise assume name is iterable
+            return CombinedExtendedFunction([v for k, v in self.functions.items() if k not in name])
+
+    def children(self):
+        return OrderedSet(self.functions)
 
     def differentiable(self, input_dict, h=1E-5, twosided=False):
         return DifferentiableCombinedExtendedFunction(self.functions, self.dag, self.name, self.inputs, self.outputs, input_dict, h, twosided)        

@@ -5,7 +5,7 @@ from typing import Optional, Dict
 from .block import Block
 from .. import utilities as utils
 from ..classes import SteadyStateDict, ImpulseDict, JacobianDict
-from ..utilities.function import ExtendedFunction, ExtendedParallelFunction
+from ..utilities.function import ExtendedFunction, CombinedExtendedFunction
 from ..utilities.ordered_set import OrderedSet
 from ..utilities.bijection import Bijection
 from .support.het_support import ForwardShockableTransition, ExpectationShockableTransition, lottery_1d, lottery_2d, Markov, CombinedTransition, Transition
@@ -41,9 +41,9 @@ class HetBlock(Block):
 
         # A HetBlock can have heterogeneous inputs and heterogeneous outputs, henceforth `hetinput` and `hetoutput`.
         if hetinputs is not None:
-            hetinputs = ExtendedParallelFunction(hetinputs)
+            hetinputs = CombinedExtendedFunction(hetinputs)
         if hetoutputs is not None:
-            hetoutputs = ExtendedParallelFunction(hetoutputs)
+            hetoutputs = CombinedExtendedFunction(hetoutputs)
         self.process_hetinputs_hetoutputs(hetinputs, hetoutputs, tocopy=False)
 
         if len(self.policy) > 2:
@@ -375,7 +375,7 @@ class HetBlock(Block):
 
         # and also affect aggregate outcomes today
         if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
-            shocked_outputs.update(differentiable_hetoutput.diff({**shocked_outputs, **din_dict}))
+            shocked_outputs.update(differentiable_hetoutput.diff({**shocked_outputs, **din_dict}, outputs=differentiable_hetoutput.outputs & output_list))
         curlyY = {k: np.vdot(D, shocked_outputs[k]) for k in output_list}
 
         # add effects from perturbation to exog on beginning-of-period expectations in curlyV and curlyY
@@ -413,7 +413,7 @@ class HetBlock(Block):
 
     '''HetInput and HetOutput options and processing'''
 
-    def process_hetinputs_hetoutputs(self, hetinputs: Optional[ExtendedParallelFunction], hetoutputs: Optional[ExtendedParallelFunction], tocopy=True):
+    def process_hetinputs_hetoutputs(self, hetinputs: Optional[CombinedExtendedFunction], hetoutputs: Optional[CombinedExtendedFunction], tocopy=True):
         if tocopy:
             self = copy.copy(self)
         inputs = self.original_inputs.copy()
@@ -442,7 +442,7 @@ class HetBlock(Block):
 
     def add_hetinputs(self, functions):
         if self.hetinputs is None:
-            return self.process_hetinputs_hetoutputs(ExtendedParallelFunction(functions), self.hetoutputs)
+            return self.process_hetinputs_hetoutputs(CombinedExtendedFunction(functions), self.hetoutputs)
         else:
             return self.process_hetinputs_hetoutputs(self.hetinputs.add(functions), self.hetoutputs)
 
@@ -451,7 +451,7 @@ class HetBlock(Block):
 
     def add_hetoutputs(self, functions):
         if self.hetoutputs is None:
-            return self.process_hetinputs_hetoutputs(self.hetinputs, ExtendedParallelFunction(functions))
+            return self.process_hetinputs_hetoutputs(self.hetinputs, CombinedExtendedFunction(functions))
         else:
             return self.process_hetinputs_hetoutputs(self.hetinputs, self.hetoutputs.add(functions))
 

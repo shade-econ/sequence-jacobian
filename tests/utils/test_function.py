@@ -1,6 +1,6 @@
 from sequence_jacobian.utilities.ordered_set import OrderedSet
 from sequence_jacobian.utilities.function import (DifferentiableExtendedFunction, ExtendedFunction, 
-                        ExtendedParallelFunction, CombinedExtendedFunction, metadata)
+                        CombinedExtendedFunction, metadata)
 import numpy as np
 
 def f1(a, b, c):
