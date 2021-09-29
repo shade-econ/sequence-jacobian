@@ -1,12 +1,11 @@
 import numpy as np
-from sequence_jacobian import simple, solved, combine, create_model, markov_rouwenhorst, agrid 
+from sequence_jacobian import simple, solved, create_model, markov_rouwenhorst, agrid 
 from sequence_jacobian.classes.impulse_dict import ImpulseDict
 from sequence_jacobian.examples.hetblocks import household_sim as hh
 
 
 '''Part 1: Household block'''
 
-@simple
 def make_grids(rho_e, sd_e, nE, amin, amax, nA):
     e_grid, e_dist, Pi = markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
     a_grid = agrid(amin=amin, amax=amax, n=nA)
@@ -108,9 +107,8 @@ def union_ss(atw, UCE, muw, N, nu, kappaw, beta, pi):
 
 def test_all():
     # Assemble HA block (want to test nesting)
-    household_ha = hh.household.add_hetinputs([income])
+    household_ha = hh.household.add_hetinputs([make_grids, income])
     household_ha = household_ha.add_hetoutputs([mpcs, weighted_uc]).rename('household_ha')
-    household_ha = combine([household_ha, make_grids], name='HH')
 
     # Assemble DAG (for transition dynamics)
     dag = {}

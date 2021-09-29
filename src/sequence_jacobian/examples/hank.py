@@ -55,8 +55,6 @@ def partial_ss_solution(B_Y, Y, Z, mu):
 '''Part 2: Embed HA block'''
 
 
-# This cannot be a hetinput, bc `transfers` depends on it
-@simple
 def make_grids(rho_s, sigma_s, nS, amax, nA):
     e_grid, pi_e, Pi = utils.discretize.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
     a_grid = utils.discretize.agrid(amax=amax, n=nA)
@@ -86,9 +84,8 @@ def labor_supply(n, e_grid):
 
 def dag():
     # Combine blocks
-    household = hh.household.add_hetinputs([transfers, wages])
+    household = hh.household.add_hetinputs([transfers, wages, make_grids])
     household = household.add_hetoutputs([labor_supply])
-    household = combine([make_grids, household], name='HH')
     blocks = [household, firm, monetary, fiscal, mkt_clearing, nkpc]
     helper_blocks = [partial_ss_solution]
     hank_model = create_model(blocks, name="One-Asset HANK")

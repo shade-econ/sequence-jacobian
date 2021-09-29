@@ -139,8 +139,6 @@ def partial_ss_step2(tax, w, UCE, N, muw, frisch):
 
 '''Part 2: Embed HA block'''
 
-# This cannot be a hetinput, bc `income` depends on it
-@simple
 def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
     b_grid = utils.discretize.agrid(amax=bmax, n=nB)
     a_grid = utils.discretize.agrid(amax=amax, n=nA)
@@ -158,8 +156,7 @@ def income(e_grid, tax, w, N):
 
 def dag():
     # Combine Blocks
-    household = hh.household.add_hetinputs([income])
-    household = combine([make_grids, household], name='HH')
+    household = hh.household.add_hetinputs([income, make_grids])
     production = combine([labor, investment])
     production_solved = production.solved(unknowns={'Q': 1., 'K': 10.},
                                           targets=['inv', 'val'], solver='broyden_custom')

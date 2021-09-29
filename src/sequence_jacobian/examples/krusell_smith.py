@@ -32,7 +32,6 @@ def firm_ss_solution(r, Y, L, delta, alpha):
 
 '''Part 2: Embed HA block'''
 
-@simple
 def make_grids(rho, sigma, nS, amax, nA):
     e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
     a_grid = utils.discretize.agrid(amax=amax, n=nA)
@@ -48,8 +47,8 @@ def income(w, e_grid):
 
 def dag():
     # Combine blocks
-    household = hh.household.add_hetinputs([income])
-    blocks = [household, firm, make_grids, mkt_clearing]
+    household = hh.household.add_hetinputs([income, make_grids])
+    blocks = [household, firm, mkt_clearing]
     helper_blocks = [firm_ss_solution]
     ks_model = create_model(blocks, name="Krusell-Smith")
 
@@ -80,7 +79,7 @@ def aggregate(A_patient, A_impatient, C_patient, C_impatient, mass_patient):
 
 def remapped_dag():
     # Create 2 versions of the household block using `remap`
-    household = hh.household.add_hetinputs([income])
+    household = hh.household.add_hetinputs([income, make_grids])
     to_map = ['beta', *household.outputs]
     hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('hh_patient')
     hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('hh_impatient')
