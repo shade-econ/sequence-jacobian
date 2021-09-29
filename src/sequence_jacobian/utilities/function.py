@@ -94,7 +94,6 @@ class DifferentiableExtendedFunction(ExtendedFunction):
         self.h = h
         self.default_twosided = twosided
 
-
     def diff(self, shock_dict, h=None, hide_zeros=False, twosided=None):
         if twosided is None:
             twosided = self.default_twosided
@@ -103,7 +102,6 @@ class DifferentiableExtendedFunction(ExtendedFunction):
             return self.diff1(shock_dict, h, hide_zeros)
         else:
             return self.diff2(shock_dict, h, hide_zeros)
-
 
     def diff1(self, shock_dict, h=None, hide_zeros=False):
         if h is None:
@@ -260,6 +258,109 @@ class DifferentiableExtendedParallelFunction(ExtendedParallelFunction, Different
         return results
 
 
-# class ExtendedCombinedFunction(ExtendedFunction):
-#     def __init__(self, fs, name=None):
+class CombinedExtendedFunction(ExtendedFunction):
+    def __init__(self, fs, name=None):
+        self.dag = graph.DAG([ExtendedFunction(f) for f in fs])
+        self.inputs = self.dag.inputs
+        self.outputs = self.dag.outputs
+        self.functions = {b.name: b for b in self.dag.blocks}
+
+        if name is None:
+            names = list(self.functions)
+            if len(names) == 1:
+                self.name = names[0]
+            else:
+                self.name = f'{names[0]}_{names[-1]}'
+        else:
+            self.name = name
+    
+    def __call__(self, input_dict, outputs=None):
+        functions_to_visit = list(self.functions.values())
+        if outputs is not None:
+            functions_to_visit = [functions_to_visit[i] for i in self.dag.visit_from_outputs(outputs)]
         
+        results = input_dict.copy()
+        for f in functions_to_visit:
+            results.update(f(results))
+
+        if outputs is not None:
+            return {k: results[k] for k in outputs}
+        else:
+            return results
+
+    def call_on_deviations(self, ss, dev_dict, outputs=None):
+        functions_to_visit = self.filter(list(self.functions.values()), dev_dict, outputs)
+
+        results = {}
+        input_dict = {**ss, **dev_dict}
+        for f in functions_to_visit:
+            out = f(input_dict)
+            results.update(out)
+            input_dict.update(out)
+
+        if outputs is not None:
+            return {k: v for k, v in results.items() if k in outputs}
+        else:
+            return results
+
+    def filter(self, function_list, inputs, outputs=None):
+        nums_to_visit = self.dag.visit_from_inputs(inputs)
+        if outputs is not None:
+            nums_to_visit &= self.dag.visit_from_outputs(outputs)
+        return [function_list[n] for n in nums_to_visit]
+
+    def wrapped_call(self, input_dict, preprocess=None, postprocess=None):
+        raise NotImplementedError
+
+    def differentiable(self, input_dict, h=1E-5, twosided=False):
+        return DifferentiableCombinedExtendedFunction(self.functions, self.dag, self.name, self.inputs, self.outputs, input_dict, h, twosided)        
+
+
+class DifferentiableCombinedExtendedFunction(CombinedExtendedFunction, DifferentiableExtendedFunction):
+    def __init__(self, functions, dag, name, inputs, outputs, input_dict, h=1E-5, twosided=False):
+        self.dag, self.name, self.inputs, self.outputs = dag, name, inputs, outputs
+        diff_functions = {}
+        for k, f in functions.items():
+            diff_functions[k] = f.differentiable(input_dict, h)
+        self.diff_functions = diff_functions
+        self.default_twosided = twosided
+    
+    def diff(self, shock_dict, h=None, outputs=None, hide_zeros=False, twosided=False):
+        if twosided is None:
+            twosided = self.default_twosided
+
+        if not twosided:
+            return self.diff1(shock_dict, h, outputs, hide_zeros)
+        else:
+            return self.diff2(shock_dict, h, outputs, hide_zeros)
+
+    def diff1(self, shock_dict, h=None, outputs=None, hide_zeros=False):
+        functions_to_visit = self.filter(list(self.diff_functions.values()), shock_dict, outputs)
+
+        shock_dict = shock_dict.copy()
+        results = {}
+        for f in functions_to_visit:
+            out = f.diff1(shock_dict, h, hide_zeros)
+            results.update(out)
+            shock_dict.update(out)
+        
+        if outputs is not None:
+            return {k: v for k, v in results.items() if k in outputs}
+        else:
+            return results
+
+    def diff2(self, shock_dict, h=None, outputs=None, hide_zeros=False):
+        functions_to_visit = self.filter(list(self.diff_functions.values()), shock_dict, outputs)
+        
+        shock_dict = shock_dict.copy()
+        results = {}
+        for f in functions_to_visit:
+            out = f.diff2(shock_dict, h, hide_zeros)
+            results.update(out)
+            shock_dict.update(out)
+        
+        if outputs is not None:
+            return {k: v for k, v in results.items() if k in outputs}
+        else:
+            return results
+

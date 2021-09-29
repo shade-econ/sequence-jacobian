@@ -27,7 +27,7 @@ class Bijection:
     def __matmul__(self, x):
         if x is None:
             return None
-        elif isinstance(x, str):
+        elif isinstance(x, str) or isinstance(x, int):
             return self[x]
         elif isinstance(x, Bijection):
             # compose self: v -> u with x: w -> v

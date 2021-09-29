@@ -1,4 +1,66 @@
 """Topological sort and related code"""
+from .ordered_set import OrderedSet
+from .bijection import Bijection
+
+class DAG:
+    """Represents "blocks" that each have inputs and outputs, where output-input relationships between
+    blocks form a DAG. Fundamental DAG object intended to underlie CombinedBlock and CombinedExtendedFunction.
+    
+    Initialized with list of blocks, which are then topologically sorted"""
+    
+    def __init__(self, blocks):
+        inmap = get_input_map(blocks)
+        outmap = get_output_map(blocks)
+        adj = get_block_adjacency_list(blocks, inmap)
+        revadj = get_block_reverse_adjacency_list(blocks, outmap)
+        topsort = topological_sort(adj, revadj)
+
+        M = Bijection({i: t for i, t in enumerate(topsort)})
+
+        self.blocks = [blocks[t] for t in topsort]
+        self.inmap = {k: M @ v for k, v in inmap.items()}
+        self.outmap = {k: M @ v for k, v in outmap.items()}
+        self.adj = [M @ adj[t] for t in topsort]
+        self.revadj = [M @ revadj[t] for t in topsort]
+
+        self.inputs = OrderedSet(k for k in inmap if k not in outmap)
+        self.outputs = OrderedSet(outmap)
+
+
+    def visit_from_inputs(self, inputs):
+        """Which block numbers are ultimately dependencies of 'inputs'?"""
+        inputs = inputs & self.inputs
+        visited = OrderedSet()
+        for n, (block, parentset) in enumerate(zip(self.blocks, self.revadj)):
+            # first see if block has its input directly changed
+            for i in inputs:
+                if i in block.inputs:
+                    visited.add(n)
+                    break
+            else:
+                if not parentset.isdisjoint(visited):
+                    visited.add(n)
+
+        return visited
+
+    def visit_from_outputs(self, outputs):
+        """Which block numbers are 'outputs' ultimately dependent on?"""
+        outputs = outputs & self.outputs
+        visited = OrderedSet()
+        for n in reversed(range(len(self.blocks))):
+            block = self.blocks[n]
+            childset = self.adj[n]
+
+            # first see if block has its output directly used
+            for o in outputs:
+                if o in block.outputs:
+                    visited.add(n)
+                    break
+            else:
+                if not childset.isdisjoint(visited):
+                    visited.add(n)
+
+        return reversed(visited)
 
 
 def block_sort(blocks):
@@ -14,15 +76,14 @@ def block_sort(blocks):
     outmap = get_output_map(blocks)
     adj = get_block_adjacency_list(blocks, inmap)
     revadj = get_block_reverse_adjacency_list(blocks, outmap)
-
     return topological_sort(adj, revadj)
 
 
 def topological_sort(adj, revadj, names=None):
     """Given directed graph pointing from each node to the nodes it depends on, topologically sort nodes"""
     # get complete set version of dep, and its reversal, and build initial stack of nodes with no dependencies
-    #dep, revdep = complete_reverse_graph(dep)
-    dep, revdep = revadj, adj
+    revdep = adj
+    dep = [s.copy() for s in revadj]
     nodeps = [n for n, depset in enumerate(dep) if not depset]
     topsorted = []
 
@@ -50,7 +111,7 @@ def get_input_map(blocks: list):
     inmap = dict()
     for num, block in enumerate(blocks):
         for i in block.inputs:
-            inset = inmap.setdefault(i, set())
+            inset = inmap.setdefault(i, OrderedSet())
             inset.add(num)
 
     return inmap
@@ -72,7 +133,7 @@ def get_block_adjacency_list(blocks, inmap):
     """adj[n] for block number n gives set of block numbers which this block points to"""
     adj = []
     for block in blocks:
-        current_adj = set()
+        current_adj = OrderedSet()
         for o in block.outputs:
             # for each output, if that output is used as an input by some blocks, add those blocks to adj
             if o in inmap:
@@ -85,7 +146,7 @@ def get_block_reverse_adjacency_list(blocks, outmap):
     """revadj[n] for block number n gives set of block numbers that point to this block"""
     revadj = []
     for block in blocks:
-        current_revadj = set()
+        current_revadj = OrderedSet()
         for i in block.inputs:
             if i in outmap:
                 current_revadj.add(outmap[i])
@@ -98,13 +159,13 @@ def find_intermediate_inputs(blocks):
     """Find outputs of the blocks in blocks that are inputs to other blocks in blocks.
     This is useful to ensure that all of the relevant curlyJ Jacobians (of all inputs to all outputs) are computed.
     """
-    required = set()
+    required = OrderedSet()
     outmap = get_output_map(blocks)
     for num, block in enumerate(blocks):
         if hasattr(block, 'inputs'):
             inputs = block.inputs
         else:
-            inputs = set(i for o in block for i in block[o])
+            inputs = OrderedSet(i for o in block for i in block[o])
         for i in inputs:
             if i in outmap:
                 required.add(i)

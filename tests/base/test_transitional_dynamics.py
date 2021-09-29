@@ -50,7 +50,7 @@ def test_hank_td(one_asset_hank_dag):
     hank_model, ss, unknowns, targets, exogenous = one_asset_hank_dag
 
     T = 30
-    household = hank_model._blocks_unsorted[0]
+    household = hank_model['household']
     J_ha = household.jacobian(ss=ss, T=T, inputs=['Div', 'Tax', 'r', 'w'])
     G = hank_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
 
@@ -70,7 +70,7 @@ def test_two_asset_td(two_asset_hank_dag):
     two_asset_model, ss, unknowns, targets, exogenous = two_asset_hank_dag
 
     T = 30
-    household = two_asset_model._blocks_unsorted[0]
+    household = two_asset_model['household']
     J_ha = household.jacobian(ss=ss, T=T, inputs=['N', 'r', 'ra', 'rb', 'tax', 'w'])
     G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
 
@@ -100,7 +100,7 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
     targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
 
     T = 30
-    household = two_asset_model._blocks_unsorted[0]
+    household = two_asset_model['household']
     J_ha = household.jacobian(ss=ss, T=T, inputs=['N', 'r', 'ra', 'rb', 'tax', 'w'])
     G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
     G_simple = two_asset_model_simple.solve_jacobian(ss, unknowns_simple, targets_simple, exogenous, T=T,

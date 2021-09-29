@@ -28,10 +28,10 @@ class CombinedBlock(Block, Parent):
     def __init__(self, blocks, name="", model_alias=False, sorted_indices=None, intermediate_inputs=None):
         super().__init__()
 
-        self._blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
-        self._sorted_indices = block_sort(blocks) if sorted_indices is None else sorted_indices
+        blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
+        sorted_indices = block_sort(blocks) if sorted_indices is None else sorted_indices
         self._required = find_intermediate_inputs(blocks) if intermediate_inputs is None else intermediate_inputs
-        self.blocks = [self._blocks_unsorted[i] for i in self._sorted_indices]
+        self.blocks = [blocks_unsorted[i] for i in sorted_indices]
 
         if not name:
             self.name = f"{self.blocks[0].name}_to_{self.blocks[-1].name}_combined"

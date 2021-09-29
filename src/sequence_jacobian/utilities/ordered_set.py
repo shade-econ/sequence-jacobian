@@ -8,7 +8,7 @@ class OrderedSet:
     
     See test_misc_support.test_ordered_set() for examples."""
 
-    def __init__(self, members: Iterable):
+    def __init__(self, members: Iterable = []):
         self.d = {k: None for k in members}
 
     def dict_from(self, s):
@@ -16,6 +16,9 @@ class OrderedSet:
 
     def __iter__(self):
         return iter(self.d)
+
+    def __reversed__(self):
+        return OrderedSet(list(self)[::-1])
 
     def __repr__(self):
         return f"OrderedSet({list(self)})"
@@ -36,7 +39,7 @@ class OrderedSet:
         self.d[x] = None
     
     def difference(self, s):
-        return OrderedSet({k: None for k in self if k not in s})
+        return OrderedSet(k for k in self if k not in s)
 
     def difference_update(self, s):
         self.d = self.difference(s).d
@@ -46,7 +49,7 @@ class OrderedSet:
         self.d.pop(k, None)
     
     def intersection(self, s):
-        return OrderedSet({k: None for k in self if k in s})
+        return OrderedSet(k for k in self if k in s)
 
     def intersection_update(self, s):
         self.d = self.intersection(s).d

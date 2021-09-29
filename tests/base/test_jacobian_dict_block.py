@@ -36,4 +36,4 @@ def test_jacobian_dict_block_combine(rbc_dag):
     cblock_w_jdict = combine(blocks_w_jdict)
 
     # Using `combine` converts JacobianDicts to JacobianDictBlocks
-    assert isinstance(cblock_w_jdict._blocks_unsorted[1], JacobianDictBlock)
+    assert isinstance(cblock_w_jdict.blocks[0], JacobianDictBlock)
