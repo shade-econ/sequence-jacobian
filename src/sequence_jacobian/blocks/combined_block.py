@@ -1,12 +1,10 @@
 """CombinedBlock class and the combine function to generate it"""
 
-from copy import deepcopy
-
 from .block import Block
 from .auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from .support.parent import Parent
 from ..classes import ImpulseDict, JacobianDict
-from ..utilities.graph import block_sort, find_intermediate_inputs
+from ..utilities.graph import DAG, find_intermediate_inputs
 
 
 def combine(blocks, name="", model_alias=False):
@@ -18,7 +16,7 @@ def create_model(blocks, **kwargs):
     return combine(blocks, model_alias=True, **kwargs)
 
 
-class CombinedBlock(Block, Parent):
+class CombinedBlock(Block, Parent, DAG):
     """A combined `Block` object comprised of several `Block` objects, which topologically sorts them and provides
     a set of partial and general equilibrium methods for evaluating their steady state, computes impulse responses,
     and calculates Jacobians along the DAG"""
@@ -29,9 +27,10 @@ class CombinedBlock(Block, Parent):
         super().__init__()
 
         blocks_unsorted = [b if isinstance(b, Block) else JacobianDictBlock(b) for b in blocks]
-        sorted_indices = block_sort(blocks) if sorted_indices is None else sorted_indices
+        DAG.__init__(self, blocks_unsorted)
+        
+        # TODO: deprecate this, use DAG methods instead
         self._required = find_intermediate_inputs(blocks) if intermediate_inputs is None else intermediate_inputs
-        self.blocks = [blocks_unsorted[i] for i in sorted_indices]
 
         if not name:
             self.name = f"{self.blocks[0].name}_to_{self.blocks[-1].name}_combined"
@@ -40,13 +39,6 @@ class CombinedBlock(Block, Parent):
 
         # now that it has a name, do Parent initialization
         Parent.__init__(self, blocks)
-
-        # Find all outputs (including those used as intermediary inputs)
-        self.outputs = set().union(*[block.outputs for block in self.blocks])
-
-        # Find all inputs that are *not* intermediary outputs
-        all_inputs = set().union(*[block.inputs for block in self.blocks])
-        self.inputs = all_inputs.difference(self.outputs)
 
         # If the create_model() is used instead of combine(), we will have __repr__ show this object as a 'Model'
         self._model_alias = model_alias
