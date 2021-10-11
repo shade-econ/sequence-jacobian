@@ -103,41 +103,19 @@ def smart_zeros(n):
     else:
         return 0.
 
+
 '''Tools for taste shocks used in discrete choice problems'''
 
-
-def choice_prob(vfun, lam):
-    """
-    Logit choice probability of choosing along first axis.
-
-    Parameters
-    ----------
-    vfun : array(Ns, Nz, Na): discrete choice specific value function
-    lam  : float, scale of taste shock
-
-    Returns
-    -------
-    prob : array (Ns, Nz, nA): choice probability
-    """
-    # rescale values for numeric robustness
-    vmax = np.max(vfun, axis=0)
-    vfun_norm = vfun - vmax
-
-    # apply formula (could be njitted in separate function)
-    P = np.exp(vfun_norm / lam) / np.sum(np.exp(vfun_norm / lam), axis=0)
+def choice_prob(V, i, scale):
+    """Logit choice probability of choosing along 0th axis"""
+    Vnorm = V - V[0, ...]
+    P = np.exp(Vnorm / scale) / np.sum(np.exp(Vnorm / scale), axis=i)
     return P
 
 
-def logsum(vfun, lam):
-    """Logsum formula for expected continuation value."""
-
-    # rescale values for numeric robustness
-    vmax = np.max(vfun, axis=0)
-    vfun_norm = vfun - vmax
-
-    # apply formula (could be njitted in separate function)
-    VE = vmax + lam * np.log(np.sum(np.exp(vfun_norm / lam), axis=0))
-    return VE
-
-
-#from .function import (input_list, output_list)
+def logsum(V, i, scale):
+    """Logsum formula along ith dimension"""
+    const = V[0, ...]
+    Vnorm = V - const
+    EV = const + scale * np.log(np.exp(Vnorm / scale).sum(axis=i))
+    return EV 

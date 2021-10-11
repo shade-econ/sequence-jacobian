@@ -2,7 +2,8 @@ import numpy as np
 from . import het_compiled
 from ...utilities.discretize import stationary as general_stationary
 from ...utilities.interpolate import interpolate_coord_robust, interpolate_coord
-from ...utilities.multidim import multiply_ith_dimension
+from ...utilities.multidim import batch_multiply_ith_dimension, multiply_ith_dimension
+from ...utilities.misc import logsum
 from typing import Optional, Sequence, Any, List, Tuple, Union
 
 class Transition:
@@ -274,3 +275,18 @@ class ExpectationShockableCombinedTransition(CombinedTransition, ExpectationShoc
                 dX = dX_shock
 
         return dX
+
+
+class DiscreteChoice(Transition):
+    def __init__(self, P, i, scale):
+        self.P = P                     # choice prob P(d|...s_i...), 0 for unavailable choices
+        self.P_T = P.swapaxes(0, 1+i)  # P_T(s_i|...d...)
+        self.i = i                     # dimension of state space that will be updated
+        self.scale = scale             # scale of taste shocks (on grid?)
+
+    def forward(self, D):
+        return batch_multiply_ith_dimension(self.P, self.i, D)
+
+    def expectation(self, X):
+        '''NOT meant for value function'''
+        return batch_multiply_ith_dimension(self.P_T, self.i, X)
