@@ -2,10 +2,6 @@
 
 import numpy as np
 import scipy.linalg
-import re
-import inspect
-import warnings
-from ..jacobian.classes import JacobianDict
 
 
 def make_tuple(x):
@@ -16,42 +12,6 @@ def make_tuple(x):
     "policy='a'" rather than "policy=('a',)"
     """
     return (x,) if not (isinstance(x, tuple) or isinstance(x, list)) else x
-
-
-def input_list(f):
-    """Return list of function inputs (both positional and keyword arguments)"""
-    return list(inspect.signature(f).parameters)
-
-
-def input_arg_list(f):
-    """Return list of function positional arguments *only*"""
-    arg_list = []
-    for p in inspect.signature(f).parameters.values():
-        if p.default == p.empty:
-            arg_list.append(p.name)
-    return arg_list
-
-
-def input_kwarg_list(f):
-    """Return list of function keyword arguments *only*"""
-    kwarg_list = []
-    for p in inspect.signature(f).parameters.values():
-        if p.default != p.empty:
-            kwarg_list.append(p.name)
-    return kwarg_list
-
-
-def output_list(f):
-    """Scans source code of function to detect statement like
-
-    'return L, Div'
-
-    and reports the list ['L', 'Div'].
-
-    Important to write functions in this way when they will be scanned by output_list, for
-    either SimpleBlock or HetBlock.
-    """
-    return re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(',')
 
 
 def numeric_primitive(instance):
@@ -143,38 +103,6 @@ def smart_zeros(n):
     else:
         return 0.
 
-
-def verify_saved_jacobian(block_name, Js, outputs, inputs, T):
-    """Verify that pre-computed Jacobian has all the right outputs, inputs, and length."""
-    if block_name not in Js.keys():
-        # don't throw warning, this will happen often for simple blocks
-        return False
-    J = Js[block_name]
-
-    if not isinstance(J, JacobianDict):
-        warnings.warn(f'Js[{block_name}] is not a JacobianDict.')
-        return False
-
-    if not set(outputs).issubset(set(J.outputs)):
-        missing = set(outputs).difference(set(J.outputs))
-        warnings.warn(f'Js[{block_name}] misses required outputs {missing}.')
-        return False
-
-    if not set(inputs).issubset(set(J.inputs)):
-        missing = set(inputs).difference(set(J.inputs))
-        warnings.warn(f'Js[{block_name}] misses required inputs {missing}.')
-        return False
-
-    # Jacobian of simple blocks may have a sparse representation
-    if T is not None:
-        Tsaved = J[J.outputs[0]][J.inputs[0]].shape[-1]
-        if T != Tsaved:
-            warnings.warn(f'Js[{block_name} has length {Tsaved}, but you asked for {T}')
-            return False
-
-    return True
-
-
 '''Tools for taste shocks used in discrete choice problems'''
 
 
@@ -210,3 +138,6 @@ def logsum(vfun, lam):
     # apply formula (could be njitted in separate function)
     VE = vmax + lam * np.log(np.sum(np.exp(vfun_norm / lam), axis=0))
     return VE
+
+
+#from .function import (input_list, output_list)

@@ -1,19 +1,19 @@
 """Test all models' estimation calculations"""
-
+''
 import pytest
 import numpy as np
 
-from sequence_jacobian import get_G, estimation
+from sequence_jacobian import estimation
 
 
 # See test_determinacy.py for the to-do describing this suppression
 @pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
 def test_krusell_smith_estimation(krusell_smith_dag):
-    ks_model, exogenous, unknowns, targets, ss = krusell_smith_dag
+    _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
 
     np.random.seed(41234)
     T = 50
-    G = ks_model.solve_jacobian(ss, exogenous, unknowns, targets, T=T)
+    G = ks_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
 
     # Step 1: Stacked impulse responses
     rho = 0.9

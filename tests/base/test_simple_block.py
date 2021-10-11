@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from sequence_jacobian import simple
-from sequence_jacobian.steady_state.classes import SteadyStateDict
+from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
 
 
 @simple
@@ -41,24 +41,24 @@ def test_block_consistency(block, ss):
     ss_results = block.steady_state(ss)
 
     # now if we put in constant inputs, td should give us the same!
-    td_results = block.impulse_nonlinear(ss_results, exogenous={k: np.zeros(20) for k in ss.keys()})
-    for k, v in td_results.impulse.items():
+    td_results = block.impulse_nonlinear(ss_results, {k: np.zeros(20) for k in ss.keys()})
+    for v in td_results.values():
         assert np.all(v == 0)
 
     # now get the Jacobian
-    J = block.jacobian(ss, exogenous=block.input_list)
+    J = block.jacobian(ss, inputs=block.inputs)
 
     # now perturb the steady state by small random vectors
     # and verify that the second-order numerical derivative implied by .td
     # is equivalent to what we get from jac
 
     h = 1E-5
-    all_shocks = {i: np.random.rand(10) for i in block.input_list}
-    td_up = block.impulse_nonlinear(ss_results, exogenous={i: h*shock for i, shock in all_shocks.items()})
-    td_dn = block.impulse_nonlinear(ss_results, exogenous={i: -h*shock for i, shock in all_shocks.items()})
+    all_shocks = {i: np.random.rand(10) for i in block.inputs}
+    td_up = block.impulse_nonlinear(ss_results, {i: h*shock for i, shock in all_shocks.items()})
+    td_dn = block.impulse_nonlinear(ss_results, {i: -h*shock for i, shock in all_shocks.items()})
     
-    linear_impulses = {o: (td_up.impulse[o] - td_dn.impulse[o])/(2*h) for o in td_up.impulse}
-    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in td_up.impulse}
+    linear_impulses = {o: (td_up[o] - td_dn[o])/(2*h) for o in block.outputs}
+    linear_impulses_from_jac = {o: sum(J[o][i] @ all_shocks[i] for i in all_shocks if i in J[o]) for o in block.outputs}
 
     for o in linear_impulses:
         assert np.all(np.abs(linear_impulses[o] - linear_impulses_from_jac[o]) < 1E-5)
