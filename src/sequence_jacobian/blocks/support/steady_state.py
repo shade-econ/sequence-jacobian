@@ -6,30 +6,7 @@ import scipy.optimize as opt
 from numbers import Real
 from functools import partial
 
-from ...classes.steady_state_dict import SteadyStateDict
 from ...utilities import misc, solvers
-
-
-
-def augment_dag_w_helper_blocks(dag, calibration, unknowns, targets, helper_blocks, helper_targets):
-    """For a given DAG (either an individual Block or CombinedBlock), add a set of helper blocks, which help
-    to solve the provided set of helper targets analytically, reducing the number of unknowns/targets that need
-    to be solved for numerically.
-    """
-    from ..auxiliary_blocks.calibration_block import CalibrationBlock
-
-    targets = {t: 0. for t in targets} if isinstance(targets, list) else targets
-    helper_targets = {t: targets[t] for t in helper_targets} if isinstance(helper_targets, list) else helper_targets
-    helper_unknowns = subset_helper_block_unknowns(unknowns, helper_blocks, helper_targets)
-
-    unknowns_to_solve = misc.dict_diff(unknowns, helper_unknowns)
-    targets_to_solve = misc.dict_diff(targets, helper_targets)
-
-    ss = SteadyStateDict({**calibration, **helper_targets})
-    blocks = dag.blocks if hasattr(dag, "blocks") else [dag]
-    dag_augmented = CalibrationBlock(blocks + helper_blocks, helper_blocks=helper_blocks, calibration=ss)
-
-    return dag_augmented, ss, unknowns_to_solve, targets_to_solve
 
 
 def instantiate_steady_state_mutable_kwargs(dissolve, block_kwargs, solver_kwargs, constrained_kwargs):
@@ -254,32 +231,6 @@ def solve_for_unknowns(residual, unknowns, solver, solver_kwargs, residual_kwarg
         raise RuntimeError(f"steady_state is not yet compatible with {solver}.")
 
     return dict(misc.smart_zip(unknowns.keys(), unknown_solutions))
-
-
-def subset_helper_block_unknowns(unknowns_all, helper_blocks, helper_targets):
-    """Find the set of unknowns that the `helper_blocks` solve for"""
-    unknowns_handled_by_helpers = {}
-    for block in helper_blocks:
-        unknowns_handled_by_helpers.update({u: unknowns_all[u] for u in block.outputs if u in unknowns_all})
-
-    n_unknowns = len(unknowns_handled_by_helpers)
-    n_targets = len(helper_targets)
-    if n_unknowns != n_targets:
-        raise ValueError(f"The provided helper_blocks handle {n_unknowns} unknowns != {n_targets} targets."
-                         f" User must specify an equal number of unknowns/targets solved for by helper blocks.")
-
-    return unknowns_handled_by_helpers
-
-
-def find_excludable_helper_blocks(blocks_all, helper_indices, helper_unknowns, helper_targets):
-    """Of the set of helper_unknowns and helper_targets, find the ones that can be excluded from the main DAG
-    for the purposes of numerically solving unknowns."""
-    excludable_helper_unknowns = {}
-    excludable_helper_targets = {}
-    for i in helper_indices:
-        excludable_helper_unknowns.update({h: helper_unknowns[h] for h in blocks_all[i].outputs if h in helper_unknowns})
-        excludable_helper_targets.update({h: helper_targets[h] for h in blocks_all[i].outputs | blocks_all[i].inputs if h in helper_targets})
-    return excludable_helper_unknowns, excludable_helper_targets
 
 
 def extract_univariate_initial_values_or_bounds(unknowns):
