@@ -108,13 +108,12 @@ def arbitrage_solved(div, p, r):
 
 
 @simple
-def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
+def partial_ss(Y, N, K, r, tot_wealth, Bg, delta):
     """Solves for (mup, alpha, Z, w) to hit (tot_wealth, N, K, pi)."""
     # 1. Solve for markup to hit total wealth
     p = tot_wealth - Bg
     mc = 1 - r * (p - K) / Y
     mup = 1 / mc
-    wealth = tot_wealth
 
     # 2. Solve for capital share to hit K
     alpha = (r + delta) * K / Y / mc
@@ -124,13 +123,12 @@ def partial_ss_step1(Y, N, K, r, tot_wealth, Bg, delta):
 
     # 4. Solve for w such that piw = 0
     w = mc * (1 - alpha) * Y / N
-    piw = 0
 
-    return p, mc, mup, wealth, alpha, Z, w, piw
+    return p, mc, mup, alpha, Z, w
 
 
 @simple
-def partial_ss_step2(tax, w, UCE, N, muw, frisch):
+def union_ss(tax, w, UCE, N, muw, frisch):
     """Solves for (vphi) to hit (wnkpc)."""
     vphi = (1 - tax) * w * UCE / muw / N ** (1 + 1 / frisch)
     wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * UCE / muw
@@ -162,27 +160,28 @@ def dag():
                                           targets=['inv', 'val'], solver='broyden_custom')
     blocks = [household, pricing_solved, arbitrage_solved, production_solved,
               dividend, taylor, fiscal, share_value, finance, wage, union, mkt_clearing]
-    helper_blocks = [partial_ss_step1, partial_ss_step2]
     two_asset_model = create_model(blocks, name='Two-Asset HANK')
 
+    # Steadt state DAG
+    blocks_ss = [household, partial_ss,
+                 dividend, taylor, fiscal, share_value, finance, union_ss, mkt_clearing]
+    two_asset_model_ss = create_model(blocks_ss, name='Two-Asset HANK SS')
+
     # Steady State
-    calibration = {'Y': 1., 'r': 0.0125, 'rstar': 0.0125, 'tot_wealth': 14, 'delta': 0.02,
+    calibration = {'Y': 1., 'N': 1.0, 'K': 10., 'r': 0.0125, 'rstar': 0.0125, 'tot_wealth': 14,
+                   'delta': 0.02, 'pi': 0.,
                    'kappap': 0.1, 'muw': 1.1, 'Bh': 1.04, 'Bg': 2.8, 'G': 0.2, 'eis': 0.5,
                    'frisch': 1, 'chi0': 0.25, 'chi2': 2, 'epsI': 4, 'omega': 0.005,
                    'kappaw': 0.1, 'phi': 1.5, 'nZ': 3, 'nB': 10, 'nA': 16, 'nK': 4,
                    'bmax': 50, 'amax': 4000, 'kmax': 1, 'rho_z': 0.966, 'sigma_z': 0.92}
-    unknowns_ss = {'beta': 0.976, 'chi1': 6.5, 'vphi': 1.71, 'Z': 0.4678,
-                   'alpha': 0.3299, 'mup': 1.015, 'w': 0.66}
-    targets_ss = {'asset_mkt': 0., 'B': 'Bh', 'wnkpc': 0., 'piw': 0.0, 'K': 10.,
-                  'wealth': 'tot_wealth', 'N': 1.0}
-    ss = two_asset_model.solve_steady_state(calibration, unknowns_ss, targets_ss,
-                                            solver='broyden_custom',
-                                            helper_blocks=helper_blocks,
-                                            helper_targets=['wnkpc', 'piw', 'K', 'wealth', 'N'])
-
+    unknowns_ss = {'beta': 0.976, 'chi1': 6.5}
+    targets_ss = {'asset_mkt': 0., 'B': 'Bh'}
+    cali = two_asset_model_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, solver='broyden_custom')
+    ss =  two_asset_model.steady_state(cali)
+    
     # Transitional Dynamics/Jacobian Calculation
     unknowns = ['r', 'w', 'Y']
     targets = ['asset_mkt', 'fisher', 'wnkpc']
     exogenous = ['rstar', 'Z', 'G']
 
-    return two_asset_model, ss, unknowns, targets, exogenous
+    return two_asset_model_ss, ss, two_asset_model, unknowns, targets, exogenous

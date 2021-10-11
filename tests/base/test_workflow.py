@@ -124,20 +124,18 @@ def test_all():
                    'nA': 100, 'kappaw': 0.1, 'muw': 1.2, 'transfer': 0.143, 'rho_B': 0.9}
     
     ss = {}
-    ss['ha'] = dag['ha'].solve_steady_state(calibration, dissolve=['fiscal'], solver='hybr',
-            unknowns={'beta': 0.96, 'B': 3.0, 'vphi': 1.0, 'G': 0.2},
-            targets={'asset_mkt': 0.0, 'MPC': 0.25, 'wnkpc': 0.0, 'tau': 0.334},
-            helper_blocks=[union_ss], helper_targets=['wnkpc'])
-    
-    # TODO: why doesn't this work?
-    # ss['ra'] = dag['ra'].solve_steady_state(ss['ha'],
-    #         unknowns={'beta': 0.96, 'vphi': 1.0}, targets={'asset_mkt': 0.0, 'wnkpc': 0.0},
-    #         helper_blocks=[household_ra_ss, union_ss], helper_targets=['asset_mkt', 'wnkpc'],
-    #         dissolve=['fiscal', 'household_ra'], solver='solved')
-
     # Constructing ss-dag manually works just fine
-    dag_ss = create_model([household_ra_ss, union_ss, firm, fiscal, mkt_clearing])
-    ss['ra'] = dag_ss.steady_state(ss['ha'], dissolve=['fiscal'])
+    dag_ss = {}
+    dag_ss['ha'] = create_model([household_ha, union_ss, firm, fiscal, mkt_clearing])
+    ss['ha'] = dag_ss['ha'].solve_steady_state(calibration, dissolve=['fiscal'], solver='hybr',
+            unknowns={'beta': 0.96, 'B': 3.0, 'G': 0.2},
+            targets={'asset_mkt': 0.0, 'MPC': 0.25, 'tau': 0.334})
+    assert np.isclose(ss['ha']['goods_mkt'], 0.0)
+    assert np.isclose(ss['ha']['asset_mkt'], 0.0)
+    assert np.isclose(ss['ha']['wnkpc'], 0.0)
+
+    dag_ss['ra'] = create_model([household_ra_ss, union_ss, firm, fiscal, mkt_clearing])
+    ss['ra'] = dag_ss['ra'].steady_state(ss['ha'], dissolve=['fiscal'])
     assert np.isclose(ss['ra']['goods_mkt'], 0.0)
     assert np.isclose(ss['ra']['asset_mkt'], 0.0)
     assert np.isclose(ss['ra']['wnkpc'], 0.0)
@@ -165,3 +163,4 @@ def test_all():
     td_nonlin_lvl = td_nonlin + ss['ha']
     td_A = np.sum(td_nonlin_lvl.internals['household_ha']['a'] * td_nonlin_lvl.internals['household_ha']['D'], axis=(1, 2))
     assert np.allclose(td_A - ss['ha']['A'], td_nonlin['A'])
+    

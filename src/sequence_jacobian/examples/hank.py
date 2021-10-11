@@ -2,8 +2,7 @@ import numpy as np
 
 from .. import utilities as utils
 from ..blocks.simple_block import simple
-from ..blocks.solved_block import solved
-from ..blocks.combined_block import create_model, combine
+from ..blocks.combined_block import create_model
 from .hetblocks import household_labor as hh
 
 
@@ -45,11 +44,10 @@ def mkt_clearing(A, NE, C, L, Y, B, pi, mu, kappa):
 
 
 @simple
-def partial_ss_solution(B_Y, Y, Z, mu):
+def nkpc_ss(Z, mu):
     '''Solve (w) to hit targets for (nkpc_res)'''
     w = Z / mu
-    B = B_Y * Y
-    return w, B
+    return w
 
 
 '''Part 2: Embed HA block'''
@@ -87,23 +85,23 @@ def dag():
     household = hh.household.add_hetinputs([transfers, wages, make_grids])
     household = household.add_hetoutputs([labor_supply])
     blocks = [household, firm, monetary, fiscal, mkt_clearing, nkpc]
-    helper_blocks = [partial_ss_solution]
+    blocks_ss = [household, firm, monetary, fiscal, mkt_clearing, nkpc_ss]
     hank_model = create_model(blocks, name="One-Asset HANK")
+    hank_model_ss = create_model(blocks_ss, name="One-Asset HANK")
 
     # Steady state
-    calibration = {'r': 0.005, 'rstar': 0.005, 'eis': 0.5, 'frisch': 0.5, 'B_Y': 5.6,
+    calibration = {'r': 0.005, 'rstar': 0.005, 'eis': 0.5, 'frisch': 0.5, 'B': 5.6,
                    'mu': 1.2, 'rho_s': 0.966, 'sigma_s': 0.5, 'kappa': 0.1, 'phi': 1.5,
                    'Y': 1., 'Z': 1., 'pi': 0., 'nS': 2, 'amax': 150, 'nA': 10}
-    unknowns_ss = {'beta': 0.986, 'vphi': 0.8, 'w': 0.8}
-    targets_ss = {'asset_mkt': 0., 'NE': 1., 'nkpc_res': 0.}
-    ss = hank_model.solve_steady_state(calibration, unknowns_ss, targets_ss, 
-                                       solver='broyden_custom',
-                                       helper_blocks=helper_blocks,
-                                       helper_targets=['nkpc_res'])
+    unknowns_ss = {'beta': 0.986, 'vphi': 0.8}
+    targets_ss = {'asset_mkt': 0., 'NE': 1.}
+    cali = hank_model_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, 
+                                            solver='broyden_custom')
+    ss = hank_model.steady_state(cali)
 
     # Transitional dynamics
     unknowns = ['w', 'Y', 'pi']
     targets = ['asset_mkt', 'goods_mkt', 'nkpc_res']
     exogenous = ['rstar', 'Z']
 
-    return hank_model, ss, unknowns, targets, exogenous
+    return hank_model_ss, ss, hank_model, unknowns, targets, exogenous

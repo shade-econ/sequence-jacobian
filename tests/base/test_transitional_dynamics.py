@@ -31,7 +31,7 @@ def test_rbc_td(rbc_dag):
 
 
 def test_ks_td(krusell_smith_dag):
-    ks_model, ss, unknowns, targets, exogenous = krusell_smith_dag
+    _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
 
     T = 30
     G = ks_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
@@ -47,7 +47,7 @@ def test_ks_td(krusell_smith_dag):
 
 
 def test_hank_td(one_asset_hank_dag):
-    hank_model, ss, unknowns, targets, exogenous = one_asset_hank_dag
+    _, ss, hank_model, unknowns, targets, exogenous = one_asset_hank_dag
 
     T = 30
     household = hank_model['household']
@@ -67,7 +67,7 @@ def test_hank_td(one_asset_hank_dag):
 
 # TODO: needs to compute Jacobian of hetoutput `Chi`
 def test_two_asset_td(two_asset_hank_dag):
-    two_asset_model, ss, unknowns, targets, exogenous = two_asset_hank_dag
+    _, ss, two_asset_model, unknowns, targets, exogenous = two_asset_hank_dag
 
     T = 30
     household = two_asset_model['household']
@@ -87,7 +87,7 @@ def test_two_asset_td(two_asset_hank_dag):
 
 
 def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
-    two_asset_model, ss, unknowns, targets, exogenous = two_asset_hank_dag
+    _, ss, two_asset_model, unknowns, targets, exogenous = two_asset_hank_dag
 
     household = hh.household.add_hetinputs([two_asset.income, two_asset.make_grids])
     blocks_simple = [household, two_asset.pricing, two_asset.arbitrage,

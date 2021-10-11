@@ -1,6 +1,6 @@
 from .. import utilities as utils
 from ..blocks.simple_block import simple
-from ..blocks.combined_block import create_model, combine
+from ..blocks.combined_block import create_model
 from .hetblocks import household_sim as hh
 
 
@@ -22,12 +22,13 @@ def mkt_clearing(K, A, Y, C, delta):
 
 
 @simple
-def firm_ss_solution(r, Y, L, delta, alpha):
+def firm_ss(r, Y, L, delta, alpha):
     '''Solve for (Z, K) given targets for (Y, r).'''
     rk = r + delta
     K = alpha * Y / rk
     Z = Y / K ** alpha / L ** (1 - alpha)
-    return K, Z
+    w = (1 - alpha) * Z * (K / L) ** alpha
+    return K, Z, w
 
 
 '''Part 2: Embed HA block'''
@@ -48,24 +49,22 @@ def income(w, e_grid):
 def dag():
     # Combine blocks
     household = hh.household.add_hetinputs([income, make_grids])
-    blocks = [household, firm, mkt_clearing]
-    helper_blocks = [firm_ss_solution]
-    ks_model = create_model(blocks, name="Krusell-Smith")
+    ks_model = create_model([household, firm, mkt_clearing], name="Krusell-Smith")
+    ks_model_ss = create_model([household, firm_ss, mkt_clearing], name="Krusell-Smith SS")
 
     # Steady state
-    calibration = {'eis': 1, 'delta': 0.025, 'alpha': 0.11, 'rho': 0.966, 'sigma': 0.5,
-                   'L': 1.0, 'nS': 2, 'nA': 10, 'amax': 200, 'r': 0.01}
-    unknowns_ss = {'beta': (0.98 / 1.01, 0.999 / 1.01), 'Z': 0.85, 'K': 3.}
-    targets_ss = {'asset_mkt': 0., 'Y': 1., 'r': 0.01}
-    ss = ks_model.solve_steady_state(calibration, unknowns_ss, targets_ss, solver='brentq',
-                                     helper_blocks=helper_blocks, helper_targets=['Y', 'r'])
+    calibration = {'eis': 1.0, 'delta': 0.025, 'alpha': 0.11, 'rho': 0.966, 'sigma': 0.5,
+                   'Y': 1.0, 'L': 1.0, 'nS': 2, 'nA': 10, 'amax': 200, 'r': 0.01}
+    unknowns_ss = {'beta': (0.98 / 1.01, 0.999 / 1.01)}
+    targets_ss = {'asset_mkt': 0.}
+    ss = ks_model_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, solver='brentq')
 
     # Transitional dynamics
     inputs = ['Z']
     unknowns = ['K']
     targets = ['asset_mkt']
 
-    return ks_model, ss, unknowns, targets, inputs
+    return ks_model_ss, ss, ks_model, unknowns, targets, inputs
 
 
 '''Part 3: Permanent beta heterogeneity'''
@@ -84,20 +83,20 @@ def remapped_dag():
     hh_patient = household.remap({k: k + '_patient' for k in to_map}).rename('hh_patient')
     hh_impatient = household.remap({k: k + '_impatient' for k in to_map}).rename('hh_impatient')
     blocks = [hh_patient, hh_impatient, firm, mkt_clearing, aggregate]
+    blocks_ss = [hh_patient, hh_impatient, firm_ss, mkt_clearing, aggregate]
     ks_remapped = create_model(blocks, name='KS-beta-het')
+    ks_remapped_ss = create_model(blocks_ss, name='KS-beta-het')
 
     # Steady State
-    calibration = {'eis': 1., 'delta': 0.025, 'alpha': 0.3, 'rho': 0.966, 'sigma': 0.5, 'L': 1.0,
+    calibration = {'eis': 1., 'delta': 0.025, 'alpha': 0.3, 'rho': 0.966, 'sigma': 0.5, 'Y': 1.0, 'L': 1.0,
                    'nS': 3, 'nA': 100, 'amax': 1000, 'beta_impatient': 0.985, 'mass_patient': 0.5}
-    unknowns_ss = {'beta_patient': (0.98 / 1.01, 0.999 / 1.01), 'Z': 0.5, 'K': 8.}
-    targets_ss = {'asset_mkt': 0., 'Y': 1., 'r': 0.01}
-    helper_blocks = [firm_ss_solution]
-    ss = ks_remapped.solve_steady_state(calibration, unknowns_ss, targets_ss, solver='brentq',
-                                        helper_blocks=helper_blocks, helper_targets=['Y', 'r'])
+    unknowns_ss = {'beta_patient': (0.98 / 1.01, 0.999 / 1.01)}
+    targets_ss = {'asset_mkt': 0.}
+    ss = ks_remapped_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, solver='brentq')
 
     # Transitional Dynamics/Jacobian Calculation
     unknowns = ['K']
     targets = ['asset_mkt']
     exogenous = ['Z']
 
-    return ks_remapped, ss, unknowns, targets, ss, exogenous
+    return ks_remapped_ss, ss, ks_remapped, unknowns, targets, ss, exogenous

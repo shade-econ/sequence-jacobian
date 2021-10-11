@@ -3,7 +3,7 @@
 import numpy as np
 
 def test_ks_jac(krusell_smith_dag):
-    ks_model, ss, unknowns, targets, exogenous = krusell_smith_dag
+    _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
     household, firm = ks_model['household'], ks_model['firm']
     T = 10
 

@@ -1,5 +1,5 @@
 """Test all models' estimation calculations"""
-
+''
 import pytest
 import numpy as np
 
@@ -9,7 +9,7 @@ from sequence_jacobian import estimation
 # See test_determinacy.py for the to-do describing this suppression
 @pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
 def test_krusell_smith_estimation(krusell_smith_dag):
-    ks_model, ss, unknowns, targets, exogenous = krusell_smith_dag
+    _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
 
     np.random.seed(41234)
     T = 50
