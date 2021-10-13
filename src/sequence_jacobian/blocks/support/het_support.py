@@ -290,3 +290,6 @@ class DiscreteChoice(Transition):
     def expectation(self, X):
         '''NOT meant for value function'''
         return batch_multiply_ith_dimension(self.P_T, self.i, X)
+
+    def forward_shockable(self, Dss):
+        return NotImplementedError

@@ -38,6 +38,3 @@ def batch_multiply_ith_dimension(P, i, X):
     # original shape and order
     X = X.reshape(Pshape[0], *Pshape[-2:])
     return X.swapaxes(0, i)
-
-
-def logsum():

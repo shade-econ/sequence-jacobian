@@ -102,11 +102,3 @@ def forward_policy_shock_2d(Dss, x_i_ss, y_i_ss, x_pi_ss, y_pi_ss, x_pi_shock, y
                 Dshock[iz, ixp, iyp+1] += dalpha * (1-beta) - alpha * dbeta
                 Dshock[iz, ixp+1, iyp+1] -= dalpha * (1-beta) + dbeta * (1-alpha)
     return Dshock
-
-
-def logsum(V, scale):
-    """Logsum formula along 0th dimension"""
-    const = V[0, ...]
-    Vnorm = V - const
-    EV = const + scale * np.log(np.exp(Vnorm / scale).sum(axis=0))
-    return EV 
