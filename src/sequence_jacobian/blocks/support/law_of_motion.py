@@ -58,6 +58,14 @@ class PolicyLottery1D(LawOfMotion):
             return het_compiled.expectation_policy_1d(X.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
 
 
+class ShockedPolicyLottery1D(PolicyLottery1D):
+    def __matmul__(self, X):
+        if self.forward:
+            return het_compiled.forward_policy_shock_1d(X.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
+        else:
+            raise NotImplementedError
+
+
 def lottery_2d(a, b, a_grid, b_grid, monotonic=False):
     if not monotonic:
         return PolicyLottery2D(*interpolate_coord_robust(a_grid, a),
@@ -101,6 +109,14 @@ class PolicyLottery2D(LawOfMotion):
         else:
             return het_compiled.expectation_policy_2d(X.reshape(self.flatshape), self.i1, self.i2,
                                                     self.pi1, self.pi2).reshape(self.shape)
+
+
+class ShockedPolicyLottery2D(PolicyLottery2D):
+    def __matmul__(self, X):
+        if self.forward:
+            return het_compiled.forward_policy_shock_2d(X.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
+        else:
+            raise NotImplementedError
 
 
 class Markov(LawOfMotion):

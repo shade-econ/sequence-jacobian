@@ -28,16 +28,26 @@ def household_new(Va, a_grid, y, r, beta, eis):
 het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='consumption_savings')
 stage_block = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household')
 
-def test_ss_equivalence():
-    hh = household.add_hetinputs([make_grids, income])
-    calibration = {'r': 0.005, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3, 'amin': 0.0, 'amax': 200,
-                    'nA': 100, 'transfer': 0.143, 'N': 1, 'atw': 1, 'beta': 0.97}
-    ss1 = hh.steady_state(calibration)
-    ss2 = stage_block._steady_state(ss1)
+#def test_equivalence():
+hh = household.add_hetinputs([make_grids, income])
+calibration = {'r': 0.004, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3, 'amin': 0.0, 'amax': 200,
+                'nA': 100, 'transfer': 0.143, 'N': 1, 'atw': 1, 'beta': 0.97}
+ss1 = hh.steady_state(calibration)
+ss2 = stage_block._steady_state(ss1)
 
-    assert np.isclose(ss1['A'], ss2['A'])
-    assert np.isclose(ss1['C'], ss2['C'])
-    assert np.allclose(ss1.internals['household']['Dbeg'], ss2.internals['household']['income_shock']['D'])
-    assert np.allclose(ss1.internals['household']['a'], ss2.internals['household']['consumption_savings']['a'])
-    assert np.allclose(ss1.internals['household']['c'], ss2.internals['household']['consumption_savings']['c'])
+# test steady-state equivalence
+assert np.isclose(ss1['A'], ss2['A'])
+assert np.isclose(ss1['C'], ss2['C'])
+assert np.allclose(ss1.internals['household']['Dbeg'], ss2.internals['household']['income_shock']['D'])
+assert np.allclose(ss1.internals['household']['a'], ss2.internals['household']['consumption_savings']['a'])
+assert np.allclose(ss1.internals['household']['c'], ss2.internals['household']['consumption_savings']['c'])
 
+# find Jacobians...
+inputs = ['r', 'beta']
+outputs = ['A', 'C']
+T = 200
+J1 = hh.jacobian(ss1, inputs, outputs, T)
+J2 = stage_block._jacobian(ss2, inputs, [o.lower() for o in outputs], T)
+
+# test Jacobian equivalence
+assert np.allclose(J1['A', 'r'], J2['A', 'r'])

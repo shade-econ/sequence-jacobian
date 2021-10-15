@@ -1,8 +1,8 @@
 from ...utilities.function import ExtendedFunction
 from ...utilities.ordered_set import OrderedSet
 from ...utilities.misc import make_tuple
-from .law_of_motion import (lottery_1d, PolicyLottery1D,
-                            lottery_2d, PolicyLottery2D,
+from .law_of_motion import (lottery_1d, ShockedPolicyLottery1D,
+                            lottery_2d, ShockedPolicyLottery2D,
                             Markov)
 
 class Stage:
@@ -15,24 +15,24 @@ class Stage:
     def precompute(self, ss, ss_lawofmotion=None):
         pass
 
-    def backward_step_separate(self, backward, inputs, lawofmotion=False):
-        """Wrapper around backward_step that takes in backward and inputs
+    def backward_step_separate(self, backward_inputs, other_inputs, lawofmotion=False):
+        """Wrapper around backward_step that takes in backward and other inputs
         separately and also returns backward and report separately"""
-        outputs = self.backward_step({**inputs, **backward}, lawofmotion)
+        outputs = self.backward_step({**other_inputs, **backward_inputs}, lawofmotion)
         if lawofmotion:
             outputs, lom = outputs
         
-        backward = {k: outputs[k] for k in self.backward}
+        backward_outputs = {k: outputs[k] for k in self.backward_outputs}
         report = {k: outputs[k] for k in self.report}
 
         if lawofmotion:
-            return (backward, report), lom
+            return (backward_outputs, report), lom
         else:
-            return backward, report
+            return backward_outputs, report
 
     def __init__(self):
         self.name = ""
-        self.backward = OrderedSet([])
+        self.backward_outputs = OrderedSet([])
         self.report = OrderedSet([])
         self.inputs = OrderedSet([])
 
@@ -48,8 +48,8 @@ class Continuous1D(Stage):
         if name is None:
             name = self.f.name
         self.name = name
-        self.backward = OrderedSet(make_tuple(backward))
-        self.report = self.f.outputs - self.backward
+        self.backward_outputs = OrderedSet(make_tuple(backward))
+        self.report = self.f.outputs - self.backward_outputs
         self.inputs = self.f.inputs
 
     def backward_step(self, inputs, lawofmotion=False):
@@ -65,7 +65,7 @@ class Continuous1D(Stage):
         space, i, grid, f = precomputed
         outputs = f.diff(shocks)
         dpi = -outputs[self.policy] / space
-        return outputs, PolicyLottery1D(i, dpi, grid)
+        return outputs, ShockedPolicyLottery1D(i, dpi, grid)
 
     def precompute(self, ss, ss_lawofmotion):
         i = ss_lawofmotion.i.reshape(ss_lawofmotion.shape)
@@ -84,8 +84,8 @@ class Continuous2D(Stage):
         if name is None:
             name = self.f.name
         self.name = name
-        self.backward = OrderedSet(make_tuple(backward))
-        self.report = self.f.outputs - self.backward
+        self.backward_outputs = OrderedSet(make_tuple(backward))
+        self.report = self.f.outputs - self.backward_outputs
         self.inputs = self.f.inputs
 
     def backward_step(self, inputs, lawofmotion=False):
@@ -103,7 +103,7 @@ class Continuous2D(Stage):
         outputs = f.diff(shocks)
         dpi1 = -outputs[self.policy[0]] / space1
         dpi2 = -outputs[self.policy[1]] / space2
-        return outputs, PolicyLottery2D(i1, dpi1, i2, dpi2, grid1, grid2)
+        return outputs, ShockedPolicyLottery2D(i1, dpi1, i2, dpi2, grid1, grid2)
 
     def precompute(self, ss, ss_lawofmotion):
         i1 = ss_lawofmotion.i1.reshape(ss_lawofmotion.shape)
@@ -137,13 +137,13 @@ class Exogenous(Stage):
 
         # attributes needed for any stage
         self.name = name
-        self.backward = backward
+        self.backward_outputs = backward
         self.report = OrderedSet([])
         self.inputs = backward | [markov_name]
     
     def backward_step(self, inputs, lawofmotion=False):
         Pi = Markov(inputs[self.markov_name], self.index)
-        outputs = {k: Pi @ inputs[k] for k in self.backward}
+        outputs = {k: Pi @ inputs[k] for k in self.backward_outputs}
 
         if not lawofmotion:
             return outputs
@@ -152,11 +152,11 @@ class Exogenous(Stage):
     
     def backward_step_shock(self, ss, shocks, precomputed=None):
         Pi = Markov(ss[self.markov_name], self.index)
-        outputs = {k: Pi @ shocks[k] for k in self.backward if k in shocks}
+        outputs = {k: Pi @ shocks[k] for k in self.backward_outputs if k in shocks}
 
         if self.markov_name in shocks:
             dPi = Markov(shocks[self.markov_name], self.index)
-            for k in self.backward:
+            for k in self.backward_outputs:
                 if k in outputs:
                     outputs[k] += dPi @ ss[k]
                 else:

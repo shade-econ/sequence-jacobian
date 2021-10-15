@@ -82,12 +82,12 @@ class ExtendedFunction:
         
         return output_dict
 
-    def differentiable(self, input_dict, h=1E-5, twosided=False):
+    def differentiable(self, input_dict, h=1E-4, twosided=False):
         return DifferentiableExtendedFunction(self.f, self.name, self.inputs, self.outputs, input_dict, h, twosided)
 
 
 class DifferentiableExtendedFunction(ExtendedFunction):
-    def __init__(self, f, name, inputs, outputs, input_dict, h=1E-5, twosided=False):
+    def __init__(self, f, name, inputs, outputs, input_dict, h=1E-4, twosided=False):
         self.f, self.name, self.inputs, self.outputs = f, name, inputs, outputs
         self.input_dict = input_dict
         self.output_dict = None # lazy evaluation of outputs for one-sided diff
