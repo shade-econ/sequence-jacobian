@@ -15,16 +15,39 @@ class Stage:
     def precompute(self, ss, ss_lawofmotion=None):
         pass
 
+    def backward_step_separate(self, backward, inputs, lawofmotion=False):
+        """Wrapper around backward_step that takes in backward and inputs
+        separately and also returns backward and report separately"""
+        outputs = self.backward_step({**inputs, **backward}, lawofmotion)
+        if lawofmotion:
+            outputs, lom = outputs
+        
+        backward = {k: outputs[k] for k in self.backward}
+        report = {k: outputs[k] for k in self.report}
+
+        if lawofmotion:
+            return (backward, report), lom
+        else:
+            return backward, report
+
+    def __init__(self):
+        self.name = ""
+        self.backward = OrderedSet([])
+        self.report = OrderedSet([])
+        self.inputs = OrderedSet([])
+
 
 class Continuous1D(Stage):
     """Stage that does one-dimensional endogenous continuous choice"""
-    def __init__(self, backward, policy, f):
+    def __init__(self, backward, policy, f, name=None):
         # subclass-specific attributes
         self.f = ExtendedFunction(f)
         self.policy = policy
 
         # attributes needed for any stage
-        self.name = self.f.name
+        if name is None:
+            name = self.f.name
+        self.name = name
         self.backward = OrderedSet(make_tuple(backward))
         self.report = self.f.outputs - self.backward
         self.inputs = self.f.inputs
@@ -52,13 +75,15 @@ class Continuous1D(Stage):
 
 class Continuous2D(Stage):
     """Stage that does two-dimensional endogenous continuous choice"""
-    def __init__(self, backward, policy, f):
+    def __init__(self, backward, policy, f, name=None):
         # subclass-specific attributes
         self.f = ExtendedFunction(f)
         self.policy = OrderedSet(policy)
 
         # attributes needed for any stage
-        self.name = self.f.name
+        if name is None:
+            name = self.f.name
+        self.name = name
         self.backward = OrderedSet(make_tuple(backward))
         self.report = self.f.outputs - self.backward
         self.inputs = self.f.inputs
@@ -95,7 +120,7 @@ class ExogenousMaker:
     def __init__(self, markov_name, index, name=None):
         self.markov_name = markov_name
         self.index = index
-        if name is not None:
+        if name is None:
             name = f"exog_{markov_name}"
         self.name = name
 
@@ -114,7 +139,7 @@ class Exogenous(Stage):
         self.name = name
         self.backward = backward
         self.report = OrderedSet([])
-        self.inputs = backward
+        self.inputs = backward | [markov_name]
     
     def backward_step(self, inputs, lawofmotion=False):
         Pi = Markov(inputs[self.markov_name], self.index)
