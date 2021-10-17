@@ -237,7 +237,7 @@ class StageBlock:
             lom_all.append(lom)
         # return end-of-stage backward, report, and lom for each stage
         # and also the final beginning-of-stage backward (i.e. end-of-stage previous period)
-        return backward_all[1:][::-1], report_all[::-1], lom_all[::-1], backward_all[0]
+        return backward_all[::-1][1:], report_all[::-1], lom_all[::-1], backward_all[-1]
 
     def forward_step_steady_state(self, D, loms: List[LawOfMotion]):
         for lom in loms:
