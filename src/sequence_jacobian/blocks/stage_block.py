@@ -1,9 +1,12 @@
-from typing import List
+from typing import List, Optional
 import numpy as np
+import copy
 
 from .het_block import HetBlock
 from ..classes import SteadyStateDict, JacobianDict
 from ..utilities.ordered_set import OrderedSet
+from ..utilities.function import CombinedExtendedFunction
+from ..utilities.bijection import Bijection
 from ..utilities.optimized_routines import within_tolerance
 from .. import utilities as utils
 from .support.law_of_motion import LawOfMotion
@@ -12,7 +15,7 @@ from .support.stages import Stage
 # TODO: make sure there aren't name clashes between variables, 'D', 'law_of_motion', and stage names!
 
 class StageBlock:
-    def __init__(self, stages: List[Stage], name=None):
+    def __init__(self, stages: List[Stage], hetinputs=None, name=None):
         inputs = OrderedSet([])
         outputs = OrderedSet([])
         stages = make_all_into_stages(stages)
@@ -25,11 +28,16 @@ class StageBlock:
         self.constructor_checks(stages, inputs, outputs)
         self.stages = stages
         self.inputs = inputs
-        self.outputs = outputs
+        self.outputs = OrderedSet([o.upper() for o in outputs])
+        self.M_outputs = Bijection({o: o.upper() for o in outputs})
 
         if name is None:
             name = stages[0].name + "_to_" + stages[-1].name
         self.name = name
+
+        if hetinputs is not None:
+            hetinputs = CombinedExtendedFunction(hetinputs)
+        
 
     @staticmethod
     def constructor_checks(stages, inputs, outputs):
@@ -45,6 +53,8 @@ class StageBlock:
     def _steady_state(self, calibration, backward_tol=1E-9, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
         ss = self.extract_ss_dict(calibration)
+        hetinputs = self.return_hetinputs(ss)
+        ss.update(hetinputs)
 
         backward, report, lom = self.backward_steady_state(ss, backward_tol, backward_maxit)
 
@@ -61,7 +71,8 @@ class StageBlock:
         D = self.forward_steady_state(Dinit, lom, forward_tol, forward_maxit)
         
         aggregates = {}
-        internals = {}
+        # initialize internals with hetinputs, then add stage-level
+        internals = hetinputs
         for i, stage in enumerate(self.stages):
             # aggregate everything to report
             for k in stage.report:
@@ -105,12 +116,14 @@ class StageBlock:
 
     def _jacobian(self, ss, inputs, outputs, T):
         ss = self.extract_ss_dict(ss)
+        outputs = self.M_outputs.inv @ outputs
+        differentiable_hetinput = self.preliminary_hetinput(ss, h=1E-4)
         backward_data, forward_data, expectations_data = self.preliminary_all_stages(ss)
 
         # step 1
         curlyYs, curlyDs = {}, {}
         for i in inputs:
-            curlyYs[i], curlyDs[i] = self.backward_fakenews(i, outputs, T, backward_data, forward_data)
+            curlyYs[i], curlyDs[i] = self.backward_fakenews(i, outputs, T, backward_data, forward_data, differentiable_hetinput)
         
         # step 2
         curlyEs = {}
@@ -130,9 +143,11 @@ class StageBlock:
         
         return JacobianDict(J, name=self.name, T=T)
 
-    def backward_fakenews(self, input_shocked, output_list, T, backward_data, forward_data):
-        # TODO: add hetinputs and hetoutputs!!!
-        curlyV, curlyD, curlyY = self.backward_step_fakenews({input_shocked: 1}, output_list, backward_data, forward_data)
+    def backward_fakenews(self, input_shocked, output_list, T, backward_data, forward_data, differentiable_hetinput):
+        din_dict = {input_shocked: 1}
+        if differentiable_hetinput is not None and input_shocked in differentiable_hetinput.inputs:
+            din_dict.update(differentiable_hetinput.diff(din_dict))
+        curlyV, curlyD, curlyY = self.backward_step_fakenews(din_dict, output_list, backward_data, forward_data)
 
         # infer dimensions from this, initialize empty arrays, and fill in contemporaneous effect
         curlyDs = np.empty((T,) + curlyD.shape)
@@ -267,6 +282,13 @@ class StageBlock:
             expectations_data.append((report, lom.T))
         return backward_data, forward_data[::-1], expectations_data
 
+    def preliminary_hetinput(self, ss, h):
+        differentiable_hetinputs = None
+        if self.hetinputs is not None:
+            # always use two-sided differentiation for hetinputs
+            differentiable_hetinputs = self.hetinputs.differentiable(ss, h, True)
+        return differentiable_hetinputs
+
     def extract_ss_dict(self, ss):
         # copied from het_block.py
         if isinstance(ss, SteadyStateDict):
@@ -279,6 +301,48 @@ class StageBlock:
 
     def next_stage(self, i):
         return self.stages[(i+1) % len(self.stages)]
+
+    def process_hetinputs(self, hetinputs: Optional[CombinedExtendedFunction], tocopy=True):
+        if tocopy:
+            self = copy.copy(self)
+        inputs = self.original_inputs.copy()
+        outputs = self.original_outputs.copy()
+        #internals = self.original_internals.copy()
+
+        if hetinputs is not None:
+            inputs |= hetinputs.inputs
+            inputs -= hetinputs.outputs
+            #internals |= hetinputs.outputs
+
+        self.inputs = inputs
+        self.outputs = outputs
+        #self.internals = internals
+
+        self.hetinputs = hetinputs
+
+        return self
+
+    def add_hetinputs(self, functions):
+        if self.hetinputs is None:
+            return self.process_hetinputs(CombinedExtendedFunction(functions))
+        else:
+            return self.process_hetinputs(self.hetinputs.add(functions))
+
+    def remove_hetinputs(self, names):
+        return self.process_hetinputs_hetoutputs(self.hetinputs.remove(names))
+
+    def return_hetinputs(self, d):
+        if self.hetinputs is not None:
+            return self.hetinputs(d)
+        else:
+            return {}
+
+    def save_original(self):
+        """store "original" copies of these for use whenever we process new hetinputs/hetoutputs"""
+        self.original_inputs = self.inputs
+        self.original_outputs = self.outputs
+        self.original_internals = self.internals
+        self.original_M_outputs = self.M_outputs
 
 def make_all_into_stages(stages: List[Stage]):
     """Given list of 'stages' that can include either actual stages or

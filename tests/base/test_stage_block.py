@@ -47,7 +47,7 @@ def test_equivalence():
     outputs = ['A', 'C']
     T = 200
     J1 = hh.jacobian(ss1, inputs, outputs, T)
-    J2 = stage_block._jacobian(ss2, inputs, [o.lower() for o in outputs], T)
+    J2 = stage_block._jacobian(ss2, inputs, outputs, T)
 
     # test Jacobian equivalence
     for i in inputs:

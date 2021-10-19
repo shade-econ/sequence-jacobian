@@ -136,7 +136,7 @@ class HetBlock(Block):
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
         ss = self.extract_ss_dict(ss)
-        self.update_with_hetinputs(ss)
+        #self.update_with_hetinputs(ss)
         outputs = self.M_outputs.inv @ outputs
 
         # step 0: preliminary processing of steady state
@@ -437,6 +437,8 @@ class HetBlock(Block):
 
         self.hetinputs = hetinputs
         self.hetoutputs = hetoutputs
+
+        # TODO: fix consequences with a self.M @ if there is remap!
 
         return self
 
