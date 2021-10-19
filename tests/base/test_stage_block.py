@@ -6,9 +6,15 @@ from sequence_jacobian.blocks.support.stages import Continuous1D, ExogenousMaker
 from sequence_jacobian import utilities as utils
 
 def make_grids(rho_e, sd_e, nE, amin, amax, nA):
-    e_grid, e_dist, Pi = markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
+    e_grid, e_dist, Pi_ss = markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
     a_grid = agrid(amin=amin, amax=amax, n=nA)
-    return e_grid, e_dist, Pi, a_grid
+    return e_grid, e_dist, Pi_ss, a_grid
+
+def alter_Pi(Pi_ss, shift):
+    Pi = Pi_ss.copy()
+    Pi[:, 0] -= shift
+    Pi[:, -1] += shift
+    return Pi
 
 def income(atw, N, e_grid, transfer):
     y = atw * N * e_grid + transfer
@@ -27,12 +33,12 @@ def household_new(Va, a_grid, y, r, beta, eis):
 
 het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='consumption_savings')
 stage_block = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household',
-                    backward_init=household_init, hetinputs=(make_grids, income))
+                    backward_init=household_init, hetinputs=(make_grids, income, alter_Pi))
 
 def test_equivalence():
-    hh = household.add_hetinputs([make_grids, income])
+    hh = household.add_hetinputs([make_grids, income, alter_Pi])
     calibration = {'r': 0.004, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3, 'amin': 0.0, 'amax': 200,
-                    'nA': 100, 'transfer': 0.143, 'N': 1, 'atw': 1, 'beta': 0.97}
+                    'nA': 100, 'transfer': 0.143, 'N': 1, 'atw': 1, 'beta': 0.97, 'shift': 0}
     ss1 = hh.steady_state(calibration)
     ss2 = stage_block._steady_state(calibration)
 
@@ -44,7 +50,7 @@ def test_equivalence():
     assert np.allclose(ss1.internals['household']['c'], ss2.internals['household']['consumption_savings']['c'])
 
     # find Jacobians...
-    inputs = ['r', 'beta']
+    inputs = ['r', 'atw', 'shift']
     outputs = ['A', 'C']
     T = 200
     J1 = hh.jacobian(ss1, inputs, outputs, T)

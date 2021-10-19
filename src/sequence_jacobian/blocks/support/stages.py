@@ -161,7 +161,7 @@ class Exogenous(Stage):
                     outputs[k] += dPi @ ss[k]
                 else:
                     outputs[k] = dPi @ ss[k]
-            return outputs, dPi
+            return outputs, dPi.T
         else:
             return outputs, None
 
