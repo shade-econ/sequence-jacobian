@@ -5,7 +5,7 @@ import copy
 from .het_block import HetBlock
 from ..classes import SteadyStateDict, JacobianDict
 from ..utilities.ordered_set import OrderedSet
-from ..utilities.function import CombinedExtendedFunction
+from ..utilities.function import ExtendedFunction, CombinedExtendedFunction
 from ..utilities.bijection import Bijection
 from ..utilities.optimized_routines import within_tolerance
 from .. import utilities as utils
@@ -15,7 +15,7 @@ from .support.stages import Stage
 # TODO: make sure there aren't name clashes between variables, 'D', 'law_of_motion', and stage names!
 
 class StageBlock:
-    def __init__(self, stages: List[Stage], hetinputs=None, name=None):
+    def __init__(self, stages: List[Stage], backward_init=None, hetinputs=None, name=None):
         inputs = OrderedSet([])
         outputs = OrderedSet([])
         stages = make_all_into_stages(stages)
@@ -37,7 +37,11 @@ class StageBlock:
 
         if hetinputs is not None:
             hetinputs = CombinedExtendedFunction(hetinputs)
-        
+        self.hetinputs = hetinputs
+
+        if backward_init is not None:
+            backward_init = ExtendedFunction(backward_init)
+        self.backward_init = backward_init
 
     @staticmethod
     def constructor_checks(stages, inputs, outputs):
@@ -55,6 +59,7 @@ class StageBlock:
         ss = self.extract_ss_dict(calibration)
         hetinputs = self.return_hetinputs(ss)
         ss.update(hetinputs)
+        self.initialize_backward(ss)
 
         backward, report, lom = self.backward_steady_state(ss, backward_tol, backward_maxit)
 
@@ -298,6 +303,12 @@ class StageBlock:
             return ssnew
         else:
             return ss.copy()
+
+    def initialize_backward(self, ss):
+        # always initialize the backward outputs of first stage,
+        # backward inputs of final stage (maybe generalize later?!)
+        if not all(k in ss for k in self.stages[0].backward_outputs):
+            ss.update(self.backward_init(ss))
 
     def next_stage(self, i):
         return self.stages[(i+1) % len(self.stages)]

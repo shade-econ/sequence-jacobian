@@ -1,6 +1,6 @@
 import numpy as np
 from sequence_jacobian.blocks.stage_block import StageBlock
-from sequence_jacobian.examples.hetblocks.household_sim import household
+from sequence_jacobian.examples.hetblocks.household_sim import household, household_init
 from sequence_jacobian import markov_rouwenhorst, agrid 
 from sequence_jacobian.blocks.support.stages import Continuous1D, ExogenousMaker
 from sequence_jacobian import utilities as utils
@@ -26,14 +26,15 @@ def household_new(Va, a_grid, y, r, beta, eis):
     return Va, a, c
 
 het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='consumption_savings')
-stage_block = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household')
+stage_block = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household',
+                    backward_init=household_init, hetinputs=(make_grids, income))
 
 def test_equivalence():
     hh = household.add_hetinputs([make_grids, income])
     calibration = {'r': 0.004, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3, 'amin': 0.0, 'amax': 200,
                     'nA': 100, 'transfer': 0.143, 'N': 1, 'atw': 1, 'beta': 0.97}
     ss1 = hh.steady_state(calibration)
-    ss2 = stage_block._steady_state(ss1)
+    ss2 = stage_block._steady_state(calibration)
 
     # test steady-state equivalence
     assert np.isclose(ss1['A'], ss2['A'])
