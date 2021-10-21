@@ -31,6 +31,7 @@ class StageBlock(Block):
         self.inputs = inputs
         self.outputs = OrderedSet([o.upper() for o in outputs])
         self.M_outputs = Bijection({o: o.upper() for o in outputs})
+        self.save_original()
 
         if name is None:
             name = stages[0].name + "_to_" + stages[-1].name
@@ -38,7 +39,8 @@ class StageBlock(Block):
 
         if hetinputs is not None:
             hetinputs = CombinedExtendedFunction(hetinputs)
-        self.hetinputs = hetinputs
+        # self.hetinputs = hetinputs
+        self.process_hetinputs(hetinputs, tocopy=False)
 
         if backward_init is not None:
             backward_init = ExtendedFunction(backward_init)
@@ -65,6 +67,9 @@ class StageBlock(Block):
                     raise ValueError(f"Stages are not allowed to return outputs called 'd' or 'law_of_motion' but stage '{stage.name}' does")
                 if o.isupper(): 
                     raise ValueError(f"Stages are not allowed to report upper-case outputs. Stage '{stage.name}' has an output '{o}'")
+
+    def __repr__(self):
+        return f"<StageBlock '{self.name}' with stages {[k.name for k in self.stages]}>"
 
     def _steady_state(self, calibration, backward_tol=1E-9, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
@@ -370,7 +375,7 @@ class StageBlock(Block):
         """store "original" copies of these for use whenever we process new hetinputs/hetoutputs"""
         self.original_inputs = self.inputs
         self.original_outputs = self.outputs
-        self.original_internals = self.internals
+        # self.original_internals = self.internals
         self.original_M_outputs = self.M_outputs
 
 def make_all_into_stages(stages: List[Stage]):

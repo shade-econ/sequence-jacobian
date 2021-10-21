@@ -33,15 +33,16 @@ def household_new(Va, a_grid, y, r, beta, eis):
     return Va, a, c
 
 het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='consumption_savings')
-stage_block = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household',
+hh2 = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household',
                     backward_init=household_init, hetinputs=(make_grids, income, alter_Pi))
 
 def test_equivalence():
-    hh = household.add_hetinputs([make_grids, income, alter_Pi])
-    calibration = {'r': 0.004, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3, 'amin': 0.0, 'amax': 200,
-                    'nA': 100, 'transfer': 0.143, 'N': 1, 'atw': 1, 'beta': 0.97, 'shift': 0}
-    ss1 = hh.steady_state(calibration)
-    ss2 = stage_block._steady_state(calibration)
+    hh1 = household.add_hetinputs([make_grids, income, alter_Pi])
+    calibration = {'r': 0.004, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
+                   'amin': 0.0, 'amax': 200, 'nA': 100, 'transfer': 0.143, 'N': 1,
+                   'atw': 1, 'beta': 0.97, 'shift': 0}
+    ss1 = hh1.steady_state(calibration)
+    ss2 = hh2.steady_state(calibration)
 
     # test steady-state equivalence
     assert np.isclose(ss1['A'], ss2['A'])
@@ -54,8 +55,8 @@ def test_equivalence():
     inputs = ['r', 'atw', 'shift']
     outputs = ['A', 'C']
     T = 200
-    J1 = hh.jacobian(ss1, inputs, outputs, T)
-    J2 = stage_block.jacobian(ss2, inputs, outputs, T)
+    J1 = hh1.jacobian(ss1, inputs, outputs, T)
+    J2 = hh2.jacobian(ss2, inputs, outputs, T)
 
     # test Jacobian equivalence
     for i in inputs:
@@ -64,6 +65,6 @@ def test_equivalence():
 
     # impulse linear
     shock = ImpulseDict({'r': 0.5 ** np.arange(20)})
-    td_lin1 = hh.impulse_linear(ss1, shock, outputs=['C'])
-    td_lin2 = stage_block.impulse_linear(ss2, shock, outputs=['C'])
+    td_lin1 = hh1.impulse_linear(ss1, shock, outputs=['C'])
+    td_lin2 = hh2.impulse_linear(ss2, shock, outputs=['C'])
     assert np.allclose(td_lin1['C'], td_lin2['C'])

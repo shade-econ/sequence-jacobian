@@ -52,6 +52,9 @@ class Continuous1D(Stage):
         self.report = self.f.outputs - self.backward_outputs
         self.inputs = self.f.inputs
 
+    def __repr__(self):
+        return f"<Stage-Continuous1D '{self.name}' with policy '{self.policy}'>"
+
     def backward_step(self, inputs, lawofmotion=False):
         outputs = self.f(inputs)
 
@@ -87,6 +90,9 @@ class Continuous2D(Stage):
         self.backward_outputs = OrderedSet(make_tuple(backward))
         self.report = self.f.outputs - self.backward_outputs
         self.inputs = self.f.inputs
+
+    def __repr__(self):
+        return f"<Stage-Continuous2D '{self.name}' with policies {self.policy}>"
 
     def backward_step(self, inputs, lawofmotion=False):
         outputs = self.f(inputs)
@@ -140,6 +146,9 @@ class Exogenous(Stage):
         self.backward_outputs = backward
         self.report = OrderedSet([])
         self.inputs = backward | [markov_name]
+
+    def __repr__(self):
+        return f"<Stage-Exogenous '{self.name}' with Markov matrix '{self.markov_name}'>"
     
     def backward_step(self, inputs, lawofmotion=False):
         Pi = Markov(inputs[self.markov_name], self.index)
