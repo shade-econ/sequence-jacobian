@@ -4,6 +4,7 @@ from sequence_jacobian.examples.hetblocks.household_sim import household, househ
 from sequence_jacobian import markov_rouwenhorst, agrid 
 from sequence_jacobian.blocks.support.stages import Continuous1D, ExogenousMaker
 from sequence_jacobian import utilities as utils
+from sequence_jacobian.classes import ImpulseDict
 
 def make_grids(rho_e, sd_e, nE, amin, amax, nA):
     e_grid, e_dist, Pi_ss = markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
@@ -54,9 +55,15 @@ def test_equivalence():
     outputs = ['A', 'C']
     T = 200
     J1 = hh.jacobian(ss1, inputs, outputs, T)
-    J2 = stage_block._jacobian(ss2, inputs, outputs, T)
+    J2 = stage_block.jacobian(ss2, inputs, outputs, T)
 
     # test Jacobian equivalence
     for i in inputs:
         for o in outputs:
             assert np.allclose(J1[o, i], J2[o, i])
+
+    # impulse linear
+    shock = ImpulseDict({'r': 0.5 ** np.arange(20)})
+    td_lin1 = hh.impulse_linear(ss1, shock, outputs=['C'])
+    td_lin2 = stage_block.impulse_linear(ss2, shock, outputs=['C'])
+    assert np.allclose(td_lin1['C'], td_lin2['C'])

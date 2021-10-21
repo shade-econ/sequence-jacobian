@@ -2,8 +2,9 @@ from typing import List, Optional
 import numpy as np
 import copy
 
+from .block import Block
 from .het_block import HetBlock
-from ..classes import SteadyStateDict, JacobianDict
+from ..classes import SteadyStateDict, JacobianDict, ImpulseDict
 from ..utilities.ordered_set import OrderedSet
 from ..utilities.function import ExtendedFunction, CombinedExtendedFunction
 from ..utilities.bijection import Bijection
@@ -12,10 +13,10 @@ from .. import utilities as utils
 from .support.law_of_motion import LawOfMotion
 from .support.stages import Stage
 
-# TODO: make sure there aren't name clashes between variables, 'D', 'law_of_motion', and stage names!
 
-class StageBlock:
+class StageBlock(Block):
     def __init__(self, stages: List[Stage], backward_init=None, hetinputs=None, name=None):
+        super().__init__()
         inputs = OrderedSet([])
         outputs = OrderedSet([])
         stages = make_all_into_stages(stages)
@@ -104,8 +105,10 @@ class StageBlock:
 
         return SteadyStateDict(aggregates, {self.name: internals})
 
+    def _impulse_linear(self, ss, inputs, outputs, Js, h=1E-4, twosided=False):
+        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js, h=h, twosided=twosided).apply(inputs))
+
     def backward_steady_state(self, ss, tol=1E-9, maxit=5000):
-        # TODO: allow for initializer function!
         backward = {k: ss[k] for k in self.stages[-1].backward_outputs}
         for it in range(maxit):
             backward_new = self.backward_step_steady_state(backward, ss)
@@ -158,6 +161,8 @@ class StageBlock:
                 J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
         
         return JacobianDict(J, name=self.name, T=T)
+
+    '''Jacobian calculation: four parts of fake news algorithm, plus support methods'''
 
     def backward_fakenews(self, input_shocked, output_list, T, backward_data, forward_data, differentiable_hetinput):
         din_dict = {input_shocked: 1}
@@ -304,6 +309,8 @@ class StageBlock:
             # always use two-sided differentiation for hetinputs
             differentiable_hetinputs = self.hetinputs.differentiable(ss, h, True)
         return differentiable_hetinputs
+
+    '''HetInput and HetOutput options and processing'''
 
     def extract_ss_dict(self, ss):
         # copied from het_block.py
