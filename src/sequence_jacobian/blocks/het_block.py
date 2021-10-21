@@ -33,6 +33,8 @@ class HetBlock(Block):
         self.inputs |= self.exogenous
         self.internals = OrderedSet(['D', 'Dbeg']) | self.exogenous | self.backward_fun.outputs
 
+        self.static_checks()
+
         # store "original" copies of these for use whenever we process new hetinputs/hetoutputs
         self.original_inputs = self.inputs
         self.original_outputs = self.outputs
@@ -46,10 +48,14 @@ class HetBlock(Block):
             hetoutputs = CombinedExtendedFunction(hetoutputs)
         self.process_hetinputs_hetoutputs(hetinputs, hetoutputs, tocopy=False)
 
+        if backward_init is not None:
+            backward_init = ExtendedFunction(backward_init)
+        self.backward_init = backward_init
+
+    def static_checks(self):
         if len(self.policy) > 2:
             raise ValueError(f"More than two endogenous policies in {self.name}, not yet supported")
 
-        # Checking that the various inputs/outputs attributes are correctly set
         for pol in self.policy:
             if pol not in self.backward_fun.outputs:
                 raise ValueError(f"Policy '{pol}' not included as output in {self.name}")
@@ -59,19 +65,14 @@ class HetBlock(Block):
         for back in self.backward:
             if back + '_p' not in self.backward_fun.inputs:
                 raise ValueError(f"Backward variable '{back}_p' not included as argument in {self.name}")
-
             if back not in self.backward_fun.outputs:
                 raise ValueError(f"Backward variable '{back}' not included as output in {self.name}")
+            if back in ['d', 'dbeg', 'D', 'Dbeg']:
+                raise ValueError(f"A backward variable is called D or Dbeg, which are reserved for the distribution.")
 
         for out in self.non_backward_outputs:
             if out[0].isupper():
                 raise ValueError("Output '{out}' is uppercase in {self.name}, which is not allowed")
-
-        if backward_init is not None:
-            backward_init = ExtendedFunction(backward_init)
-        self.backward_init = backward_init
-
-        # note: should do more input checking to ensure certain choices not made: 'D' not input, etc.
 
     def __repr__(self):
         """Nice string representation of HetBlock for printing to console"""

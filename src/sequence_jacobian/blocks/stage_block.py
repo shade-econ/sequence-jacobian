@@ -43,9 +43,10 @@ class StageBlock:
             backward_init = ExtendedFunction(backward_init)
         self.backward_init = backward_init
 
+
     @staticmethod
     def constructor_checks(stages, inputs, outputs):
-        """some checks: inputs, outputs, and combined backward should not overlap at all"""
+        # inputs, outputs, and combined backward should not overlap at all
         if not inputs.isdisjoint(outputs):
             raise ValueError(f'inputs and outputs have overlap {inputs & outputs}')
         backward_all = set().union(*(stage.backward_outputs for stage in stages))
@@ -53,6 +54,16 @@ class StageBlock:
             raise ValueError(f'Some stage taking another non-immediate-successor stage backward {inputs & backward_all} as input')
         if not outputs.isdisjoint(backward_all):
             raise ValueError(f'Outputs and backward have overlap {outputs & backward_all}')
+       
+        # 'D', 'law_of_motion' are protected names; outputs should not be upper case
+        for stage in stages:
+            if stage.name in ['D', 'law_of_motion']:
+                raise ValueError(f"Stage '{stage.name}' has invalid name")
+            for o in stage.report:
+                if o in ['d', 'law_of_motion']:
+                    raise ValueError(f"Stages are not allowed to return outputs called 'd' or 'law_of_motion' but stage '{stage.name}' does")
+                if o.isupper(): 
+                    raise ValueError(f"Stages are not allowed to report upper-case outputs. Stage '{stage.name}' has an output '{o}'")
 
     def _steady_state(self, calibration, backward_tol=1E-9, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
