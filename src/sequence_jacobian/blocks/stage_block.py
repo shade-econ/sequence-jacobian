@@ -39,7 +39,6 @@ class StageBlock(Block):
 
         if hetinputs is not None:
             hetinputs = CombinedExtendedFunction(hetinputs)
-        # self.hetinputs = hetinputs
         self.process_hetinputs(hetinputs, tocopy=False)
 
         if backward_init is not None:
@@ -101,42 +100,37 @@ class StageBlock(Block):
                 aggregates[k.upper()] = np.vdot(D[i], report[i][k])
             
             # put individual-level report, backward, and dist in internals
-            internals[stage.name] = {**backward[i], **report[i], 'law_of_motion': lom[i], 'D': D[i]}
+            internals[stage.name] = {**backward[i], **report[i],
+                                     'law_of_motion': lom[i], 'D': D[i]}
 
-        # for now, put all inputs to the block into aggregates
-        # later we'll add hetinput, etc.
+        # put all inputs to the block into aggregates
         for k in self.inputs:
             aggregates[k] = ss[k]
 
         return SteadyStateDict(aggregates, {self.name: internals})
 
+    def _impulse_nonlinear(self, ssin, inputs, outputs, ss_initial):
+        ss = self.extract_ss_dict(ssin)
+        if ss_initial is not None:
+            ss[self.stages[0].name]['D'] = ss_initial[self.stages[0].name]['D']
+
+        # report_path is dict(stage: {output: TxN-dim array})
+        # lom_path is list[t][stage] in forward order
+        report_path, lom_path = self.backward_nonlinear(ss, inputs)
+        
+        # D_path is dict(stage: TxN-dim array)
+        D_path = self.forward_nonlinear(ss, lom_path)
+
+        aggregates = {}
+        for stage in self.stages:
+            for o in stage.report:
+                if self.M_outputs @ o in outputs:
+                    aggregates[self.M_outputs @ o] = utils.optimized_routines.fast_aggregate(D_path[stage.name], report_path[stage.name][o])
+
+        return ImpulseDict(aggregates, T=inputs.T) - ssin
+
     def _impulse_linear(self, ss, inputs, outputs, Js, h=1E-4, twosided=False):
         return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js, h=h, twosided=twosided).apply(inputs))
-
-    def backward_steady_state(self, ss, tol=1E-9, maxit=5000):
-        backward = {k: ss[k] for k in self.stages[-1].backward_outputs}
-        for it in range(maxit):
-            backward_new = self.backward_step_steady_state(backward, ss)
-            if it % 10 == 0 and all(within_tolerance(backward_new[k], backward[k], tol) for k in backward):
-                break
-            backward = backward_new
-        else:
-            raise ValueError(f'No convergence after {maxit} backward iterations!')
-
-        # one more iteration to get backward in all stages, report, and law of motion
-        return self.backward_step_nonlinear(backward, ss)[:3]
-            
-    def forward_steady_state(self, D, lom: List[LawOfMotion], tol=1E-10, maxit=100_000):
-        for it in range(maxit):
-            D_new = self.forward_step_steady_state(D, lom)
-            if it % 10 == 0 and within_tolerance(D, D_new, tol):
-                break
-            D = D_new
-        else:
-            raise ValueError(f'No convergence after {maxit} forward iterations!')
-
-        # one more iteration to get beginning-of-stage in all stages
-        return self.forward_step_nonlinear(D, lom)[0]
 
     def _jacobian(self, ss, inputs, outputs, T):
         ss = self.extract_ss_dict(ss)
@@ -166,6 +160,103 @@ class StageBlock(Block):
                 J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
         
         return JacobianDict(J, name=self.name, T=T)
+
+    '''Steady-state backward and forward methods'''
+    
+    def backward_steady_state(self, ss, tol=1E-9, maxit=5000):
+        backward = {k: ss[k] for k in self.stages[-1].backward_outputs}
+        for it in range(maxit):
+            backward_new = self.backward_step_steady_state(backward, ss)
+            if it % 10 == 0 and all(within_tolerance(backward_new[k], backward[k], tol) for k in backward):
+                break
+            backward = backward_new
+        else:
+            raise ValueError(f'No convergence after {maxit} backward iterations!')
+
+        # one more iteration to get backward in all stages, report, and law of motion
+        return self.backward_step_nonlinear(backward, ss)[:3]
+
+    def backward_step_steady_state(self, backward, inputs):
+        for stage in reversed(self.stages):
+            backward, _ = stage.backward_step_separate(backward, inputs)
+        return backward
+
+    def backward_step_nonlinear(self, backward, inputs):
+        backward_all = [backward]
+        report_all = []
+        lom_all = []
+        for stage in reversed(self.stages):
+            (backward, report), lom = stage.backward_step_separate(backward, inputs, lawofmotion=True)
+            backward_all.append(backward)
+            report_all.append(report)
+            lom_all.append(lom)
+        # return end-of-stage backward, report, and lom for each stage
+        # and also the final beginning-of-stage backward (i.e. end-of-stage previous period)
+        return backward_all[::-1][1:], report_all[::-1], lom_all[::-1], backward_all[-1]
+            
+    def forward_steady_state(self, D, lom: List[LawOfMotion], tol=1E-10, maxit=100_000):
+        for it in range(maxit):
+            D_new = self.forward_step_steady_state(D, lom)
+            if it % 10 == 0 and within_tolerance(D, D_new, tol):
+                break
+            D = D_new
+        else:
+            raise ValueError(f'No convergence after {maxit} forward iterations!')
+
+        # one more iteration to get beginning-of-stage in all stages
+        return self.forward_step_nonlinear(D, lom)[0]
+
+    def forward_step_steady_state(self, D, loms: List[LawOfMotion]):
+        for lom in loms:
+            D = lom @ D
+        return D
+
+    def forward_step_nonlinear(self, D, loms: List[LawOfMotion]):
+        Ds = [D]
+        for i, lom in enumerate(loms):
+            Ds.append(lom @ Ds[i-1])
+        # return all beginning-of-stage Ds this period, then beginning-of-period next period
+        return Ds[:-1], Ds[-1]
+
+    '''Nonlinear backward and forward methods'''
+
+    def backward_nonlinear(self, ss, inputs):
+        indict = ss.copy()
+        T = inputs.T
+        backward = {k: ss[self.stages[-1].name][k] for k in self.stages[-1].backward_outputs}
+
+        # report_path is dict(stage: {output: TxN-dim array})
+        report_path = {stage.name: {o: np.empty((T,) + ss[stage.name][o].shape) for o in stage.report} for stage in self.stages}
+        lom_path = []
+
+        for t in reversed(range(T)):
+            indict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
+            hetinputs = self.return_hetinputs(indict)
+            indict.update(hetinputs)
+            
+            _, report, lom, backward = self.backward_step_nonlinear(backward, indict)
+
+            for j, stage in enumerate(self.stages):
+                for o in stage.report:  
+                    report_path[stage.name][o][t, ...] = report[j][o]
+
+            lom_path.append(lom)
+
+        return report_path, lom_path[::-1]
+
+# TODO: this does not line up
+    def forward_nonlinear(self, ss, lom_path):
+        T = len(lom_path)
+        Dbeg = ss[self.stages[0].name]['D']
+        D_path = {stage.name: np.empty((T,) + ss[stage.name]['D'].shape) for stage in self.stages}
+
+        for t in range(T):
+            D, Dbeg = self.forward_step_nonlinear(Dbeg, lom_path[t])
+            
+            for j, stage in enumerate(self.stages):
+                D_path[stage.name][t, ...] = D[j]
+
+        return D_path
 
     '''Jacobian calculation: four parts of fake news algorithm, plus support methods'''
 
@@ -261,36 +352,6 @@ class StageBlock(Block):
         for _, lom_T in expectations_data:
             cur_exp = lom_T @ cur_exp
         return cur_exp
-
-    def backward_step_steady_state(self, backward, inputs):
-        for stage in reversed(self.stages):
-            backward, _ = stage.backward_step_separate(backward, inputs)
-        return backward
-
-    def backward_step_nonlinear(self, backward, inputs):
-        backward_all = [backward]
-        report_all = []
-        lom_all = []
-        for stage in reversed(self.stages):
-            (backward, report), lom = stage.backward_step_separate(backward, inputs, lawofmotion=True)
-            backward_all.append(backward)
-            report_all.append(report)
-            lom_all.append(lom)
-        # return end-of-stage backward, report, and lom for each stage
-        # and also the final beginning-of-stage backward (i.e. end-of-stage previous period)
-        return backward_all[::-1][1:], report_all[::-1], lom_all[::-1], backward_all[-1]
-
-    def forward_step_steady_state(self, D, loms: List[LawOfMotion]):
-        for lom in loms:
-            D = lom @ D
-        return D
-
-    def forward_step_nonlinear(self, D, loms: List[LawOfMotion]):
-        Ds = [D]
-        for i, lom in enumerate(loms):
-            Ds.append(lom @ Ds[i-1])
-        # return all beginning-of-stage Ds this period, then beginning-of-period next period
-        return Ds[:-1], Ds[-1]
 
     def preliminary_all_stages(self, ss):
         backward_data = []

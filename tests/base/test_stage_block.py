@@ -68,3 +68,11 @@ def test_equivalence():
     td_lin1 = hh1.impulse_linear(ss1, shock, outputs=['C'])
     td_lin2 = hh2.impulse_linear(ss2, shock, outputs=['C'])
     assert np.allclose(td_lin1['C'], td_lin2['C'])
+
+    # impulse nonlinear
+    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C'])
+    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C'])
+    assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
+
+
+test_equivalence()

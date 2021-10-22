@@ -32,8 +32,8 @@ def within_tolerance(x1, x2, tol):
 def fast_aggregate(X, Y):
     """If X has dims (T, ...) and Y has dims (T, ...), do dot product for each T to get length-T vector.
 
-    Identical to np.sum(X*Y, axis=(1,...,X.ndim-1)) but avoids costly creation of intermediates, useful
-    for speeding up aggregation in td by factor of 4 to 5."""
+    Identical to np.sum(X*Y, axis=(1,...,X.ndim-1)) but avoids costly creation of intermediates,
+    useful for speeding up aggregation in td by factor of 4 to 5."""
     T = X.shape[0]
     Xnew = X.reshape(T, -1)
     Ynew = Y.reshape(T, -1)
