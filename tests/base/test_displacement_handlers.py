@@ -121,26 +121,28 @@ def test_ignore_vector():
 
 
 def test_displace():
+    # TODO: test ss_initial being different from ss
+
     # Test unary operations
-    arg_singles = [Displace(np.array([1, 2, 3]), ss=2), Displace(np.array([1, 2, 3]), ss=2)(-1)]
+    arg_singles = [Displace(np.array([1, 2, 3]), 2, 2), Displace(np.array([1, 2, 3]), 2, 2)(-1)]
     for t1 in arg_singles:
         for op in ["__neg__", "__pos__"]:
             assert type(apply_op(op, t1)) == Displace
             assert np.all(numeric_primitive(apply_op(op, t1)) == apply_op(op, numeric_primitive(t1)))
 
     # Test binary operations
-    arg_pairs = [(Displace(np.array([1, 2, 3]), ss=2), 1),
-                 (Displace(np.array([1, 2, 3]), ss=2), IgnoreFloat(1)),
-                 (Displace(np.array([1, 2, 3]), ss=2), Displace(np.array([2, 3, 4]), ss=3)),
-                 (1, Displace(np.array([1, 2, 3]), ss=2)),
-                 (IgnoreFloat(1), Displace(np.array([1, 2, 3]), ss=2)),
+    arg_pairs = [(Displace(np.array([1, 2, 3]), 2, 2), 1),
+                 (Displace(np.array([1, 2, 3]), 2, 2), IgnoreFloat(1)),
+                 (Displace(np.array([1, 2, 3]), 2, 2), Displace(np.array([2, 3, 4]), 3, 3)),
+                 (1, Displace(np.array([1, 2, 3]), 2, 2)),
+                 (IgnoreFloat(1), Displace(np.array([1, 2, 3]), 2, 2)),
 
-                 (Displace(np.array([1, 2, 3]), ss=2)(-1), 1),
-                 (Displace(np.array([1, 2, 3]), ss=2)(-1), IgnoreFloat(1)),
-                 (Displace(np.array([1, 2, 3]), ss=2)(-1), Displace(np.array([2, 3, 4]), ss=3)),
-                 (Displace(np.array([1, 2, 3]), ss=2), Displace(np.array([2, 3, 4]), ss=3)(-1)),
-                 (1, Displace(np.array([1, 2, 3]), ss=2)(-1)),
-                 (IgnoreFloat(1), Displace(np.array([1, 2, 3]), ss=2)(-1))]
+                 (Displace(np.array([1, 2, 3]), 2, 2)(-1), 1),
+                 (Displace(np.array([1, 2, 3]), 2, 2)(-1), IgnoreFloat(1)),
+                 (Displace(np.array([1, 2, 3]), 2, 2)(-1), Displace(np.array([2, 3, 4]), 3, 3)),
+                 (Displace(np.array([1, 2, 3]), 2, 2), Displace(np.array([2, 3, 4]), 3, 3)(-1)),
+                 (1, Displace(np.array([1, 2, 3]), 2, 2)(-1)),
+                 (IgnoreFloat(1), Displace(np.array([1, 2, 3]), 2, 2)(-1))]
     for pair in arg_pairs:
         t1, t2 = pair
         for op in ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
@@ -158,7 +160,6 @@ def test_displace():
         t1_manual_displace[:-1] = numeric_primitive(t1)[1:]
         t1_manual_displace[-1:] = t1.ss
         assert np.all(numeric_primitive(t1(1)) == t1_manual_displace)
-
 
 def test_accumulated_derivative():
     # Test unary operations

@@ -2,8 +2,11 @@
 __pycache__/
 .ipynb_checkpoints/
 .DS_Store
-.vscode
+.vscode/
+.pytest_cache/
 
 *.zip
 
 scripts/
+wiki/
+*.egg-info/

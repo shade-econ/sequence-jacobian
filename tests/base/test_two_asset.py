@@ -2,21 +2,20 @@
 
 import numpy as np
 
-from sequence_jacobian.models import two_asset
+from sequence_jacobian.examples.hetblocks import household_twoasset as hh
 from sequence_jacobian import utilities as utils
 
 
 def test_hank_ss():
-    A, B, U = hank_ss_singlerun()
+    A, B, UCE = hank_ss_singlerun()
     assert np.isclose(A, 12.526539492650361)
     assert np.isclose(B, 1.0840860793350566)
-    assert np.isclose(U, 4.5102870939550055)
+    assert np.isclose(UCE, 4.5102870939550055)
 
 
-def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delta=0.02, kappap=0.1, 
-                      muw=1.1, Bh=1.04, Bg=2.8, G=0.2, eis=0.5, frisch=1, chi0=0.25, chi1=6.5, chi2=2,
-                      epsI=4, omega=0.005, kappaw=0.1, phi=1.5, nZ=3, nB=50, nA=70, nK=50,
-                      bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92, verbose=True):
+def hank_ss_singlerun(beta=0.976, r=0.0125, tot_wealth=14, K=10, delta=0.02, Bg=2.8, G=0.2,
+                      eis=0.5, chi0=0.25, chi1=6.5, chi2=2, omega=0.005, nZ=3, nB=50,
+                      nA=70, nK=50, bmax=50, amax=4000, kmax=1, rho_z=0.966, sigma_z=0.92):
     """Mostly cribbed from two_asset.hank_ss(), but just does backward iteration to get
     a partial equilibrium household steady state given parameters, not solving for equilibrium.
     Convenient for testing."""
@@ -25,27 +24,26 @@ def hank_ss_singlerun(beta=0.976, vphi=2.07, r=0.0125, tot_wealth=14, K=10, delt
     b_grid = utils.discretize.agrid(amax=bmax, n=nB)
     a_grid = utils.discretize.agrid(amax=amax, n=nA)
     k_grid = utils.discretize.agrid(amax=kmax, n=nK)[::-1].copy()
-    e_grid, pi, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
 
     # solve analytically what we can
-    I = delta * K
     mc = 1 - r * (tot_wealth - Bg - K)
     alpha = (r + delta) * K / mc
     w = (1 - alpha) * mc
     tax = (r * Bg + G) / w
     ra = r
     rb = r - omega
+    z_grid = (1 - tax) * w  * e_grid
 
     # figure out initializer
-    z_grid = two_asset.income(e_grid, tax, w, 1)
-    Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
-    Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
+    calibration = {'Pi': Pi, 'a_grid': a_grid, 'b_grid': b_grid, 'e_grid': e_grid,
+                   'z_grid': z_grid, 'k_grid': k_grid, 'beta': beta, 'N': 1.0,
+                   'tax': tax, 'w': w, 'eis': eis, 'rb': rb, 'ra': ra,
+                   'chi0': chi0, 'chi1': chi1, 'chi2': chi2}
 
-    out = two_asset.household.ss(Va=Va, Vb=Vb, Pi=Pi, a_grid=a_grid, b_grid=b_grid,
-                                 N=1, tax=tax, w=w, e_grid=e_grid, k_grid=k_grid, beta=beta,
-                                 eis=eis, rb=rb, ra=ra, chi0=chi0, chi1=chi1, chi2=chi2)
+    out = hh.household.steady_state(calibration)
     
-    return out['A'], out['B'], out['U']
+    return out['A'], out['B'], out['UCE']
 
 
 def test_Psi():
@@ -56,7 +54,7 @@ def test_Psi():
     a = np.random.rand(50) + 1
     ap = np.random.rand(50) + 1
 
-    oPsi, oPsi1, oPsi2 = two_asset.get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2)
+    oPsi, oPsi1, oPsi2 = hh.get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2)
 
     Psi = Psi_correct(ap, a, ra, chi0, chi1, chi2)
     assert np.allclose(oPsi, Psi)

@@ -1,21 +1,19 @@
 """Test all models' estimation calculations"""
-
+''
 import pytest
 import numpy as np
 
-import sequence_jacobian as sj
-from sequence_jacobian import jacobian
+from sequence_jacobian import estimation
 
 
 # See test_determinacy.py for the to-do describing this suppression
 @pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
-def test_krusell_smith_estimation(krusell_smith_model):
-    blocks, exogenous, unknowns, targets, ss = krusell_smith_model
+def test_krusell_smith_estimation(krusell_smith_dag):
+    _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
 
     np.random.seed(41234)
     T = 50
-    G = jacobian.get_G(block_list=blocks, exogenous=exogenous, unknowns=unknowns,
-                       targets=targets, T=T, ss=ss)
+    G = ks_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T)
 
     # Step 1: Stacked impulse responses
     rho = 0.9
@@ -34,7 +32,7 @@ def test_krusell_smith_estimation(krusell_smith_model):
 
     # Step 2: Obtain covariance at all leads and lags
     sigmas = np.array([sigma_persist, sigma_trans])
-    Sigma = sj.estimation.all_covariances(dX, sigmas)
+    Sigma = estimation.all_covariances(dX, sigmas)
 
     # Step 3: Log-likelihood calculation
     # random 100 observations
@@ -44,5 +42,5 @@ def test_krusell_smith_estimation(krusell_smith_model):
     sigma_measurement = np.full(4, 0.05)
 
     # calculate log-likelihood
-    ll = sj.estimation.log_likelihood(Y, Sigma, sigma_measurement)
+    ll = estimation.log_likelihood(Y, Sigma, sigma_measurement)
     assert np.isclose(ll, -59921.410111251025)
