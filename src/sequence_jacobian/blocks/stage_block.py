@@ -214,7 +214,7 @@ class StageBlock(Block):
     def forward_step_nonlinear(self, D, loms: List[LawOfMotion]):
         Ds = [D]
         for i, lom in enumerate(loms):
-            Ds.append(lom @ Ds[i-1])
+            Ds.append(lom @ Ds[i])
         # return all beginning-of-stage Ds this period, then beginning-of-period next period
         return Ds[:-1], Ds[-1]
 
@@ -244,7 +244,6 @@ class StageBlock(Block):
 
         return report_path, lom_path[::-1]
 
-# TODO: this does not line up
     def forward_nonlinear(self, ss, lom_path):
         T = len(lom_path)
         Dbeg = ss[self.stages[0].name]['D']

@@ -32,8 +32,8 @@ def household_new(Va, a_grid, y, r, beta, eis):
     Va = (1 + r) * c ** (-1 / eis)
     return Va, a, c
 
-het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='consumption_savings')
-hh2 = StageBlock([ExogenousMaker('Pi', 0, 'income_shock'), het_stage], name='household',
+het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1')
+hh2 = StageBlock([ExogenousMaker('Pi', 0, 'stage0'), het_stage], name='household',
                     backward_init=household_init, hetinputs=(make_grids, income, alter_Pi))
 
 def test_equivalence():
@@ -47,9 +47,9 @@ def test_equivalence():
     # test steady-state equivalence
     assert np.isclose(ss1['A'], ss2['A'])
     assert np.isclose(ss1['C'], ss2['C'])
-    assert np.allclose(ss1.internals['household']['Dbeg'], ss2.internals['household']['income_shock']['D'])
-    assert np.allclose(ss1.internals['household']['a'], ss2.internals['household']['consumption_savings']['a'])
-    assert np.allclose(ss1.internals['household']['c'], ss2.internals['household']['consumption_savings']['c'])
+    assert np.allclose(ss1.internals['household']['Dbeg'], ss2.internals['household']['stage0']['D'])
+    assert np.allclose(ss1.internals['household']['a'], ss2.internals['household']['stage1']['a'])
+    assert np.allclose(ss1.internals['household']['c'], ss2.internals['household']['stage1']['c'])
 
     # find Jacobians...
     inputs = ['r', 'atw', 'shift']
@@ -73,6 +73,3 @@ def test_equivalence():
     td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C'])
     td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C'])
     assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
-
-
-test_equivalence()

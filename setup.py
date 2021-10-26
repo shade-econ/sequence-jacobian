@@ -14,7 +14,7 @@ setup(
     name="sequence-jacobian",
     python_requires=">=3.7",
     install_requires=read("requirements.txt").splitlines(),
-    version="0.0.1",
+    version="1.0.0-alpha",
     author="Michael Cai",
     author_email="michaelcai@u.northwestern.edu",
     description="Sequence-Space Jacobian Methods for Solving and Estimating Heterogeneous Agent Models",
