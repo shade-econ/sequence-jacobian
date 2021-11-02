@@ -141,12 +141,19 @@ class DiscreteChoice(LawOfMotion):
         self.i = i                     # dimension of state space that will be updated
         self.scale = scale             # scale of taste shocks (on grid?)
 
+        # cache "transposed" version of this, since we'll always need both!
+        self.forward = True
+        self.P_T = P.swapaxes(0, 1+self.i).copy()
+
     @property
     def T(self):
         newself = copy.copy(self)
-        newself.P = self.P.swapaxes(0, 1+self.i).copy()
+        newself.forward = not self.forward
         return newself
 
     def __matmul__(self, X):
-        return batch_multiply_ith_dimension(self.P, self.i, X)
-
+        if self.forward:
+            return batch_multiply_ith_dimension(self.P, self.i, X)
+        else:
+            return batch_multiply_ith_dimension(self.P_T, self.i, X)
+    

@@ -106,16 +106,27 @@ def smart_zeros(n):
 
 '''Tools for taste shocks used in discrete choice problems'''
 
-def logit(V, i, scale):
+def logit(V, scale):
     """Logit choice probability of choosing along 0th axis"""
-    Vnorm = V - V[0, ...]
-    P = np.exp(Vnorm / scale) / np.sum(np.exp(Vnorm / scale), axis=i)
+    Vnorm = V - V.max(axis=0)
+    Vexp = np.exp(Vnorm / scale)
+    P = Vexp / Vexp.sum(axis=0)
     return P
 
-
-def logsum(V, i, scale):
-    """Logsum formula along ith dimension"""
-    const = V[0, ...]
+def logsum(V, scale):
+    """Logsum formula along 0th axis"""
+    const = V.max(axis=0)
     Vnorm = V - const
-    EV = const + scale * np.log(np.exp(Vnorm / scale).sum(axis=i))
+    EV = const + scale * np.log(np.exp(Vnorm / scale).sum(axis=0))
     return EV 
+
+def logit_choice(V, scale):
+    """Logit choice probabilities and logsum along 0th axis"""
+    const = V.max(axis=0)
+    Vnorm = V - const
+    Vexp = np.exp(Vnorm / scale)
+    Vexpsum = Vexp.sum(axis=0)
+
+    P = Vexp / Vexpsum
+    EV = const + scale * np.log(Vexpsum)
+    return P, EV
