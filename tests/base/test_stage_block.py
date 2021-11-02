@@ -1,4 +1,5 @@
 import numpy as np
+
 from sequence_jacobian.blocks.stage_block import StageBlock
 from sequence_jacobian.examples.hetblocks.household_sim import household, household_init
 from sequence_jacobian import markov_rouwenhorst, agrid 

@@ -61,9 +61,9 @@ class LogitChoice(Stage):
         if name is None:
             name = self.f.name
         self.name = name
-        self.backward_outputs = backward | value
+        self.backward_outputs = OrderedSet(make_tuple(backward)) | [value]
         self.report = OrderedSet([])
-        self.inputs = backward | [value, taste_shock_scale]
+        self.inputs = OrderedSet(make_tuple(backward)) | [value, taste_shock_scale]
         if f is not None:
             self.inputs |= f.inputs
 
