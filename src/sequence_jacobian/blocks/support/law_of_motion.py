@@ -1,9 +1,7 @@
 import numpy as np
 from . import het_compiled
-from ...utilities.discretize import stationary as general_stationary
 from ...utilities.interpolate import interpolate_coord_robust, interpolate_coord
 from ...utilities.multidim import batch_multiply_ith_dimension, multiply_ith_dimension
-from ...utilities.misc import logsum
 from typing import Optional, Sequence, Any, List, Tuple, Union
 import copy
 

@@ -1,6 +1,7 @@
+from sequence_jacobian.blocks.support.het_support import DiscreteChoice
 from ...utilities.function import ExtendedFunction
 from ...utilities.ordered_set import OrderedSet
-from ...utilities.misc import make_tuple
+from ...utilities.misc import make_tuple, logit, logsum
 from .law_of_motion import (lottery_1d, ShockedPolicyLottery1D,
                             lottery_2d, ShockedPolicyLottery2D,
                             Markov)
@@ -36,6 +37,40 @@ class Stage:
         self.report = OrderedSet([])
         self.inputs = OrderedSet([])
 
+
+class Discrete(Stage):
+    """Stage that does endogenous discrete choice with taste shocks"""
+    def __init__(self, backward, index, name, taste_shock_scale):
+        # subclass-specific attributes
+        self.index = index
+        self.taste_shock_scale = taste_shock_scale
+
+        # attributes needed for any stage
+        self.name = name
+        self.backward_outputs = backward
+        self.report = OrderedSet([])
+        self.inputs = backward | [taste_shock_scale]
+
+    def __repr__(self):
+        return f"<Stage-Discrete '{self.name}'>"
+
+    def backward_step(self, inputs, lawofmotion=False):
+        """map discrete-choice specific value function from next stage 
+            - inputs: 
+                - backward: dchoice-specific value in next stage
+                - scale of taste shock 
+            - outputs: value function this stage (logsum)
+            - lom: choice probability
+        """ 
+        P =  logit(inputs[self.backward_outputs], self.index, inputs[self.taste_shock_scale])
+        vfun = logsum(inputs[self.backward_outputs], self.index, inputs[self.taste_shock_scale])
+
+        lom = DiscreteChoice(P, self.index)
+
+        if not lawofmotion:
+            return outputs
+        else:
+            return outputs, lom.T
 
 class Continuous1D(Stage):
     """Stage that does one-dimensional endogenous continuous choice"""

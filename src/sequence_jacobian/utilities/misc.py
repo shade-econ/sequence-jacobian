@@ -106,7 +106,7 @@ def smart_zeros(n):
 
 '''Tools for taste shocks used in discrete choice problems'''
 
-def choice_prob(V, i, scale):
+def logit(V, i, scale):
     """Logit choice probability of choosing along 0th axis"""
     Vnorm = V - V[0, ...]
     P = np.exp(Vnorm / scale) / np.sum(np.exp(Vnorm / scale), axis=i)
