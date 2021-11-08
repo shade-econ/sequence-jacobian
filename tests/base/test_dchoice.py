@@ -233,9 +233,19 @@ def test_runs():
     calibration = {'taste_shock': 0.01, 'r': 0.005, 'beta': 0.97, 'eis': 0.5,
                    'vphi': 0.3, 'chi': 0.3, 'rho_z': 0.95, 'sd_z': 0.5, 'nZ': 7, 'amin': .0, 'amax': 200.0, 'nA': 200, 'atw': 1.0, 'b': 0.5, 's': 0.1, 'f': 0.4}
 
-    ss = hh.steady_state(calibration)
+    ss1 = hh.steady_state(calibration)
+    ss2 = hh.steady_state({**calibration,
+                           'V': 0.9*ss1.internals['household']['consav']['V'],
+                           'Va': 0.9*ss1.internals['household']['consav']['Va']})
+    
+    # test steady-state equivalence (from different starting point)
+    assert np.isclose(ss1['A'], ss2['A'])
+    assert np.isclose(ss1['C'], ss2['C'])
+    assert np.allclose(ss1.internals['household']['consav']['D'], ss2.internals['household']['consav']['D'])
+    assert np.allclose(ss1.internals['household']['consav']['a'], ss2.internals['household']['consav']['a'])
+    assert np.allclose(ss1.internals['household']['consav']['c'], ss2.internals['household']['consav']['c'])
 
     inputs = ['r', 'atw', 'f']
     outputs = ['A', 'C']
     T = 50
-    J = hh.jacobian(ss, inputs, outputs, T)
+    J = hh.jacobian(ss1, inputs, outputs, T)
