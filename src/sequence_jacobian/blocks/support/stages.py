@@ -1,5 +1,6 @@
 import numpy as np
-from sequence_jacobian.blocks.support.het_support import DiscreteChoice
+# from sequence_jacobian.blocks.support.het_support import DiscreteChoice
+from sequence_jacobian.blocks.support.law_of_motion import DiscreteChoice
 from ...utilities.function import ExtendedFunction
 from ...utilities.ordered_set import OrderedSet
 from ...utilities.misc import make_tuple, logit_choice
@@ -37,107 +38,6 @@ class Stage:
         self.backward_outputs = OrderedSet([])
         self.report = OrderedSet([])
         self.inputs = OrderedSet([])
-
-
-class LogitChoice(Stage):
-    """Stage that does endogenous discrete choice with type 1 extreme value taste shocks"""
-    def __init__(self, value, backward, index, taste_shock_scale, f=None, name=None):
-        # flow utility function, if present, should return a single output
-        if f is not None:
-            f = ExtendedFunction(f)
-            if not len(f.outputs) == 1:
-                raise ValueError(f'Flow utility function {f.name} returning multiple outputs {f.outputs}')
-            self.f = f
-        else:
-            self.f = None
-
-        # other subclass-specific attributes
-        self.index = index
-        self.value = value
-        self.backward = backward
-        self.taste_shock_scale = taste_shock_scale
-
-        # attributes needed for any stage
-        if name is None:
-            name = self.f.name
-        self.name = name
-        self.backward_outputs = OrderedSet(make_tuple(backward)) | [value]
-        self.report = OrderedSet([])
-        self.inputs = OrderedSet(make_tuple(backward)) | [value, taste_shock_scale]
-        if f is not None:
-            self.inputs |= f.inputs
-
-    def __repr__(self):
-        return f"<Stage-Discrete '{self.name}'>"
-
-    def backward_step(self, inputs, lawofmotion=False):
-        # start with value we're given
-        V_next = inputs[self.value]
-
-        # add dimension at beginning to allow for choice, then swap (today's choice determines next stages's state)
-        V = V_next[np.newaxis, ...]
-        V = np.swapaxes(V, 0, self.index+1)
-
-        # call f if we have it to get flow utility
-        if self.f is not None:
-            flow_u = self.f(inputs)
-        else:
-            nchoice = V.shape[0]
-            flow_u = np.zeros((nchoice,) + V_next.shape)
-
-        V = flow_u + V
-        
-        # calculate choice probabilities and expected value
-        P, EV = logit_choice(V, inputs[self.taste_shock_scale])
-        
-        # make law of motion, use it to take expectations of everything else
-        lom = DiscreteChoice(P, self.index)
-
-        # take expectations
-        outputs = {k: lom.T @ inputs[k] for k in self.backward}
-        outputs[self.value] = EV
-
-        if not lawofmotion:
-            return outputs
-        else:
-            return outputs, lom
-
-    def backward_step_shock(self, ss, shocks, precomputed):
-        """See 'discrete choice math' note for background. Note that scale is inverse of 'c' in that note."""
-        f, lom = precomputed
-
-        # this part parallel to backward_step, just with derivatives...
-        dV_next = shocks[self.value]
-        dV = dV_next[np.newaxis, ...]
-        dV = np.swapaxes(dV, 0, self.index+1)
-
-        if f is not None:
-            dflow_u = f.diff(shocks)
-        else:
-            dflow_u = np.zeros_like(lom.P)
-        
-        dV = dflow_u + dV
-
-        # simply take expectations to get shock to expected value function (envelope result)
-        dEV = lom.T @ dV
-
-        # calculate shocks to choice probabilities (note nifty broadcasting of dEV)
-        scale = ss[self.taste_shock_scale]
-        dP = lom.P * (dV - dEV) / scale
-        dlom = DiscreteChoice(dP, self.index)
-
-        # find shocks to outputs, aggregate everything of interest
-        doutputs = {self.value: dEV}
-        for k in self.backward:
-            doutputs[k] = dlom.T @ ss[k]
-            if k in shocks:
-                doutputs[k] += lom @ shocks[k]
-        
-        return doutputs, dlom
-
-    def precompute(self, ss, ss_lawofmotion):
-        f = self.f.differentiable(ss) if self.f is not None else None
-        return f, ss_lawofmotion
 
 
 class Continuous1D(Stage):
@@ -277,3 +177,107 @@ class Exogenous(Stage):
         else:
             return outputs, None
 
+
+class LogitChoice(Stage):
+    """Stage that does endogenous discrete choice with type 1 extreme value taste shocks"""
+    def __init__(self, value, backward, index, taste_shock_scale, f=None, name=None):
+        # flow utility function, if present, should return a single output
+        if f is not None:
+            f = ExtendedFunction(f)
+            if not len(f.outputs) == 1:
+                raise ValueError(f'Flow utility function {f.name} returning multiple outputs {f.outputs}')
+            self.f = f
+        else:
+            self.f = None
+
+        # other subclass-specific attributes
+        self.index = index
+        self.value = value
+        self.backward = OrderedSet(make_tuple(backward))
+        self.taste_shock_scale = taste_shock_scale
+
+        # attributes needed for any stage
+        if name is None:
+            name = self.f.name
+        self.name = name
+        self.backward_outputs = self.backward | [value]
+        self.report = OrderedSet([])
+        self.inputs = self.backward | [value, taste_shock_scale]
+        if f is not None:
+            self.inputs |= f.inputs
+
+    def __repr__(self):
+        return f"<Stage-Discrete '{self.name}'>"
+
+    def backward_step(self, inputs, lawofmotion=False):
+        # start with value we're given
+        V_next = inputs[self.value]
+
+        # add dimension at beginning to allow for choice, then swap (today's choice determines next stages's state)
+        V = V_next[np.newaxis, ...]
+        V = np.swapaxes(V, 0, self.index+1)
+
+        # call f if we have it to get flow utility
+        if self.f is not None:
+            flow_u = self.f(inputs)
+            flow_u = next(iter(flow_u.values()))
+        else:
+            # create phantom state variable, convenient but bit wasteful
+            nchoice = V.shape[0]
+            flow_u = np.zeros((nchoice,) + V_next.shape)
+
+        V = flow_u + V
+        
+        # calculate choice probabilities and expected value
+        P, EV = logit_choice(V, inputs[self.taste_shock_scale])
+        
+        # make law of motion, use it to take expectations of everything else
+        lom = DiscreteChoice(P, self.index)
+
+        # take expectations
+        outputs = {k: lom.T @ inputs[k] for k in self.backward}
+        outputs[self.value] = EV
+
+        if not lawofmotion:
+            return outputs
+        else:
+            return outputs, lom
+
+    def backward_step_shock(self, ss, shocks, precomputed):
+        """See 'discrete choice math' note for background. Note that scale is inverse of 'c' in that note."""
+        f, lom = precomputed
+
+        # this part parallel to backward_step, just with derivatives...
+        dV_next = shocks[self.value]
+        dV = dV_next[np.newaxis, ...]
+        dV = np.swapaxes(dV, 0, self.index+1)
+
+        if f is not None:
+            dflow_u = f.diff(shocks)
+            dflow_u = next(iter(dflow_u.values()))
+            dflow_u = np.nan_to_num(dflow_u)  # -inf - (-inf) = nan, want zeros
+        else:
+            dflow_u = np.zeros_like(lom.P)
+        
+        dV = dflow_u + dV
+
+        # simply take expectations to get shock to expected value function (envelope result)
+        dEV = np.sum(lom.P * dV, axis=0)
+
+        # calculate shocks to choice probabilities (note nifty broadcasting of dEV)
+        scale = ss[self.taste_shock_scale]
+        dP = lom.P * (dV - dEV) / scale
+        dlom = DiscreteChoice(dP, self.index)
+
+        # find shocks to outputs, aggregate everything of interest
+        doutputs = {self.value: dEV}
+        for k in self.backward:
+            doutputs[k] = dlom.T @ ss[k]
+            if k in shocks:
+                doutputs[k] += lom.T @ shocks[k]
+        
+        return doutputs, dlom
+
+    def precompute(self, ss, ss_lawofmotion):
+        f = self.f.differentiable(ss) if self.f is not None else None
+        return f, ss_lawofmotion

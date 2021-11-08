@@ -2,7 +2,7 @@ import numpy as np
 
 
 def multiply_ith_dimension(Pi, i, X):
-    """If Pi is a square matrix, multiply Pi times the ith dimension of X and return"""
+    """If Pi is a matrix, multiply Pi times the ith dimension of X and return"""
     X = X.swapaxes(0, i)
     shape = X.shape
     X = X.reshape((shape[0], -1))
@@ -11,7 +11,7 @@ def multiply_ith_dimension(Pi, i, X):
     X = Pi @ X
 
     # reverse steps
-    X = X.reshape(shape)
+    X = X.reshape((Pi.shape[0], *shape[1:]))
     return X.swapaxes(0, i)
 
 

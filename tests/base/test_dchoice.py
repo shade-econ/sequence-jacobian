@@ -2,7 +2,7 @@
 SIM model with labor force participation choice
 - state space: (s, x, z, a)
     - s is employment
-        - 0: employed, 1: unemployed 
+        - 0: employed, 1: unemployed, 2: out of labor force
     - x is matching
         - 0: matched, 1: unmatched
     - z is labor productivity
@@ -20,7 +20,7 @@ from sequence_jacobian import markov_rouwenhorst, agrid
 
 
 @njit(fastmath=True)
-def util(c, emp_status, eis, vphi):
+def util(c, emp_status, eis, vphi, chi):
     # utility from consumption
     if eis == 1:
         u = np.log(c)
@@ -30,6 +30,8 @@ def util(c, emp_status, eis, vphi):
     # disutility from work
     if emp_status == 0:
         u = u - vphi
+    elif emp_status == 1:
+        u = u - chi
 
     return u
 
@@ -41,12 +43,12 @@ def make_grids(rho_z, sd_z, nZ, amin, amax, nA):
 
 
 def labor_income(z_grid, atw, b, s, f):
-    y_grid = z_grid[np.newaxis, :] * np.array([atw, b])[:, np.newaxis]
-    Pi_s = np.array([[1 - s, s], [f, (1 - f)]])
+    y_grid = z_grid[np.newaxis, :] * np.array([atw, b, b])[:, np.newaxis]
+    Pi_s = np.array([[1 - s, s], [f, (1 - f)], [0, 1]])
     return y_grid, Pi_s
 
 
-def backward_init(y_grid, a_grid, r, eis, vphi):
+def backward_init(y_grid, a_grid, r, eis, vphi, chi):
     # consumption rule of thumb
     coh = y_grid[:, :, np.newaxis] + (1 + r) * a_grid[np.newaxis, np.newaxis, :]
     c = 0.1 * coh
@@ -54,7 +56,7 @@ def backward_init(y_grid, a_grid, r, eis, vphi):
     # capitalize utility to get value function
     V, Va = np.empty_like(c), np.empty_like(c)
     for e in range(2):
-        V[e, ...] = util(c[e, ...], e, eis, vphi) / 0.01
+        V[e, ...] = util(c[e, ...], e, eis, vphi, chi) / 0.01
 
     # get Va by finite difference
     Va[:, :, 1:-1] = (V[:, :, 2:] - V[:, :, :-2]) / (a_grid[2:] - a_grid[:-2])
@@ -67,7 +69,7 @@ def backward_init(y_grid, a_grid, r, eis, vphi):
 '''Consumption-savings stage: : (s, z, a) -> (s, z, a')'''
 
 
-def consav(V, Va, a_grid, y_grid, r, beta, eis, vphi):
+def consav(V, Va, a_grid, y_grid, r, beta, eis, vphi, chi):
     """DC-EGM algorithm"""
     # EGM step
     W = beta * V
@@ -77,7 +79,8 @@ def consav(V, Va, a_grid, y_grid, r, beta, eis, vphi):
 
     # upper envelope step
     imin, imax = nonconcave(uc_nextgrid)  # bounds of non-concave region
-    V, c = upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis, vphi)
+    V, c = upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r,
+                          eis, vphi, chi)
 
     # update Va, report asset policy
     uc = c ** (-1 / eis)
@@ -130,7 +133,7 @@ def nonconcave(uc_nextgrid, imin, imax):
 
 
 @njit
-def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis, vphi):
+def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis, vphi, chi):
     """Interpolate value function and consumption to exogenous grid."""
     Ns, Nz, Na = W.shape
     c = np.zeros_like(W)
@@ -165,7 +168,7 @@ def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis
                     c_slope = (c_high - c_low) / (ap_high - ap_low)
                     c_guess = c_low + c_slope * (acur - ap_low)
                     w_guess = w_low + w_slope * (acur - ap_low)
-                    V[ie, iz, ia] = util(c_guess, ie, eis, vphi) + w_guess
+                    V[ie, iz, ia] = util(c_guess, ie, eis, vphi, chi) + w_guess
                     c[ie, iz, ia] = c_guess
 
                 # Region 2: non-concave region
@@ -188,7 +191,7 @@ def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis
                             c_slope = (c_high - c_low) / (ap_high - ap_low)
                             c_guess = c_low + c_slope * (acur - ap_low)
                             w_guess = w_low + w_slope * (acur - ap_low)
-                            v_guess = util(c_guess, ie, eis, vphi) + w_guess
+                            v_guess = util(c_guess, ie, eis, vphi, chi) + w_guess
 
                             # select best value for this segment
                             if v_guess > V[ie, iz, ia]:
@@ -199,7 +202,7 @@ def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis
             ia = 0
             while ia < Na and a_grid[ia] <= a_nextgrid[ie, iz, 0]:
                 c[ie, iz, ia] = (1 + r) * a_grid[ia] + ycur
-                V[ie, iz, ia] = util(c[ie, iz, ia], ie, eis, vphi) + W[ie, iz, 0]
+                V[ie, iz, ia] = util(c[ie, iz, ia], ie, eis, vphi, chi) + W[ie, iz, 0]
                 ia += 1
 
     return V, c
@@ -210,14 +213,14 @@ def upper_envelope(imin, imax, W, a_nextgrid, c_nextgrid, a_grid, y_grid, r, eis
 
 def participation(V):
     '''adjustments to flow utility associated with x -> s choice, implements constraints on discrete choice'''
-    flow_u = np.zeros((2,) + V.shape) # (s, x, z, a)
-    flow_u[0, 1, ...] = -np.inf       # unmatched -> employed
+    flow_u = np.zeros((3, 2,) + V.shape[-2:])   # (s, x, z, a)
+    flow_u[0, 1, ...] = -np.inf                 # unmatched -> employed
     return flow_u
 
 
 '''Put stages together'''
 
-consav_stage = Continuous1D(backward='Va', policy='a', f=consav, name='consav')
+consav_stage = Continuous1D(backward=['Va', 'V'], policy='a', f=consav, name='consav')
 labsup_stage = LogitChoice(value='V', backward='Va', index=0, taste_shock_scale='taste_shock',
                            f=participation, name='dchoice')
 search_stage = ExogenousMaker(markov_name='Pi_s', index=0, name='search_shock')
@@ -226,3 +229,13 @@ prod_stage = ExogenousMaker(markov_name='Pi_z', index=1, name='prod_shock')
 hh = StageBlock([prod_stage, search_stage, labsup_stage, consav_stage],
                 backward_init=backward_init, hetinputs=[make_grids, labor_income], name='household')
 
+def test_runs():
+    calibration = {'taste_shock': 0.01, 'r': 0.005, 'beta': 0.97, 'eis': 0.5,
+                   'vphi': 0.3, 'chi': 0.3, 'rho_z': 0.95, 'sd_z': 0.5, 'nZ': 7, 'amin': .0, 'amax': 200.0, 'nA': 200, 'atw': 1.0, 'b': 0.5, 's': 0.1, 'f': 0.4}
+
+    ss = hh.steady_state(calibration)
+
+    inputs = ['r', 'atw', 'f']
+    outputs = ['A', 'C']
+    T = 50
+    J = hh.jacobian(ss, inputs, outputs, T)

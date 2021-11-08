@@ -136,10 +136,9 @@ class Markov(LawOfMotion):
 
 
 class DiscreteChoice(LawOfMotion):
-    def __init__(self, P, i, scale):
+    def __init__(self, P, i):
         self.P = P                     # choice prob P(d|...s_i...), 0 for unavailable choices
         self.i = i                     # dimension of state space that will be updated
-        self.scale = scale             # scale of taste shocks (on grid?)
 
         # cache "transposed" version of this, since we'll always need both!
         self.forward = True
