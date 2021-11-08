@@ -104,7 +104,7 @@ class StageBlock(Block):
                                      'law_of_motion': lom[i], 'D': D[i]}
 
         # put all inputs to the block into aggregates
-        for k in self.inputs:
+        for k in self.M.inv @ self.inputs:
             aggregates[k] = ss[k]
 
         return SteadyStateDict(aggregates, {self.name: internals})
@@ -129,8 +129,8 @@ class StageBlock(Block):
 
         return ImpulseDict(aggregates, T=inputs.T) - ssin
 
-    def _impulse_linear(self, ss, inputs, outputs, Js, h=1E-4, twosided=False):
-        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js, h=h, twosided=twosided).apply(inputs))
+    def _impulse_linear(self, ss, inputs, outputs, Js):
+        return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T).apply(inputs))
 
     def _jacobian(self, ss, inputs, outputs, T):
         ss = self.extract_ss_dict(ss)

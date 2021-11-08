@@ -133,11 +133,10 @@ class HetBlock(Block):
         return ImpulseDict(aggregates, internals_dict, inputs.T) - ssin
 
     def _impulse_linear(self, ss, inputs, outputs, Js, h=1E-4, twosided=False):
-        return ImpulseDict(self.jacobian(ss, list(inputs.keys()), outputs, inputs.T, Js, h=h, twosided=twosided).apply(inputs))
+        return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T, h=h, twosided=twosided).apply(inputs))
 
     def _jacobian(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
         ss = self.extract_ss_dict(ss)
-        #self.update_with_hetinputs(ss)
         outputs = self.M_outputs.inv @ outputs
 
         # step 0: preliminary processing of steady state
