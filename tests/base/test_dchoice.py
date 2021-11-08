@@ -14,6 +14,7 @@ from numba import njit, guvectorize
 from sequence_jacobian.blocks.stage_block import StageBlock
 from sequence_jacobian.blocks.support.stages import Continuous1D, ExogenousMaker, LogitChoice
 from sequence_jacobian import markov_rouwenhorst, agrid
+from sequence_jacobian.classes.impulse_dict import ImpulseDict 
 
 
 '''Setup: utility function, hetinputs, initializer'''
@@ -249,3 +250,11 @@ def test_runs():
     outputs = ['A', 'C']
     T = 50
     J = hh.jacobian(ss1, inputs, outputs, T)
+
+    # impulse responses
+    shock = ImpulseDict({'f': 0.5 ** np.arange(50)})
+    td_lin = hh.impulse_linear(ss1, shock, outputs=['C'])
+    td_nonlin = hh.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C'])
+    td_ghost = hh.impulse_nonlinear(ss1, shock * 0.0, outputs=['C'])
+    td_nonlin = td_nonlin - td_ghost
+    assert np.allclose(td_lin['C'], td_nonlin['C'] / 1E-4, atol=1E-5)
