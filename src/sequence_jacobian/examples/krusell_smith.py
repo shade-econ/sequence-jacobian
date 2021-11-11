@@ -17,8 +17,9 @@ def firm(K, L, Z, alpha, delta):
 @simple
 def mkt_clearing(K, A, Y, C, delta):
     asset_mkt = A - K
-    goods_mkt = Y - C - delta * K
-    return asset_mkt, goods_mkt
+    I = K - (1 - delta) * K(-1)
+    goods_mkt = Y - C - I
+    return asset_mkt, goods_mkt, I
 
 
 @simple
