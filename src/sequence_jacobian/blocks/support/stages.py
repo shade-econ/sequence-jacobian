@@ -1,7 +1,10 @@
+from typing import List, Optional
 import numpy as np
+import copy
+
 # from sequence_jacobian.blocks.support.het_support import DiscreteChoice
 from sequence_jacobian.blocks.support.law_of_motion import DiscreteChoice
-from ...utilities.function import ExtendedFunction
+from ...utilities.function import ExtendedFunction, CombinedExtendedFunction
 from ...utilities.ordered_set import OrderedSet
 from ...utilities.misc import make_tuple, logit_choice
 from .law_of_motion import (lottery_1d, ShockedPolicyLottery1D,
@@ -18,31 +21,72 @@ class Stage:
     def precompute(self, ss, ss_lawofmotion=None):
         pass
 
-    def backward_step_separate(self, backward_inputs, other_inputs, lawofmotion=False):
+    def backward_step_separate(self, backward_inputs, other_inputs, lawofmotion=False, hetoutputs=False):
         """Wrapper around backward_step that takes in backward and other inputs
         separately and also returns backward and report separately"""
-        outputs = self.backward_step({**other_inputs, **backward_inputs}, lawofmotion)
+        all_inputs = {**other_inputs, **backward_inputs}
+        outputs = self.backward_step(all_inputs, lawofmotion)
         if lawofmotion:
             outputs, lom = outputs
         
         backward_outputs = {k: outputs[k] for k in self.backward_outputs}
-        report = {k: outputs[k] for k in self.report}
+        report = {k: outputs[k] for k in self.original_report}
+
+        if hetoutputs and self.hetoutputs is not None:
+            all_inputs.update(outputs)
+            report.update(self.hetoutputs(all_inputs))
 
         if lawofmotion:
             return (backward_outputs, report), lom
         else:
             return backward_outputs, report
 
-    def __init__(self):
-        self.name = ""
-        self.backward_outputs = OrderedSet([])
-        self.report = OrderedSet([])
-        self.inputs = OrderedSet([])
+    def __init__(self, hetoutputs=None):
+        # instance variables of a stage:
+        # self.name = ""
+        # self.backward_outputs = OrderedSet([])
+        # self.report = OrderedSet([])
+        # self.inputs = OrderedSet([])
 
+        self.original_inputs = self.inputs.copy()
+        self.original_report = self.report.copy()
+
+        if hetoutputs is not None:
+            hetoutputs = CombinedExtendedFunction(hetoutputs)
+        self.process_hetoutputs(hetoutputs, tocopy=False)
+
+    def process_hetoutputs(self, hetoutputs: Optional[CombinedExtendedFunction], tocopy=True):
+        if tocopy:
+            self = copy.copy(self)
+        self.inputs = self.original_inputs.copy()
+        self.report = self.original_report.copy()
+
+        if hetoutputs is not None:
+            self.inputs |= (hetoutputs.inputs - self.report - self.backward_outputs)
+            self.report |= hetoutputs.outputs
+
+        self.hetoutputs = hetoutputs
+
+        return self
+
+    def add_hetoutputs(self, functions):
+        if self.hetoutputs is None:
+            return self.process_hetoutputs(CombinedExtendedFunction(functions))
+        else:
+            return self.process_hetoutputs(self.hetoutputs.add(functions))
+
+    def remove_hetoutputs(self, names):
+        return self.process_hetoutputs(self.hetoutputs.remove(names))
+
+    # def return_hetinputs(self, d):
+    #     if self.hetinputs is not None:
+    #         return self.hetinputs(d)
+    #     else:
+    #         return {}
 
 class Continuous1D(Stage):
     """Stage that does one-dimensional endogenous continuous choice"""
-    def __init__(self, backward, policy, f, name=None):
+    def __init__(self, backward, policy, f, name=None, hetoutputs=None):
         # subclass-specific attributes
         self.f = ExtendedFunction(f)
         self.policy = policy
@@ -54,6 +98,8 @@ class Continuous1D(Stage):
         self.backward_outputs = OrderedSet(make_tuple(backward))
         self.report = self.f.outputs - self.backward_outputs
         self.inputs = self.f.inputs
+
+        super().__init__(hetoutputs)
 
     def __repr__(self):
         return f"<Stage-Continuous1D '{self.name}' with policy '{self.policy}'>"
@@ -81,7 +127,7 @@ class Continuous1D(Stage):
 
 class Continuous2D(Stage):
     """Stage that does two-dimensional endogenous continuous choice"""
-    def __init__(self, backward, policy, f, name=None):
+    def __init__(self, backward, policy, f, name=None, hetoutputs=None):
         # subclass-specific attributes
         self.f = ExtendedFunction(f)
         self.policy = OrderedSet(policy)
@@ -93,6 +139,8 @@ class Continuous2D(Stage):
         self.backward_outputs = OrderedSet(make_tuple(backward))
         self.report = self.f.outputs - self.backward_outputs
         self.inputs = self.f.inputs
+
+        super().__init__(hetoutputs)
 
     def __repr__(self):
         return f"<Stage-Continuous2D '{self.name}' with policies {self.policy}>"
@@ -126,20 +174,21 @@ class Continuous2D(Stage):
 
 class ExogenousMaker:
     """Call make_stage with backward returned by next stage to get Exogenous stage"""
-    def __init__(self, markov_name, index, name=None):
+    def __init__(self, markov_name, index, name=None, hetoutputs=None):
         self.markov_name = markov_name
         self.index = index
         if name is None:
             name = f"exog_{markov_name}"
         self.name = name
+        self.hetoutputs = hetoutputs
 
     def make_stage(self, backward):
-        return Exogenous(self.markov_name, self.index, self.name, backward)
+        return Exogenous(self.markov_name, self.index, self.name, backward, self.hetoutputs)
 
 
 class Exogenous(Stage):
     """Stage that applies exogenous Markov process along one dimension"""
-    def __init__(self, markov_name, index, name, backward):
+    def __init__(self, markov_name, index, name, backward, hetoutputs=None):
         # subclass-specific attributes
         self.markov_name = markov_name
         self.index = index
@@ -149,6 +198,8 @@ class Exogenous(Stage):
         self.backward_outputs = backward
         self.report = OrderedSet([])
         self.inputs = backward | [markov_name]
+
+        super().__init__(hetoutputs)
 
     def __repr__(self):
         return f"<Stage-Exogenous '{self.name}' with Markov matrix '{self.markov_name}'>"
@@ -180,7 +231,7 @@ class Exogenous(Stage):
 
 class LogitChoice(Stage):
     """Stage that does endogenous discrete choice with type 1 extreme value taste shocks"""
-    def __init__(self, value, backward, index, taste_shock_scale, f=None, name=None):
+    def __init__(self, value, backward, index, taste_shock_scale, f=None, name=None, hetoutputs=None):
         # flow utility function, if present, should return a single output
         if f is not None:
             f = ExtendedFunction(f)
@@ -205,6 +256,8 @@ class LogitChoice(Stage):
         self.inputs = self.backward | [value, taste_shock_scale]
         if f is not None:
             self.inputs |= f.inputs
+
+        super().__init__(hetoutputs)
 
     def __repr__(self):
         return f"<Stage-Discrete '{self.name}'>"

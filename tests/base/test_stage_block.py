@@ -33,7 +33,11 @@ def household_new(Va, a_grid, y, r, beta, eis):
     Va = (1 + r) * c ** (-1 / eis)
     return Va, a, c
 
-het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1')
+def marginal_utility(c, eis):
+    uc = c ** (-1 / eis)
+    return uc
+
+het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1', hetoutputs=[marginal_utility])
 hh2 = StageBlock([ExogenousMaker('Pi', 0, 'stage0'), het_stage], name='household',
                     backward_init=household_init, hetinputs=(make_grids, income, alter_Pi))
 
@@ -75,6 +79,7 @@ def test_equivalence():
     td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C'])
     assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
 
+test_equivalence()
 
 def test_remap():
     # hetblock

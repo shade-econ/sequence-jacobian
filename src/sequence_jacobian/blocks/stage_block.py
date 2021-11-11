@@ -186,10 +186,11 @@ class StageBlock(Block):
         report_all = []
         lom_all = []
         for stage in reversed(self.stages):
-            (backward, report), lom = stage.backward_step_separate(backward, inputs, lawofmotion=True)
+            (backward, report), lom = stage.backward_step_separate(backward, inputs, lawofmotion=True, hetoutputs=True)
             backward_all.append(backward)
             report_all.append(report)
             lom_all.append(lom)
+
         # return end-of-stage backward, report, and lom for each stage
         # and also the final beginning-of-stage backward (i.e. end-of-stage previous period)
         return backward_all[::-1][1:], report_all[::-1], lom_all[::-1], backward_all[-1]
@@ -288,12 +289,17 @@ class StageBlock(Block):
 
         # backward through stages, pick up shocks to law of motion
         # and also the part of curlyY not coming through the distribution
-        for stage, ss, D, lom, precomp in backward_data:
-            dout, dlom = stage.backward_step_shock(ss, {**din_dict, **dback}, precomp)
+        for stage, ss, D, lom, precomp, hetoutputs in backward_data:
+            din_all = {**din_dict, **dback}
+            dout, dlom = stage.backward_step_shock(ss, din_all, precomp)
             dloms.append(dlom)
 
             dback = {k: dout[k] for k in stage.backward_outputs}
             
+            if hetoutputs is not None and output_list & hetoutputs.outputs:
+                din_all.update(dout)
+                dout.update(hetoutputs.diff(din_all, outputs=output_list & hetoutputs.outputs))
+
             for k in stage.report:
                 if k in output_list:
                     curlyY[k] = np.vdot(D, dout[k])
@@ -353,6 +359,7 @@ class StageBlock(Block):
         return cur_exp
 
     def preliminary_all_stages(self, ss):
+        # TODO: to make code more intelligible, this should be made object-oriented
         backward_data = []
         forward_data = []
         expectations_data = []
@@ -363,7 +370,14 @@ class StageBlock(Block):
             D = ss[stage.name]['D']
             lom = ss[stage.name]['law_of_motion']
             precomputed = stage.precompute(input, lom)
-            backward_data.append((stage, input, D, lom, precomputed))
+
+            hetoutputs = None
+            # if stage.hetoutputs is not None:
+            #     # THIS IS WRONG BECAUSE NOT USING BACKWARD OUTPUT?! (that's in next stage)
+            #     hetoutputs_inputs = {k: potential_inputs[k] for k in stage.hetoutputs.inputs}
+            #     hetoutputs = stage.hetoutputs.differentiable(hetoutputs_inputs)
+
+            backward_data.append((stage, input, D, lom, precomputed, hetoutputs))
             forward_data.append((stage, report, D, lom))
             expectations_data.append((report, lom.T))
         return backward_data, forward_data[::-1], expectations_data
@@ -400,7 +414,6 @@ class StageBlock(Block):
         if tocopy:
             self = copy.copy(self)
         inputs = self.original_inputs.copy()
-        outputs = self.original_outputs.copy()
         #internals = self.original_internals.copy()
 
         if hetinputs is not None:
@@ -409,10 +422,10 @@ class StageBlock(Block):
             #internals |= hetinputs.outputs
 
         self.inputs = inputs
-        self.outputs = outputs
         #self.internals = internals
 
         self.hetinputs = hetinputs
+        # TODO: fix consequences with remap, as in het_block.py
 
         return self
 
@@ -423,7 +436,7 @@ class StageBlock(Block):
             return self.process_hetinputs(self.hetinputs.add(functions))
 
     def remove_hetinputs(self, names):
-        return self.process_hetinputs_hetoutputs(self.hetinputs.remove(names))
+        return self.process_hetinputs(self.hetinputs.remove(names))
 
     def return_hetinputs(self, d):
         if self.hetinputs is not None:
