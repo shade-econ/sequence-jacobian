@@ -2,25 +2,12 @@
 
 A unified framework to solve and analyze heterogeneous-agent macro models.
 
-Python toolkit based on [Auclert, Bardóczy, Rognlie, Straub (2021): "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models"](https://doi.org/10.3982/ECTA17434). 
+Python toolkit based on [Auclert, Bardóczy, Rognlie, Straub (2021): "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models"](https://doi.org/10.3982/ECTA17434) [[ungated copy]](http://mattrognlie.com/sequence_space_jacobian.pdf).
 
-**Note:** Version 1.0.0-alpha was released on October 25 2021.
+**Important Note:** This page currently reflects version 1.0.0-alpha of the toolkit. This is a preliminary release of an extensively overhauled and improved version of the old toolkit. Unfortunately, we do not yet have any documentation or tutorials available for this new version, although these are coming soon!
+
+For now, most users will probably want to visit and download the toolkit from the [original toolkit page](https://github.com/shade-econ/sequence-jacobian/tree/bcca2eff6041abc77d0a777e6c64f9ac6ff44305) instead, which has instructions and extensive Jupyter notebooks that walk through the process of using the toolkit.
 
 ## 1. Resources
 
-- New documentation and tutorials are coming soon.
-- The previous version (with tutorials) is available under tag v0.1.0.
-
-## 2. Setting up Python
-
-To install a full distribution of Python, with all of the packages and tools you will need to run our code,
-download the latest [Python 3 Anaconda](https://www.anaconda.com/distribution/) distribution.
-**Note:** make sure you choose the installer for Python version 3. 
-Once you install Anaconda, you will be able to play with the notebooks we provided. Just open a terminal, change 
-directory to the folder with notebooks, and type `jupyter notebook`. This will launch the notebook dashboard in your
-default browser. Click on a notebook to get started. 
-
-For more information on Jupyter notebooks, check out the
-[official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/).
-If you'd like to learn more about Python, the [QuantEcon](https://lectures.quantecon.org/py/) lectures of
-Tom Sargent and John Stachurski are a great place to start.
+- New documentation and tutorials are coming soon. Please see the [original toolkit page](https://github.com/shade-econ/sequence-jacobian/tree/bcca2eff6041abc77d0a777e6c64f9ac6ff44305) for a version with tutorials.
