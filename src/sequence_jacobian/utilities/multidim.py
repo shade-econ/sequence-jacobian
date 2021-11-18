@@ -26,7 +26,7 @@ def outer(pis):
 def batch_multiply_ith_dimension(P, i, X):
     """If P is (D, X.shape) array, multiply P and X along ith dimension of X."""
     # standardize arrays
-    P = P.swapaxes(1, 1+i)
+    P = P.swapaxes(1, 1 + i)
     X = X.swapaxes(0, i)
     Pshape = P.shape
     P = P.reshape((*Pshape[:2], -1))
@@ -36,5 +36,5 @@ def batch_multiply_ith_dimension(P, i, X):
     X = np.einsum('ijb,jb->ib', P, X)
 
     # original shape and order
-    X = X.reshape(Pshape[0], *Pshape[-2:])
+    X = X.reshape(Pshape[0], *Pshape[2:])
     return X.swapaxes(0, i)
