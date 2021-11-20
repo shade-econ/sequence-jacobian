@@ -79,7 +79,7 @@ def test_equivalence():
     td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C'])
     assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
 
-test_equivalence()
+# test_equivalence()
 
 def test_remap():
     # hetblock

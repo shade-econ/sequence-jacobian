@@ -183,3 +183,48 @@ def interpolate_coord_robust_vector(x, xq):
         xqpi[iq] = (x[ilow+1] - xq[iq]) / (x[ilow+1] - x[ilow])
 
     return xqi, xqpi
+
+
+'''Used in discrete choice problems'''
+
+@njit
+def interpolate_coord_njit(x, xq):
+    nxq, nx = xq.shape[0], x.shape[0]
+    xqi = np.empty(nxq, dtype=np.uint32)
+    xqpi = np.empty(nxq)
+
+    xi = 0
+    x_low = x[0]
+    x_high = x[1]
+    for xqi_cur in range(nxq):
+        xq_cur = xq[xqi_cur]
+        while xi < nx - 2:
+            if x_high >= xq_cur:
+                break
+            xi += 1
+            x_low = x_high
+            x_high = x[xi + 1]
+
+        xqpi[xqi_cur] = (x_high - xq_cur) / (x_high - x_low)
+        xqi[xqi_cur] = xi
+
+    return xqi, xqpi
+
+
+@njit
+def apply_coord_njit(x_i, x_pi, y):
+    nq = x_i.shape[0]
+    yq = np.empty(nq)
+
+    for iq in range(nq):
+        y_low = y[x_i[iq]]
+        y_high = y[x_i[iq]+1]
+        yq[iq] = x_pi[iq]*y_low + (1-x_pi[iq])*y_high
+
+    return yq
+
+
+@njit
+def interpolate_point(x, x0, x1, y0, y1):
+    y = y0 + (x - x0) * (y1 - y0) / (x1 - x0)
+    return y
