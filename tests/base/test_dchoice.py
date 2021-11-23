@@ -164,7 +164,8 @@ def participation(V, vphi, chi):
 '''Put stages together'''
 
 consav_stage = Continuous1D(backward=['Va', 'V'], policy='a', f=consav, name='consav')
-labsup_stage = LogitChoice(value='V', backward='Va', index=0, taste_shock_scale='taste_shock',
+labsup_stage = LogitChoice(value='V', backward='Va', index=0, 
+                           taste_shock_scale='taste_shock',
                            f=participation, name='dchoice')
 search_stage = ExogenousMaker(markov_name='Pi_s', index=0, name='search_shock')
 prod_stage = ExogenousMaker(markov_name='Pi_e', index=1, name='prod_shock')

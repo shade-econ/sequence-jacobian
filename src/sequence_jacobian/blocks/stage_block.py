@@ -473,7 +473,7 @@ def make_all_into_stages(stages: List[Stage]):
     # now iterate backward from the end
     for i in range(len(stages)-1, ifirst, -1):
         if not isinstance(stages[i], Stage):
-            stages[i] = stages[i].make_stages(stages[(i+1)%len(stages)].backward_outputs)
+            stages[i] = stages[i].make_stage(stages[(i+1)%len(stages)].backward_outputs)
     
     return stages
 
