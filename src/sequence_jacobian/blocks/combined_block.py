@@ -112,8 +112,9 @@ class CombinedBlock(Block, Parent, DAG):
         inputs = (inputs | self._required) - vector_valued
         outputs = (outputs | self._required) - vector_valued
         for block in self.blocks:
-            J = block.jacobian(ss, inputs & block.inputs, outputs & block.outputs, T, Js, options)
-            total_Js.update(J @ total_Js)
+            if (inputs & block.inputs) and (outputs & block.outputs):
+                J = block.jacobian(ss, inputs & block.inputs, outputs & block.outputs, T, Js, options)
+                total_Js.update(J @ total_Js)
 
         return total_Js[original_outputs, :]
 
