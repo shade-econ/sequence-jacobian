@@ -9,7 +9,7 @@ def solved(unknowns, targets, solver=None, solver_kwargs={}, name=""):
     """Convenience @solved(unknowns=..., targets=...) decorator on a single SimpleBlock"""
     # call as decorator, return function of function
     def singleton_solved_block(f):
-        return SolvedBlock(simple(f).rename(f.__name__ + '_inner'), f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
+        return SolvedBlock(simple(f).rename_top(f.__name__ + '_inner'), f.__name__, unknowns, targets, solver=solver, solver_kwargs=solver_kwargs)
     return singleton_solved_block
 
 

@@ -271,7 +271,7 @@ class Block:
         from .solved_block import SolvedBlock
         return SolvedBlock(self, name, unknowns, targets, solver, solver_kwargs)
 
-    def remap(self, map):
+    def remap(self, map: Dict[str, str]):
         other = deepcopy(self)
         other.M = self.M @ Bijection(map)
         other.inputs = other.M @ self.inputs
@@ -284,10 +284,26 @@ class Block:
             other.non_back_iter_outputs = other.M @ self.non_back_iter_outputs
         return other
 
-    def rename(self, name):
-        renamed = deepcopy(self)
-        renamed.name = name
-        return renamed
+    def rename(self, suffix: str, name: Optional[str] = None):
+        if isinstance(self, Parent):
+            other = deepcopy(self)
+            other.name = self.name + suffix
+            if hasattr(self, 'blocks'):
+                other.blocks = [b.rename(suffix, name) for b in self.blocks]
+                Parent.__init__(other, other.blocks)
+            elif hasattr(self, 'block'):
+                other.block = self.block.rename_top(self.block.name + suffix)
+                Parent.__init__(other, [other.block])
+            return other
+        else:
+            if name is None:  
+                name = self.name + suffix
+            return self.rename_top(name)  
+
+    def rename_top(self, name: str):
+        other = deepcopy(self)
+        other.name = name
+        return other
 
     def default_inputs_outputs(self, ss: SteadyStateDict, inputs, outputs):
         # TODO: there should be checks to make sure you don't ask for multidimensional stuff for Jacobians?
