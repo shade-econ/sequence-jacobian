@@ -36,8 +36,8 @@ def dmp_aggregate(U_men, U_women, Div_labor_men, Div_labor_women, vacancy_cost_m
 
 def test_remap_combined_block():
     dmp = combine([matching, job_creation, labor_lom], name='DMP')
-    dmp_men = dmp.rename('_men')
-    dmp_women = dmp.rename('_women')
+    dmp_men = dmp.rename(suffix='_men')
+    dmp_women = dmp.rename(suffix='_women')
 
     # remap some inputs and all outputs
     to_remap = ['theta', 'ell', 's'] + list(dmp_men.outputs)

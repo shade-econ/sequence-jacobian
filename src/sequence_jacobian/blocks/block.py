@@ -284,21 +284,25 @@ class Block:
             other.non_back_iter_outputs = other.M @ self.non_back_iter_outputs
         return other
 
-    def rename(self, suffix: str, name: Optional[str] = None):
+    def rename(self, name: Optional[str] = None, suffix: Optional[str] = None):
+        """Convention: specify suffix kwarg if called on Parent."""
         if isinstance(self, Parent):
             other = deepcopy(self)
             other.name = self.name + suffix
             if hasattr(self, 'blocks'):
-                other.blocks = [b.rename(suffix, name) for b in self.blocks]
+                other.blocks = [b.rename(name, suffix) for b in self.blocks]
                 Parent.__init__(other, other.blocks)
             elif hasattr(self, 'block'):
                 other.block = self.block.rename_top(self.block.name + suffix)
                 Parent.__init__(other, [other.block])
             return other
         else:
-            if name is None:  
-                name = self.name + suffix
-            return self.rename_top(name)  
+            if suffix is None:
+                # called rename on singleton block 
+                return self.rename_top(name)  
+            else:
+                # called rename on Parent, reached leaf
+                return self.rename_top(self.name + suffix)
 
     def rename_top(self, name: str):
         other = deepcopy(self)
