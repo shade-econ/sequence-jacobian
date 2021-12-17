@@ -116,8 +116,7 @@ class CombinedBlock(Block, Parent, DAG):
                 J = block.jacobian(ss, inputs & block.inputs, outputs & block.outputs, T, Js, options)
                 total_Js.update(J @ total_Js)
 
-        return total_Js[original_outputs, :]
-
+        return total_Js[original_outputs & total_Js.outputs, :]
 
 # Useful type aliases
 Model = CombinedBlock

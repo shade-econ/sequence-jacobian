@@ -199,7 +199,7 @@ class JacobianDict(NestedDict):
                 if i in J_i:
                     y[o] += J_i[i] @ x[i]
 
-        return ImpulseDict(y, T=x.T)
+        return x | ImpulseDict(y, T=x.T)
 
     def pack(self, T=None):
         if T is None:
