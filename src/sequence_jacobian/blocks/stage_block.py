@@ -451,6 +451,42 @@ class StageBlock(Block):
         # self.original_internals = self.internals
         self.original_M_outputs = self.M_outputs
 
+    '''Flexible expectation vectors'''
+
+    # TODO: this is wrong; can we make something like this work?
+    # def preliminary_expectations(self, ss, loms=None):
+    #     """allow for arbitrary loms, not the ones from ss; useful for counterfactuals"""
+    #     # loms is Dict[stage.name: lom] in forward order
+    #     expectations_data = []
+    #     for stage in reversed(self.stages):
+    #         report = {k: ss[stage.name][k] for k in stage.report}
+    #         if loms is None:
+    #             lom = ss[stage.name]['law_of_motion']
+    #         else:
+    #             lom = loms[stage.name]
+    #         expectations_data.append((report, lom.T))
+    #     return expectations_data
+    
+
+    def expectation_vectors_level(self, o, T, expectations_data):
+        curlyE0 = self.expectations_beginning_of_period(o, expectations_data)
+        curlyEs = np.empty((T,) + curlyE0.shape)
+        curlyEs[0] = curlyE0
+
+        for t in range(1, T):
+            curlyEs[t] = self.expectation_step_fakenews(curlyEs[t-1], expectations_data)
+        return curlyEs
+
+    def preliminary_expectations(self, ssin):
+        ss = self.extract_ss_dict(ssin)
+        expectations_data = []
+        for stage in reversed(self.stages):
+            report = {k: ss[stage.name][k] for k in stage.report}
+            lom = ss[stage.name]['law_of_motion']
+            expectations_data.append((report, lom.T))
+        return expectations_data
+
+
 def make_all_into_stages(stages: List[Stage]):
     """Given list of 'stages' that can include either actual stages or
     objects with a .make_stage(next_period_backward) method, turn all into stages."""
