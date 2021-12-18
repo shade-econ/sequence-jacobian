@@ -1,5 +1,6 @@
 .idea/
 __pycache__/
+notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints/
 .DS_Store
 .vscode/
