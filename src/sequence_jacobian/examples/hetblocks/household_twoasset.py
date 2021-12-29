@@ -13,19 +13,21 @@ def household_init(b_grid, a_grid, z_grid, eis):
 
 
 def adjustment_costs(a, a_grid, ra, chi0, chi1, chi2):
-    chi, _, _ = apply_function(get_Psi_and_deriv, a, a_grid, ra, chi0, chi1, chi2)
+    chi = get_Psi_and_deriv(a, a_grid, ra, chi0, chi1, chi2)[0]
     return chi
+
+
+def marginal_cost_grid(a_grid, ra, chi0, chi1, chi2):
+    # precompute Psi1(a', a) on grid of (a', a) for steps 3 and 5
+    Psi1 = get_Psi_and_deriv(a_grid[:, np.newaxis],
+                             a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
+    return Psi1
 
 
 # policy and bacward order as in grid!
 @het(exogenous='Pi', policy=['b', 'a'], backward=['Vb', 'Va'],
-     hetoutputs=[adjustment_costs], backward_init=household_init)  
-def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2):
-    # TODO: make into hetinput
-    # precompute Psi1(a', a) on grid of (a', a) for steps 3 and 5
-    Psi1 = get_Psi_and_deriv(a_grid[:, np.newaxis],
-                             a_grid[np.newaxis, :], ra, chi0, chi1, chi2)[1]
-
+     hetinputs=[marginal_cost_grid], hetoutputs=[adjustment_costs], backward_init=household_init)  
+def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2, Psi1):
     # === STEP 2: Wb(z, b', a') and Wa(z, b', a') ===
     # (take discounted expectation of tomorrow's value function)
     Wb = beta * Vb_p

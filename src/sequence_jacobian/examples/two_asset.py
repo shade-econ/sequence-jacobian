@@ -109,7 +109,7 @@ def arbitrage_solved(div, p, r):
 
 @simple
 def partial_ss(Y, N, K, r, tot_wealth, Bg, delta):
-    """Solves for (mup, alpha, Z, w) to hit (tot_wealth, N, K, pi)."""
+    """Solves for (mup, alpha, Z, w) to hit (tot_wealth, Y, K, pi)."""
     # 1. Solve for markup to hit total wealth
     p = tot_wealth - Bg
     mc = 1 - r * (p - K) / Y
