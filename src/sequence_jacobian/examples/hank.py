@@ -87,7 +87,7 @@ def dag():
     blocks = [household, firm, monetary, fiscal, mkt_clearing, nkpc]
     blocks_ss = [household, firm, monetary, fiscal, mkt_clearing, nkpc_ss]
     hank_model = create_model(blocks, name="One-Asset HANK")
-    hank_model_ss = create_model(blocks_ss, name="One-Asset HANK")
+    hank_model_ss = create_model(blocks_ss, name="One-Asset HANK SS")
 
     # Steady state
     calibration = {'r': 0.005, 'rstar': 0.005, 'eis': 0.5, 'frisch': 0.5, 'B': 5.6,
