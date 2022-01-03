@@ -13,7 +13,7 @@ class DAG:
         outmap = get_output_map(blocks)
         adj = get_block_adjacency_list(blocks, inmap)
         revadj = get_block_reverse_adjacency_list(blocks, outmap)
-        topsort = topological_sort(adj, revadj)
+        topsort = topological_sort(adj, revadj, names=[getattr(block, 'name', '[NO BLOCK NAME]') for block in blocks])
 
         M = Bijection({i: t for i, t in enumerate(topsort)})
 
@@ -63,22 +63,6 @@ class DAG:
         return reversed(visited)
 
 
-def block_sort(blocks):
-    """Given list of blocks (either blocks themselves or dicts of Jacobians), find a topological sort.
-
-    Relies on blocks having 'inputs' and 'outputs' attributes (unless they are dicts of Jacobians, in which case it's
-    inferred) that indicate their aggregate inputs and outputs
-
-    blocks: `list`
-        A list of the blocks (SimpleBlock, HetBlock, etc.) to sort
-    """
-    inmap = get_input_map(blocks)
-    outmap = get_output_map(blocks)
-    adj = get_block_adjacency_list(blocks, inmap)
-    revadj = get_block_reverse_adjacency_list(blocks, outmap)
-    return topological_sort(adj, revadj)
-
-
 def topological_sort(adj, revadj, names=None):
     """Given directed graph pointing from each node to the nodes it depends on, topologically sort nodes"""
     # get complete set version of dep, and its reversal, and build initial stack of nodes with no dependencies
@@ -98,7 +82,7 @@ def topological_sort(adj, revadj, names=None):
 
     # should be done: topsorted should be topologically sorted with same # of elements as original graphs!
     if len(topsorted) != len(dep):
-        cycle_ints = find_cycle(dep, dep.keys() - set(topsorted))
+        cycle_ints = find_cycle(dep, set(range(len(dep))) - set(topsorted))
         assert cycle_ints is not None, 'topological sort failed but no cycle, THIS SHOULD NEVER EVER HAPPEN'
         cycle = [names[i] for i in cycle_ints] if names else cycle_ints
         raise Exception(f'Topological sort failed: cyclic dependency {" -> ".join([str(n) for n in cycle])}')
@@ -172,15 +156,15 @@ def find_intermediate_inputs(blocks):
     return required
 
 
-def find_cycle(dep, onlyset=None):
+def find_cycle(dep, onlyset):
     """Return list giving cycle if there is one, otherwise None"""
 
     # supposed to look only within 'onlyset', so filter out everything else
-    if onlyset is not None:
-        dep = {k: (set(v) & set(onlyset)) for k, v in dep.items() if k in onlyset}
+    # awkward holdover: 'dep' is transformed here into a dict with integer keys
+    dep = {k: (dep[k] & onlyset) for k in range(len(dep)) if k in onlyset}
 
     tovisit = set(dep.keys())
-    stack = SetStack()
+    stack = OrderedSet()
     while tovisit or stack:
         if stack:
             # if stack has something, still need to proceed with DFS
@@ -207,38 +191,3 @@ def find_cycle(dep, onlyset=None):
 
     # if we never find a cycle, we're done
     return None
-
-
-class SetStack:
-    """Stack implemented with list but tests membership with set to be efficient in big cases"""
-
-    def __init__(self):
-        self.myset = set()
-        self.mylist = []
-
-    def add(self, x):
-        self.myset.add(x)
-        self.mylist.append(x)
-
-    def pop(self):
-        x = self.mylist.pop()
-        self.myset.remove(x)
-        return x
-
-    def top(self):
-        return self.mylist[-1]
-
-    def index(self, x):
-        return self.mylist.index(x)
-
-    def __contains__(self, x):
-        return x in self.myset
-
-    def __len__(self):
-        return len(self.mylist)
-
-    def __getitem__(self, i):
-        return self.mylist.__getitem__(i)
-
-    def __repr__(self):
-        return self.mylist.__repr__()

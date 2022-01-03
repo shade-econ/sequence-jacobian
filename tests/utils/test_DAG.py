@@ -1,6 +1,7 @@
 from sequence_jacobian.utilities.graph import DAG
 from sequence_jacobian.utilities.ordered_set import OrderedSet
-
+from sequence_jacobian import simple, combine
+import pytest
 
 class Block:
     def __init__(self, inputs, outputs):
@@ -39,3 +40,29 @@ def test_visited():
 
     test_dag.visit_from_inputs(['e']) == OrderedSet([0, 1, 2])
     test_dag.visit_from_inputs(['z']) == OrderedSet([1, 2])
+
+
+def test_find_cycle():
+    @simple
+    def f1(x):
+        y = x
+        return y
+
+    @simple
+    def f2(y, theta):
+        z = y
+        return z
+
+    @simple
+    def f3(x, z):
+        w = x * z
+        return w
+
+    @simple
+    def f4(z):
+        x = z
+        return x
+
+    with pytest.raises(Exception) as exception:
+        a = combine([f1, f2, f3, f4])
+    assert "Topological sort failed: cyclic dependency f1 -> f4 -> f2 -> f1" in str(exception.value)

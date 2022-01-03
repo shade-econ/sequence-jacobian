@@ -142,3 +142,16 @@ class OrderedSet:
 
     def __rxor__(self, s):
         return OrderedSet(s).symmetric_difference(self)
+
+    """Compatibility methods, regular use not advised"""
+
+    def pop(self):
+        k = self.top()
+        del self.d[k]
+        return k
+
+    def top(self):
+        return list(self.d)[-1]
+
+    def index(self, k):
+        return list(self.d).index(k)
