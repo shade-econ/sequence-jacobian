@@ -110,7 +110,7 @@ class HetBlock(Block):
         ss = self.extract_ss_dict(ssin)
         if ss_initial is not None:
             # only effect of distinct initial ss on hetblock is different initial distribution
-            ss['Dbeg'] = ss_initial['Dbeg']
+            ss['Dbeg'] = ss_initial.internals[self.name]['Dbeg']
 
         # identify individual variable paths we want from backward iteration, then run it
         toreturn = self.non_backward_outputs
