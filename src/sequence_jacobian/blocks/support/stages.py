@@ -34,7 +34,9 @@ class Stage:
 
         if hetoutputs and self.hetoutputs is not None:
             all_inputs.update(outputs)
-            report.update(self.hetoutputs(all_inputs))
+            #report.update(self.hetoutputs(all_inputs))
+            # for some reason self.hetoutputs returns its inputs too, need to fix that
+            report.update({k: v for k, v in self.hetoutputs(all_inputs).items() if k in self.hetoutputs.outputs})
 
         if lawofmotion:
             return (backward_outputs, report), lom

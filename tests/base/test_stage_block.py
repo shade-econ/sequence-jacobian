@@ -37,6 +37,7 @@ def marginal_utility(c, eis):
     uc = c ** (-1 / eis)
     return uc
 
+#het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1')
 het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1', hetoutputs=[marginal_utility])
 hh2 = StageBlock([ExogenousMaker('Pi', 0, 'stage0'), het_stage], name='household',
                     backward_init=household_init, hetinputs=(make_grids, income, alter_Pi))
@@ -55,10 +56,11 @@ def test_equivalence():
     assert np.allclose(ss1.internals['household']['Dbeg'], ss2.internals['household']['stage0']['D'])
     assert np.allclose(ss1.internals['household']['a'], ss2.internals['household']['stage1']['a'])
     assert np.allclose(ss1.internals['household']['c'], ss2.internals['household']['stage1']['c'])
+    assert np.allclose(ss1.internals['household']['Va'], ss2.internals['household']['stage0']['Va'])
 
     # find Jacobians...
     inputs = ['r', 'atw', 'shift']
-    outputs = ['A', 'C']
+    outputs = ['A', 'C', 'UC']
     T = 200
     J1 = hh1.jacobian(ss1, inputs, outputs, T)
     J2 = hh2.jacobian(ss2, inputs, outputs, T)
@@ -70,16 +72,17 @@ def test_equivalence():
 
     # impulse linear
     shock = ImpulseDict({'r': 0.5 ** np.arange(20)})
-    td_lin1 = hh1.impulse_linear(ss1, shock, outputs=['C'])
-    td_lin2 = hh2.impulse_linear(ss2, shock, outputs=['C'])
+    td_lin1 = hh1.impulse_linear(ss1, shock, outputs=['C', 'UC'])
+    td_lin2 = hh2.impulse_linear(ss2, shock, outputs=['C', 'UC'])
     assert np.allclose(td_lin1['C'], td_lin2['C'])
+    assert np.allclose(td_lin1['UC'], td_lin2['UC'])
 
     # impulse nonlinear
-    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C'])
-    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C'])
-    assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
+    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'])
+    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'])
+    assert np.allclose(td_nonlin1['UC'], td_nonlin2['UC'])
 
-# test_equivalence()
+test_equivalence()
 
 def test_remap():
     # hetblock
