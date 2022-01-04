@@ -21,11 +21,10 @@ class Stage:
     def precompute(self, ss, ss_lawofmotion=None):
         pass
 
-    def backward_step_separate(self, backward_inputs, other_inputs, lawofmotion=False, hetoutputs=False):
-        """Wrapper around backward_step that takes in backward and other inputs
-        separately and also returns backward and report separately"""
-        all_inputs = {**other_inputs, **backward_inputs}
-        outputs = self.backward_step(all_inputs, lawofmotion)
+    def backward_step_separate(self, inputs, lawofmotion=False, hetoutputs=False):
+        """Wrapper around backward_step that also obtains hetoutputs,
+        and returns backward, report, and sometimes lom separately"""
+        outputs = self.backward_step(inputs, lawofmotion)
         if lawofmotion:
             outputs, lom = outputs
         
@@ -33,10 +32,10 @@ class Stage:
         report = {k: outputs[k] for k in self.original_report}
 
         if hetoutputs and self.hetoutputs is not None:
-            all_inputs.update(outputs)
+            inputs = {**inputs, **outputs}
             #report.update(self.hetoutputs(all_inputs))
             # for some reason self.hetoutputs returns its inputs too, need to fix that
-            report.update({k: v for k, v in self.hetoutputs(all_inputs).items() if k in self.hetoutputs.outputs})
+            report.update({k: v for k, v in self.hetoutputs(inputs).items() if k in self.hetoutputs.outputs})
 
         if lawofmotion:
             return (backward_outputs, report), lom

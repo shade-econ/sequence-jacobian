@@ -26,6 +26,8 @@ class StageBlock(Block):
             inputs |= (stage.inputs - stages[(i+1) % len(stages)].backward_outputs)
             outputs |= stage.report
         
+        # TODO: should have internals
+
         self.constructor_checks(stages, inputs, outputs)
         self.stages = stages
         self.inputs = inputs
@@ -83,8 +85,8 @@ class StageBlock(Block):
         try:
             Dinit = ss[self.stages[0].name]['D']
         except KeyError:
-            # assume that beginning-of-first-stage distribution is uniform with
-            # same dimensions as end-of-period final stage
+            # assume that beginning-of-first-stage distribution is uniform, with
+            # same dimensions as ANY backward input to final stage / backward output from first stage
             backward_last = backward[-1]
             backward_example = backward_last[list(backward_last)[0]]
             Dinit = np.full(backward_example.shape, 1/backward_example.size)
@@ -92,14 +94,14 @@ class StageBlock(Block):
         D = self.forward_steady_state(Dinit, lom, forward_tol, forward_maxit)
         
         aggregates = {}
-        # initialize internals with hetinputs, then add stage-level
+        # initialize internals with hetinputs, then add stage-level internals
         internals = hetinputs
         for i, stage in enumerate(self.stages):
             # aggregate everything to report
             for k in stage.report:
                 aggregates[k.upper()] = np.vdot(D[i], report[i][k])
             
-            # put individual-level report, backward, and dist in internals
+            # put individual-level report, end-of-stage backward, and beginning-of-stage dist in internals
             internals[stage.name] = {**backward[i], **report[i],
                                      'law_of_motion': lom[i], 'D': D[i]}
 
@@ -112,10 +114,10 @@ class StageBlock(Block):
     def _impulse_nonlinear(self, ssin, inputs, outputs, ss_initial):
         ss = self.extract_ss_dict(ssin)
         if ss_initial is not None:
-            ss[self.stages[0].name]['D'] = ss_initial[self.stages[0].name]['D']
+            ss[self.stages[0].name]['D'] = ss_initial[self.name][self.stages[0].name]['D']
 
         # report_path is dict(stage: {output: TxN-dim array})
-        # lom_path is list[t][stage] in forward order
+        # lom_path is list[t][stage] in chronological order
         report_path, lom_path = self.backward_nonlinear(ss, inputs)
         
         # D_path is dict(stage: TxN-dim array)
@@ -164,7 +166,13 @@ class StageBlock(Block):
     '''Steady-state backward and forward methods'''
     
     def backward_steady_state(self, ss, tol=1E-9, maxit=5000):
-        backward = {k: ss[k] for k in self.stages[-1].backward_outputs}
+        # 'backward' will be dict with backward output of first stage
+        # (i.e. input to last stage) from the most recent time iteration
+        # initializer for first iteration should be in 'ss'
+        
+        backward = {k: ss[k] for k in self.stages[0].backward_outputs}
+
+        # iterate until end-of-final-stage backward inputs converge
         for it in range(maxit):
             backward_new = self.backward_step_steady_state(backward, ss)
             if it % 10 == 0 and all(within_tolerance(backward_new[k], backward[k], tol) for k in backward):
@@ -173,29 +181,35 @@ class StageBlock(Block):
         else:
             raise ValueError(f'No convergence after {maxit} backward iterations!')
 
-        # one more iteration to get backward in all stages, report, and law of motion
+        # one more iteration to get backward INPUTS, reported outputs, and law of motion for all stages
         return self.backward_step_nonlinear(backward, ss)[:3]
 
     def backward_step_steady_state(self, backward, inputs):
+        """Iterate backward through all stages for a single period, ignoring reported outputs"""
         for stage in reversed(self.stages):
-            backward, _ = stage.backward_step_separate(backward, inputs)
+            backward, _ = stage.backward_step_separate({**inputs, **backward})
         return backward
 
     def backward_step_nonlinear(self, backward, inputs):
+        # append backward INPUT to final stage
         backward_all = [backward]
         report_all = []
         lom_all = []
         for stage in reversed(self.stages):
-            (backward, report), lom = stage.backward_step_separate(backward, inputs, lawofmotion=True, hetoutputs=True)
+            (backward, report), lom = stage.backward_step_separate({**inputs, **backward}, lawofmotion=True, hetoutputs=True)
+            # append backward OUTPUT, reported outputs, and law of motion for each stage, in reverse chronological order
             backward_all.append(backward)
             report_all.append(report)
             lom_all.append(lom)
 
-        # return end-of-stage backward, report, and lom for each stage
-        # and also the final beginning-of-stage backward (i.e. end-of-stage previous period)
+        # return backward INPUT, report, and lom for each stage, with stages now in chronological order
+        # (to get backward inputs, skip first chronological entry of backward_all, which is backward output of first stage,
+        # return that entry separately as the fourth output of this function)
         return backward_all[::-1][1:], report_all[::-1], lom_all[::-1], backward_all[-1]
             
     def forward_steady_state(self, D, lom: List[LawOfMotion], tol=1E-10, maxit=100_000):
+        """Find steady-state beginning-of-stage distributions for all stages"""
+        # iterate until beginning-of-stage distribution for first stage converges
         for it in range(maxit):
             D_new = self.forward_step_steady_state(D, lom)
             if it % 10 == 0 and within_tolerance(D, D_new, tol):
@@ -204,10 +218,12 @@ class StageBlock(Block):
         else:
             raise ValueError(f'No convergence after {maxit} forward iterations!')
 
-        # one more iteration to get beginning-of-stage in all stages
+        # one more iteration to get beginning-of-stage in *all* stages
         return self.forward_step_nonlinear(D, lom)[0]
 
     def forward_step_steady_state(self, D, loms: List[LawOfMotion]):
+        """Given beginning-of-first-stage distribution, apply laws of motion in 'loms'
+        for each stage to get end-of-final-stage distribution, which is returned"""
         for lom in loms:
             D = lom @ D
         return D
@@ -224,7 +240,8 @@ class StageBlock(Block):
     def backward_nonlinear(self, ss, inputs):
         indict = ss.copy()
         T = inputs.T
-        backward = {k: ss[self.stages[-1].name][k] for k in self.stages[-1].backward_outputs}
+        # populate backward with steady-state backward inputs to final stage (stored under final stage in ss dict)
+        backward = {k: ss[self.stages[-1].name][k] for k in self.stages[0].backward_outputs}
 
         # report_path is dict(stage: {output: TxN-dim array})
         report_path = {stage.name: {o: np.empty((T,) + ss[stage.name][o].shape) for o in stage.report} for stage in self.stages}
@@ -235,6 +252,7 @@ class StageBlock(Block):
             hetinputs = self.return_hetinputs(indict)
             indict.update(hetinputs)
             
+            # get reports and lom from each stage, backward output of first stage (to feed into next iteration)
             _, report, lom, backward = self.backward_step_nonlinear(backward, indict)
 
             for j, stage in enumerate(self.stages):
@@ -251,6 +269,9 @@ class StageBlock(Block):
         D_path = {stage.name: np.empty((T,) + ss[stage.name]['D'].shape) for stage in self.stages}
 
         for t in range(T):
+            # iterate forward from beginning-of-first-stage distribution in Dbeg to get
+            # (1) beginning-of-stage distributions for all stages (in D)
+            # (2) end-of-final-stage distribution, used for next period's beginning-of-first-stage dist (in Dbeg)
             D, Dbeg = self.forward_step_nonlinear(Dbeg, lom_path[t])
             
             for j, stage in enumerate(self.stages):
@@ -283,11 +304,15 @@ class StageBlock(Block):
         return curlyYs, curlyDs
 
     def backward_step_fakenews(self, din_dict, output_list, backward_data, forward_data):
-        dback = {}
-        dloms = []
-        curlyY = {}
+        """Given shocks to this period's inputs in 'din_dict', calculate perturbation to
+        first-stage backward outputs (curlyV), to final-stage end-of-stage distribution (curlyD),
+        and to any aggregate outputs that are in 'output_list' (curlyY)"""
 
-        # backward through stages, pick up shocks to law of motion
+        dback = {}  # perturbations to backward outputs from most recent stage
+        dloms = []  # list of perturbations to law of motion from all stages (initially in reverse order)
+        curlyY = {} # perturbations to aggregate outputs
+
+        # go backward through stages, pick up shocks to law of motion
         # and also the part of curlyY not coming through the distribution
         for stage, ss, D, lom, precomp, hetoutputs in backward_data:
             din_all = {**din_dict, **dback}
@@ -300,13 +325,15 @@ class StageBlock(Block):
                 din_all.update(dout)
                 dout.update(hetoutputs.diff(din_all, outputs=output_list & hetoutputs.outputs))
 
+            # if policy is perturbed for k in output_list, add this to curlyY
+            # (effect of perturbed distribution is added separately below)
             for k in stage.report:
                 if k in output_list:
                     curlyY[k] = np.vdot(D, dout[k])
 
         curlyV = dback
 
-        # forward through stages, find shock to D
+        # forward through stages, accumulate to find perturbation to D
         dD = None
         for (stage, ss, D, lom), dlom in zip(forward_data, dloms[::-1]):
             # if dD is not None, add consequences for curlyY
@@ -331,6 +358,9 @@ class StageBlock(Block):
         return curlyV, curlyD, curlyY
 
     def expectation_vectors(self, o, T, expectations_data):
+        """Expectation vector giving expected value of output o, from any stage,
+        T periods from now, at the beginning of the first stage
+        (demeaned for numerical reasons, which doesn't affect product with curlyD)."""
         curlyE0 = self.expectations_beginning_of_period(o, expectations_data)
         curlyEs = np.empty((T,) + curlyE0.shape)
         curlyEs[0] = utils.misc.demean(curlyE0)
@@ -341,6 +371,7 @@ class StageBlock(Block):
         return curlyEs
 
     def expectations_beginning_of_period(self, o, expectations_data):
+        """Find expected value of all outputs o, this period, at beginning of first stage"""
         cur_exp = None
         for ss_report, lom_T in expectations_data:
             # if we've already passed variable, take expectations
@@ -358,7 +389,11 @@ class StageBlock(Block):
             cur_exp = lom_T @ cur_exp
         return cur_exp
 
+    '''Preliminary processing'''
+
     def preliminary_all_stages(self, ss):
+        """Create lists of tuples with steady-state information for backward, forward, and
+        expectations iterations, each list going in the same time direction as the relevant iteration"""
         # TODO: to make code more intelligible, this should be made object-oriented
         backward_data = []
         forward_data = []
@@ -391,7 +426,8 @@ class StageBlock(Block):
     '''HetInput and HetOutput options and processing'''
 
     def extract_ss_dict(self, ss):
-        # copied from het_block.py
+        """Flatten ss dict and internals for this block (if present) into one dict,
+        but keeping each stage within internals as a subdict"""
         if isinstance(ss, SteadyStateDict):
             ssnew = ss.toplevel.copy()
             if self.name in ss.internals:
@@ -401,8 +437,9 @@ class StageBlock(Block):
             return ss.copy()
 
     def initialize_backward(self, ss):
-        # always initialize the backward outputs of first stage,
-        # backward inputs of final stage (maybe generalize later?!)
+        """if not all backward outputs of first stage (i.e. backward inputs
+        of final stage) are already in dict, call backward_init to generate them"""
+        # could generalize to allow backward_init to start us at different stage?
         if not all(k in ss for k in self.stages[0].backward_outputs):
             ss.update(self.backward_init(ss))
 
@@ -488,7 +525,11 @@ class StageBlock(Block):
 
 def make_all_into_stages(stages: List[Stage]):
     """Given list of 'stages' that can include either actual stages or
-    objects with a .make_stage(next_period_backward) method, turn all into stages."""
+    objects with a .make_stage(next_stage_backward) method, turn all into stages.
+    
+    Since .make_stage() requires the backward outputs from the next stage,
+    we need to find an actual stage to start with, which makes this a little harder."""
+
     # copy since we'll overwrite
     stages = list(stages)
 
