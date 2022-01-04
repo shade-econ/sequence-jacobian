@@ -372,10 +372,9 @@ class StageBlock(Block):
             precomputed = stage.precompute(input, lom)
 
             hetoutputs = None
-            # if stage.hetoutputs is not None:
-            #     # THIS IS WRONG BECAUSE NOT USING BACKWARD OUTPUT?! (that's in next stage)
-            #     hetoutputs_inputs = {k: potential_inputs[k] for k in stage.hetoutputs.inputs}
-            #     hetoutputs = stage.hetoutputs.differentiable(hetoutputs_inputs)
+            if stage.hetoutputs is not None:
+                hetoutputs_inputs = {k: potential_inputs[k] for k in stage.hetoutputs.inputs}
+                hetoutputs = stage.hetoutputs.differentiable(hetoutputs_inputs)
 
             backward_data.append((stage, input, D, lom, precomputed, hetoutputs))
             forward_data.append((stage, report, D, lom))
