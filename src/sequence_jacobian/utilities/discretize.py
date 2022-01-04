@@ -5,7 +5,7 @@ from scipy.stats import norm
 
 
 def agrid(amax, n, amin=0):
-    """Create grid between amin-pivot and amax+pivot that is equidistant in logs."""
+    """Create grid between amin and amax that is equidistant in logs."""
     pivot = np.abs(amin) + 0.25
     a_grid = np.geomspace(amin + pivot, amax + pivot, n) - pivot
     a_grid[0] = amin  # make sure *exactly* equal to amin
@@ -21,6 +21,15 @@ def agrid_old(amax, N, amin=0, frac=1/25):
     a = np.geomspace(amin+apivot,amax+apivot,N) - apivot
     a[0] = amin
     return a
+
+
+def nonlinspace(amax, n, phi, amin=0):
+    """Create grid between amin and amax. phi=1 is equidistant, phi>1 dense near amin. Extra flexibility may be useful in non-convex problems in which policy functions have nonlinear (even non-monotonic) sections far from the borrowing limit."""
+    a_grid = np.zeros(n)
+    a_grid[0] = amin
+    for i in range(1, n):
+        a_grid[i] = a_grid[i-1] + (amax - a_grid[i-1]) / (n-i)**phi 
+    return a_grid
 
 
 def stationary(Pi, pi_seed=None, tol=1E-11, maxit=10_000):

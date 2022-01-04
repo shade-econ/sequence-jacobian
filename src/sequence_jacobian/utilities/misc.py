@@ -2,6 +2,7 @@
 
 import numpy as np
 import scipy.linalg
+from numba import njit, guvectorize
 
 
 def make_tuple(x):
@@ -103,41 +104,81 @@ def smart_zeros(n):
     else:
         return 0.
 
+
 '''Tools for taste shocks used in discrete choice problems'''
 
 
-def choice_prob(vfun, lam):
-    """
-    Logit choice probability of choosing along first axis.
-
-    Parameters
-    ----------
-    vfun : array(Ns, Nz, Na): discrete choice specific value function
-    lam  : float, scale of taste shock
-
-    Returns
-    -------
-    prob : array (Ns, Nz, nA): choice probability
-    """
-    # rescale values for numeric robustness
-    vmax = np.max(vfun, axis=0)
-    vfun_norm = vfun - vmax
-
-    # apply formula (could be njitted in separate function)
-    P = np.exp(vfun_norm / lam) / np.sum(np.exp(vfun_norm / lam), axis=0)
+def logit(V, scale):
+    """Logit choice probability of choosing along 0th axis"""
+    Vnorm = V - V.max(axis=0)
+    Vexp = np.exp(Vnorm / scale)
+    P = Vexp / Vexp.sum(axis=0)
     return P
 
 
-def logsum(vfun, lam):
-    """Logsum formula for expected continuation value."""
-
-    # rescale values for numeric robustness
-    vmax = np.max(vfun, axis=0)
-    vfun_norm = vfun - vmax
-
-    # apply formula (could be njitted in separate function)
-    VE = vmax + lam * np.log(np.sum(np.exp(vfun_norm / lam), axis=0))
-    return VE
+def logsum(V, scale):
+    """Logsum formula along 0th axis"""
+    const = V.max(axis=0)
+    Vnorm = V - const
+    EV = const + scale * np.log(np.exp(Vnorm / scale).sum(axis=0))
+    return EV 
 
 
-#from .function import (input_list, output_list)
+def logit_choice(V, scale):
+    """Logit choice probabilities and logsum along 0th axis"""
+    const = V.max(axis=0)
+    Vnorm = V - const
+    Vexp = np.exp(Vnorm / scale)
+    Vexpsum = Vexp.sum(axis=0)
+
+    P = Vexp / Vexpsum
+    EV = const + scale * np.log(Vexpsum)
+    return P, EV
+
+
+@guvectorize(['void(float64[:], uint32[:], uint32[:])'], '(nA) -> (),()', nopython=True)
+def nonconcave(Va, ilower, iupper):
+    """
+    Let V(..., a) be the value function associated with a non-convex dynamic program. `Va` is its derivative with respect to the **single** continuous state variable `a`.
+
+    Find ilower and iupper such that {a_{ilower + 1}, ..., a_{iupper - 1}} is the region where V is non-concave.
+    
+    Reference: Fella (2014): A generalized endogenous grid method for non-smooth and non-concave problems 
+    """
+    nA = Va.shape[-1]
+    vmin = np.inf
+    vmax = -np.inf
+    # Find vmin & vmax
+    for ia in range(nA - 1):
+        if Va[ia + 1] > Va[ia]:
+            vmin_temp = Va[ia]
+            vmax_temp = Va[ia + 1]
+            if vmin_temp < vmin:
+                vmin = vmin_temp
+            if vmax_temp > vmax:
+                vmax = vmax_temp
+
+    # Find ilower
+    if vmax == -np.inf:
+        ilower_ = nA
+    else:
+        ia = nA
+        while ia > 0:
+            if Va[ia] > vmax:
+                break
+            ia -= 1
+        ilower_ = ia
+        
+    # Find iupper
+    if vmin == np.inf:
+        iupper_ = 0
+    else:
+        ia = 0
+        while ia < nA:
+            if Va[ia] < vmin:
+                break
+            ia += 1
+        iupper_ = ia
+
+    ilower[:] = ilower_
+    iupper[:] = iupper_

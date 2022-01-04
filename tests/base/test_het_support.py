@@ -2,6 +2,8 @@ import numpy as np
 from sequence_jacobian.blocks.support.het_support import (Transition,
     PolicyLottery1D, PolicyLottery2D, Markov, CombinedTransition,
     lottery_1d, lottery_2d)
+from sequence_jacobian.utilities.multidim import batch_multiply_ith_dimension
+
 
 def test_combined_markov():
     shape = (5, 6, 7)
@@ -169,3 +171,13 @@ def test_forward_expectations_symmetry():
         assert np.isclose(outcome, outcome2)
 
 
+def test_einsum():
+    D = np.random.rand(2, 5, 10)
+    P = np.random.rand(3, 2, 5, 10)
+    Dnew = np.einsum('xij,dxij->dij', D, P)
+    assert Dnew[0, 1, 1] == np.sum(P[0, :, 1, 1] * D[:, 1, 1])
+
+    # can I generalize this? reshape and then einsum
+    Dnew2 = batch_multiply_ith_dimension(P, 0, D)
+
+    assert (Dnew == Dnew2).all()

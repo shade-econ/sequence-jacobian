@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 class Parent:
     # see tests in test_parent_block.py
 
