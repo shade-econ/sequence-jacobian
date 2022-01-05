@@ -1,5 +1,6 @@
 import warnings
-from sequence_jacobian.utilities import graph
+from sequence_jacobian.blocks.solved_block import SolvedBlock
+from sequence_jacobian.blocks.het_block import HetBlock
 
 """
 Adrien's DAG Graph routine, updated for SSJ v1.0
@@ -17,31 +18,18 @@ sudo port install graphviz
 
 try:
     from graphviz import Digraph
+    from IPython.display import display
 
-    def drawdag(block_list,exogenous=[], unknowns=[], targets=[], showdag=False, leftright=False, filename='model'):
+    def drawdag(model, exogenous=[], unknowns=[], targets=[], leftright=False):
         '''
         Routine that draws DAG
-        :param block_list: list of blocks to be represented
+        :param model: combined block to be represented as dag
         :param exogenous: (optional) exogenous variables, to be represented on DAG
         :param unknowns:  (optional) unknown variables, to be represented on DAG
         :param unknowns:  (optional) target variables, to be represented on DAG
-        :bool showdag: if True, export and plot pdf file. If false, export png file and do not plot
-        :bool debug: if True, returns list of candidate unknown and targets
         :bool leftright: if True, plots dag from left to right instead of top to bottom
         :return: none
         '''
-
-        # obtain the topological sort 
-        topsorted = graph.block_sort(block_list)
-        # reorder blocks according to this topological sort (NB: typically blocks will already be sorted)
-        block_list_sorted = [block_list[i] for i in topsorted]
-        # Obtain the dependency list of the sorted set of blocks
-        #inmap = graph.get_input_map(block_list_sorted)
-        #adj = graph.get_block_adjacency_list(block_list_sorted, inmap)
-        # Obtain the dependency list of the sorted set of blocks
-        outmap = graph.get_output_map(block_list_sorted)
-        revadj = graph.get_block_reverse_adjacency_list(block_list_sorted, outmap)
-
         # Start DAG
         dot = Digraph(comment='Model DAG')
 
@@ -60,21 +48,17 @@ try:
             dot.node('targets', 'targets', shape='diamond')
             
         # add nodes sequentially in order
-        for i in topsorted:
-            #if hasattr(block_list_sorted[i], 'hetinput'):
-            if "HetBlock" in str(block_list_sorted[i].__class__):
-                # HA block
-                dot.node(str(i), block_list_sorted[i].name + ' [HA, ' + str(i) + ']')
-            elif "SolvedBlock" in str(block_list_sorted[i].__class__):
-                # Solved block
-                dot.node(str(i), block_list_sorted[i].name + ' [solved,' + str(i) + ']')
+        for i, b in enumerate(model.blocks):
+            if isinstance(b, HetBlock):
+                dot.node(str(i), b.name + ' [HA, ' + str(i) + ']')
+            elif isinstance(b, SolvedBlock) :
+                dot.node(str(i), b.name + ' [solved,' + str(i) + ']')
             else:
-                # Simple block
-                dot.node(str(i), block_list_sorted[i].name + ' [' + str(i) + ']')
+                dot.node(str(i), b.name + ' [' + str(i) + ']')
 
             # nodes from exogenous to i (figure out if needed and draw)
             if exogenous:
-                edgelabel = block_list_sorted[i].inputs & set(exogenous)
+                edgelabel = b.inputs & set(exogenous)
                 if len(edgelabel) != 0:
                     edgelabel_list = list(edgelabel)
                     edgelabel_str = ', '.join(str(e) for e in edgelabel_list)
@@ -82,7 +66,7 @@ try:
 
             # nodes from unknowns to i (figure out if needed, then draw)
             if unknowns:
-                edgelabel = block_list_sorted[i].inputs & set(unknowns)
+                edgelabel = b.inputs & set(unknowns)
                 if len(edgelabel) != 0:
                     edgelabel_list = list(edgelabel)
                     edgelabel_str = ', '.join(str(e) for e in edgelabel_list)
@@ -90,24 +74,21 @@ try:
             
             # nodes from i to final targets
             for target in targets:
-                if target in block_list_sorted[i].outputs:
+                if target in b.outputs:
                     dot.edge(str(i), 'targets', label=target)
                         
             # nodes from any interior block to i
-            for j in revadj[i]:
+            for j in model.revadj[i]:
                 # figure out inputs of i that are also outputs of j
-                edgelabel = block_list_sorted[i].inputs & block_list_sorted[j].outputs
+                edgelabel = b.inputs & model.blocks[j].outputs
                 edgelabel_list = list(edgelabel)
                 edgelabel_str = ', '.join(str(e) for e in edgelabel_list)
                 
                 # draw edge from j to i
                 dot.edge(str(j), str(i), label=str(edgelabel_str))
 
-        if showdag:
-            dot.render('dag/' + filename, view=True, cleanup=True)
-        else:
-            dot.render('dag/' + filename, format='png', cleanup=True)
-            #print(dot.source)
+        # dot.render('dag/' + model.name, format='png', view=True, cleanup=True)
+        display(dot)
 
 except ImportError:
     def draw_dag(*args, **kwargs):
