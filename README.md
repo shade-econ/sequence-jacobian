@@ -24,7 +24,7 @@ pip install git+https://github.com/shade-econ/sequence-jacobian@master
 
 ## Resources
 
-The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. 
+The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. [Click here](https://shade-econ.github.io/sequence-jacobian/notebooks.zip) to download all notebooks as a zip.
 
 - [RBC](notebooks/rbc.ipynb)
 - [Krusell-Smith](notebooks/krusell_smith.ipynb)
