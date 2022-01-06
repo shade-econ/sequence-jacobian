@@ -6,10 +6,9 @@ The conceptual framework is based on our paper Adrien Auclert, Bence Bardóczy, 
 
 ## Requirements
 
-SSJ requires the following software to be installed:
-- [Python 3](https://www.python.org/)
+SSJ runs on Python 3. We recommend that you install the latest [Python 3 Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. We test SSJ on Python 3.8. 
 
-We recommend that you install the latest [Python 3 Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. We tested the code on Python 3.8.  
+**Optional package**: SSJ provides an interface for plotting the directed acyclic graph (DAG) representation of models. This feature requires the [Graphviz](https://www.graphviz.org/) graph drawing software and the corresponding [Python package](https://pypi.org/project/graphviz/), you have to install both of these if you'd like to use it.
 
 ## Installation 
 
@@ -31,7 +30,7 @@ The `notebooks` folder contains a number of examples. We recommend working throu
 - [RBC](notebooks/rbc.ipynb)
 - [Krusell-Smith](notebooks/krusell_smith.ipynb)
 - [One-asset HANK](notebooks/hank.ipynb) 
-- [Two-asset HANK](notebooks/two_asset.ipynb) 
+- [Two-asset HANK](notebooks/two_asset.ipynb)
 - [Labor search](notebooks/labor_search.ipynb) 
 
 If you need help with running Jupyter notebooks, check out the [official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/). If you'd like to learn more about Python, the [QuantEcon](https://python-programming.quantecon.org/intro.html) lectures of Tom Sargent and John Stachurski are a great place to start.
