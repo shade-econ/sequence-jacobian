@@ -12,19 +12,14 @@ SSJ runs on Python 3. We recommend that you install the latest [Python 3 Anacond
 
 ## Installation 
 
-Install from [PyPI](https://pypi.org/) by running (COMING SOON)
+Install from [PyPI](https://pypi.org/)
 ```
 pip install sequence-jacobian
 ```
 
-Install from source by running 
-```
-pip install git+https://github.com/shade-econ/sequence-jacobian@master
-```
-
 ## Resources
 
-The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. [Click here](https://shade-econ.github.io/sequence-jacobian/notebooks.zip) to download all notebooks as a zip.
+The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. [Click here](https://github.com/shade-econ/sequence-jacobian/raw/master/notebooks/notebooks.zip) to download all notebooks as a zip.
 
 - [RBC](notebooks/rbc.ipynb)
 - [Krusell-Smith](notebooks/krusell_smith.ipynb)
