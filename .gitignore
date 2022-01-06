@@ -11,3 +11,6 @@ notebooks/.ipynb_checkpoints/
 scripts/
 wiki/
 *.egg-info/
+
+pyproject.toml
+setup.cfg

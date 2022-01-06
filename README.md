@@ -28,13 +28,10 @@ pip install git+https://github.com/shade-econ/sequence-jacobian@master
 
 The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. 
 
-- RBC notebook ([html](notebooks/rbc.html), [Jupyter](notebooks/rbc.ipynb)) 
-- Krusell-Smith notebook ([html](notebooks/krusell_smith.html), [Jupyter](notebooks/krusell_smith.ipynb)) 
-- One-asset HANK notebook ([html](notebooks/hank.html), [Jupyter](notebooks/hank.ipynb)) 
-- Two-asset HANK notebook ([html](notebooks/two_asset.html), [Jupyter](notebooks/two_asset.ipynb)) 
-- Labor search notebook ([html](notebooks/labor_search.html), [Jupyter](notebooks/labor_search.ipynb)) 
+- [RBC](notebooks/rbc.ipynb)
+- [Krusell-Smith](notebooks/krusell_smith.ipynb)
+- [One-asset HANK](notebooks/hank.ipynb) 
+- [Two-asset HANK](notebooks/two_asset.ipynb) 
+- [Labor search](notebooks/labor_search.ipynb) 
 
-Take a look at the `html` versions if you don't have Python yet. Once you install Anaconda, you will be able interact with the `Jupyter` notebooks. Just open a terminal, change directory to the folder with the notebooks, and type `jupyter notebook`. This will launch the notebook dashboard in your
-default browser. Click on a notebook to get started. 
-
-For more information on Jupyter notebooks, check out the [official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/). If you'd like to learn more about Python, the [QuantEcon](https://python-programming.quantecon.org/intro.html) lectures of Tom Sargent and John Stachurski are a great place to start.
+If you need help with running Jupyter notebooks, check out the [official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/). If you'd like to learn more about Python, the [QuantEcon](https://python-programming.quantecon.org/intro.html) lectures of Tom Sargent and John Stachurski are a great place to start.

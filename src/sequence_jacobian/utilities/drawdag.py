@@ -87,7 +87,7 @@ try:
                 # draw edge from j to i
                 dot.edge(str(j), str(i), label=str(edgelabel_str))
 
-        # dot.render('dag/' + model.name, format='png', view=True, cleanup=True)
+        dot.render('dag/' + model.name, format='png', cleanup=True)
         display(dot)
 
 except ImportError:

@@ -15,7 +15,7 @@ class DAG:
         revadj = get_block_reverse_adjacency_list(blocks, outmap)
         topsort = topological_sort(adj, revadj, names=[getattr(block, 'name', '[NO BLOCK NAME]') for block in blocks])
 
-        M = Bijection({i: t for i, t in enumerate(topsort)})
+        M = Bijection({t: i for i, t in enumerate(topsort)})
 
         self.blocks = [blocks[t] for t in topsort]
         self.inmap = {k: M @ v for k, v in inmap.items()}
@@ -25,7 +25,6 @@ class DAG:
 
         self.inputs = OrderedSet(k for k in inmap if k not in outmap)
         self.outputs = OrderedSet(outmap)
-
 
     def visit_from_inputs(self, inputs):
         """Which block numbers are ultimately dependencies of 'inputs'?"""
