@@ -1,4 +1,4 @@
-Tutorials SSJ.
+# Tutorials for SSJ.
 - RBC
 - Krusell-Smith
 - One-asset HANK
