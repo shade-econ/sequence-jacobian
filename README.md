@@ -21,7 +21,6 @@ Install from source by running
 ```
 pip install git+https://github.com/shade-econ/sequence-jacobian@master
 ```
-<!-- or simply [click here](https://github.com/shade-econ/sequence-jacobian/archive/master.zip) to download all files as a zip. -->
 
 ## Resources
 
