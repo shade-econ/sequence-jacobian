@@ -4,6 +4,17 @@ import numpy as np
 from scipy.stats import norm
 
 
+def asset_grid(amin, amax, n):
+    # find maximum ubar of uniform grid corresponding to desired maximum amax of asset grid
+    ubar = np.log(1 + np.log(1 + amax - amin))
+    
+    # make uniform grid
+    u_grid = np.linspace(0, ubar, n)
+    
+    # double-exponentiate uniform grid and add amin to get grid from amin to amax
+    return amin + np.exp(np.exp(u_grid) - 1) - 1
+
+
 def agrid(amax, n, amin=0):
     """Create grid between amin and amax that is equidistant in logs."""
     pivot = np.abs(amin) + 0.25

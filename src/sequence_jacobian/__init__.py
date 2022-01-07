@@ -22,7 +22,7 @@ warnings.formatwarning = lambda message, category, filename, lineno, line=None: 
 # deprecation of old ways for calling things
 def agrid(*args, **kwargs):
     warnings.warn("The function 'agrid' is deprecated and will be removed in a subsequent version.\n"
-                  "Please call sj.grids.asset_grid(<FILL IN HERE AFTER WRITING FUNCTION>) instead.")
+                  "Please call sj.grids.asset_grid(amin, amax, n) instead.")
     return utilities.discretize.agrid(*args, **kwargs)
 
 def markov_rouwenhorst(*args, **kwargs):
