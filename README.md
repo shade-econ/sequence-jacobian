@@ -22,9 +22,22 @@ pip install sequence-jacobian
 The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. [Click here](https://github.com/shade-econ/sequence-jacobian/raw/master/notebooks/notebooks.zip) to download all notebooks as a zip.
 
 - [RBC](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/rbc.ipynb)
+    - represent macro models as collections of blocks (DAG)
+    - write SimpleBlocks and CombinedBlocks
+    - compute linearized and non-linear (perfect-foresight) impulse responses
 - [Krusell-Smith](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/krusell_smith.ipynb)
+    - write HetBlocks to represent heterogeneous agents
+    - construct general-equilibrium Jacobians manually
+    - compute the log-likelihood of the model given time-series data
 - [One-asset HANK](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/hank.ipynb) 
+    - adapt an off-the-shelf HetBlock to any macro environment using helper functions
+    - see a more advanced example of calibration
 - [Two-asset HANK](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/two_asset.ipynb)
-- [Labor search](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/labor_search.ipynb) 
+    - write SolvedBlocks to represent implicit aggregate equilibrium conditions
+    - re-use saved Jacobians
+    - fine tune options of block methods 
+- [Labor search](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/labor_search.ipynb)
+    - example with multiple exogenous states
+    - shocks to transition matrix of exogenous states
 
 If you need help with running Jupyter notebooks, check out the [official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/). If you'd like to learn more about Python, the [QuantEcon](https://python-programming.quantecon.org/intro.html) lectures of Tom Sargent and John Stachurski are a great place to start.
