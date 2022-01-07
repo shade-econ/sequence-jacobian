@@ -4,7 +4,7 @@ import numpy as np
 
 def test_ks_jac(krusell_smith_dag):
     _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
-    household, firm = ks_model['household'], ks_model['firm']
+    household, firm = ks_model['hh'], ks_model['firm']
     T = 10
 
     # Automatically calculate the general equilibrium Jacobian
@@ -58,7 +58,7 @@ def test_ks_jac(krusell_smith_dag):
 def test_fake_news_v_direct_method(one_asset_hank_dag):
     hank_model, ss, *_ = one_asset_hank_dag
 
-    household = hank_model['household']
+    household = hank_model['hh']
     T = 40
     exogenous = ['r']
     output_list = household.non_backward_outputs

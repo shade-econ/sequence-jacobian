@@ -3,27 +3,27 @@
 import numpy as np
 from numba import vectorize, njit
 
-from ...blocks.het_block import het
-from ... import utilities as utils
+from ..blocks.het_block import het
+from .. import interpolate
 
 
-def household_init(a_grid, we, r, eis, T):
+def hh_init(a_grid, we, r, eis, T):
     fininc = (1 + r) * a_grid + T[:, np.newaxis] - a_grid[0]
     coh = (1 + r) * a_grid[np.newaxis, :] + we[:, np.newaxis] + T[:, np.newaxis]
     Va = (1 + r) * (0.1 * coh) ** (-1 / eis)
     return fininc, Va
 
 
-@het(exogenous='Pi', policy='a', backward='Va', backward_init=household_init)
-def household(Va_p, a_grid, we, T, r, beta, eis, frisch, vphi):
+@het(exogenous='Pi', policy='a', backward='Va', backward_init=hh_init)
+def hh(Va_p, a_grid, we, T, r, beta, eis, frisch, vphi):
     '''Single backward step via EGM.'''
     uc_nextgrid = beta * Va_p
     c_nextgrid, n_nextgrid = cn(uc_nextgrid, we[:, np.newaxis], eis, frisch, vphi)
 
     lhs = c_nextgrid - we[:, np.newaxis] * n_nextgrid + a_grid[np.newaxis, :] - T[:, np.newaxis]
     rhs = (1 + r) * a_grid
-    c = utils.interpolate.interpolate_y(lhs, rhs, c_nextgrid)
-    n = utils.interpolate.interpolate_y(lhs, rhs, n_nextgrid)
+    c = interpolate.interpolate_y(lhs, rhs, c_nextgrid)
+    n = interpolate.interpolate_y(lhs, rhs, n_nextgrid)
 
     a = rhs + we[:, np.newaxis] * n + T[:, np.newaxis] - c
     iconst = np.nonzero(a < a_grid[0])

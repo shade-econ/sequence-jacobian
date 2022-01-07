@@ -1,1 +1,0 @@
-'''Heterogeneous agent blocks'''

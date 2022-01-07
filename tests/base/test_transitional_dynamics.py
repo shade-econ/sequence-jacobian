@@ -4,7 +4,7 @@ import numpy as np
 
 from sequence_jacobian import combine
 from sequence_jacobian.examples import two_asset
-from sequence_jacobian.examples.hetblocks import household_twoasset as hh
+from sequence_jacobian.hetblocks import hh_twoasset as hh
 
 
 # TODO: Figure out a more robust way to check similarity of the linear and non-linear solution.
@@ -50,14 +50,14 @@ def test_hank_td(one_asset_hank_dag):
     _, ss, hank_model, unknowns, targets, exogenous = one_asset_hank_dag
 
     T = 30
-    household = hank_model['household']
+    household = hank_model['hh']
     J_ha = household.jacobian(ss=ss, T=T, inputs=['Div', 'Tax', 'r', 'w'])
-    G = hank_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
+    G = hank_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'hh': J_ha})
 
     rho_r, sig_r = 0.61, -0.01/4
     drstar = sig_r * rho_r ** (np.arange(T))
 
-    td_nonlin = hank_model.solve_impulse_nonlinear(ss, unknowns, targets, {"rstar": drstar}, Js={'household': J_ha})
+    td_nonlin = hank_model.solve_impulse_nonlinear(ss, unknowns, targets, {"rstar": drstar}, Js={'hh': J_ha})
 
     dC_nonlin = 100 * td_nonlin['C'] / ss['C']
     dC_lin = 100 * G['C']['rstar'] @ drstar / ss['C']
@@ -70,15 +70,15 @@ def test_two_asset_td(two_asset_hank_dag):
     _, ss, two_asset_model, unknowns, targets, exogenous = two_asset_hank_dag
 
     T = 30
-    household = two_asset_model['household']
+    household = two_asset_model['hh']
     J_ha = household.jacobian(ss=ss, T=T, inputs=['N', 'r', 'ra', 'rb', 'tax', 'w'])
-    G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
+    G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'hh': J_ha})
 
     for shock_size, tol in [(0.1, 3e-4), (1, 2e-2)]:
         drstar = shock_size * -0.0025 * 0.6 ** np.arange(T)
 
         td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, unknowns, targets, {"rstar": drstar},
-                                                            Js={'household': J_ha})
+                                                            Js={'hh': J_ha})
 
         dY_nonlin = 100 * td_nonlin['Y']
         dY_lin = 100 * G['Y']['rstar'] @ drstar
@@ -89,7 +89,7 @@ def test_two_asset_td(two_asset_hank_dag):
 def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
     _, ss, two_asset_model, unknowns, targets, exogenous = two_asset_hank_dag
 
-    household = hh.household.add_hetinputs([two_asset.income, two_asset.make_grids])
+    household = hh.hh.add_hetinputs([two_asset.income, two_asset.make_grids])
     blocks_simple = [household, two_asset.pricing, two_asset.arbitrage,
                      two_asset.labor, two_asset.investment, two_asset.dividend,
                      two_asset.taylor, two_asset.fiscal, two_asset.share_value,
@@ -100,23 +100,23 @@ def test_two_asset_solved_v_simple_td(two_asset_hank_dag):
     targets_simple = ["asset_mkt", "fisher", "wnkpc", "nkpc", "equity", "inv", "val"]
 
     T = 30
-    household = two_asset_model['household']
+    household = two_asset_model['hh']
     J_ha = household.jacobian(ss=ss, T=T, inputs=['N', 'r', 'ra', 'rb', 'tax', 'w'])
-    G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'household': J_ha})
+    G = two_asset_model.solve_jacobian(ss, unknowns, targets, exogenous, T=T, Js={'hh': J_ha})
     G_simple = two_asset_model_simple.solve_jacobian(ss, unknowns_simple, targets_simple, exogenous, T=T,
-                                                     Js={'household': J_ha})
+                                                     Js={'hh': J_ha})
 
     drstar = -0.0025 * 0.6 ** np.arange(T)
 
     dY = 100 * G['Y']['rstar'] @ drstar
     td_nonlin = two_asset_model.solve_impulse_nonlinear(ss, unknowns, targets, {"rstar": drstar},
-                                                        Js={'household': J_ha})
+                                                        Js={'hh': J_ha})
     dY_nonlin = 100 * (td_nonlin['Y'] - 1)
 
     dY_simple = 100 * G_simple['Y']['rstar'] @ drstar
     td_nonlin_simple = two_asset_model_simple.solve_impulse_nonlinear(ss,
                                                                       unknowns_simple, targets_simple,
-                                                                      {"rstar": drstar}, Js={'household': J_ha})
+                                                                      {"rstar": drstar}, Js={'hh': J_ha})
 
     dY_nonlin_simple = 100 * (td_nonlin_simple['Y'] - 1)
 

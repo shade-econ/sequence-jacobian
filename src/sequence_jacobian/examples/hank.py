@@ -1,9 +1,7 @@
 import numpy as np
 
-from .. import utilities as utils
-from ..blocks.simple_block import simple
-from ..blocks.combined_block import create_model
-from .hetblocks import household_labor as hh
+from sequence_jacobian import grids, simple, create_model, hetblocks
+hh = hetblocks.hh_labor.hh
 
 
 '''Part 1: Blocks'''
@@ -54,8 +52,8 @@ def nkpc_ss(Z, mu):
 
 
 def make_grids(rho_s, sigma_s, nS, amax, nA):
-    e_grid, pi_e, Pi = utils.discretize.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
-    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    e_grid, pi_e, Pi = grids.markov_rouwenhorst(rho=rho_s, sigma=sigma_s, N=nS)
+    a_grid = grids.agrid(amax=amax, n=nA)
     return e_grid, pi_e, Pi, a_grid
 
 
@@ -82,7 +80,7 @@ def labor_supply(n, e_grid):
 
 def dag():
     # Combine blocks
-    household = hh.household.add_hetinputs([transfers, wages, make_grids])
+    household = hh.add_hetinputs([transfers, wages, make_grids])
     household = household.add_hetoutputs([labor_supply])
     blocks = [household, firm, monetary, fiscal, mkt_clearing, nkpc]
     blocks_ss = [household, firm, monetary, fiscal, mkt_clearing, nkpc_ss]

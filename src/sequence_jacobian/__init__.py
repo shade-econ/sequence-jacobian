@@ -1,6 +1,6 @@
 """Public-facing objects."""
 
-from . import estimation, utilities, grids, interpolate, misc
+from . import estimation, utilities, grids, interpolate, misc, hetblocks
 
 from .blocks.simple_block import simple
 from .blocks.het_block import het

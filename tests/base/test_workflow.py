@@ -1,7 +1,7 @@
 import numpy as np
 from sequence_jacobian import simple, solved, create_model, markov_rouwenhorst, agrid 
 from sequence_jacobian.classes.impulse_dict import ImpulseDict
-from sequence_jacobian.examples.hetblocks import household_sim as hh
+from sequence_jacobian.hetblocks.hh_sim import hh
 
 
 '''Part 1: Household block'''
@@ -107,7 +107,7 @@ def union_ss(atw, UCE, muw, N, nu, kappaw, beta, pi):
 
 def test_all():
     # Assemble HA block (want to test nesting)
-    household_ha = hh.household.add_hetinputs([make_grids, income])
+    household_ha = hh.add_hetinputs([make_grids, income])
     household_ha = household_ha.add_hetoutputs([mpcs, weighted_uc]).rename('household_ha')
 
     # Assemble DAG (for transition dynamics)

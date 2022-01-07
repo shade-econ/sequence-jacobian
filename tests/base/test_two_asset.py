@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from sequence_jacobian.examples.hetblocks import household_twoasset as hh
+from sequence_jacobian.hetblocks import hh_twoasset as hh
 from sequence_jacobian import utilities as utils
 
 
@@ -41,7 +41,7 @@ def hank_ss_singlerun(beta=0.976, r=0.0125, tot_wealth=14, K=10, delta=0.02, Bg=
                    'tax': tax, 'w': w, 'eis': eis, 'rb': rb, 'ra': ra,
                    'chi0': chi0, 'chi1': chi1, 'chi2': chi2}
 
-    out = hh.household.steady_state(calibration)
+    out = hh.hh.steady_state(calibration)
     
     return out['A'], out['B'], out['UCE']
 

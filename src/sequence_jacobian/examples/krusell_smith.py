@@ -1,8 +1,6 @@
-from .. import utilities as utils
-from ..blocks.simple_block import simple
-from ..blocks.combined_block import create_model
-from .hetblocks import household_sim as hh
+from sequence_jacobian import grids, simple, create_model, hetblocks
 
+hh = hetblocks.hh_sim.hh
 
 '''Part 1: Blocks'''
 
@@ -35,8 +33,8 @@ def firm_ss(r, Y, L, delta, alpha):
 '''Part 2: Embed HA block'''
 
 def make_grids(rho, sigma, nS, amax, nA):
-    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
-    a_grid = utils.discretize.agrid(amax=amax, n=nA)
+    e_grid, _, Pi = grids.markov_rouwenhorst(rho=rho, sigma=sigma, N=nS)
+    a_grid = grids.agrid(amax=amax, n=nA)
     return e_grid, Pi, a_grid
 
 
@@ -49,7 +47,7 @@ def income(w, e_grid):
 
 def dag():
     # Combine blocks
-    household = hh.household.add_hetinputs([income, make_grids])
+    household = hh.add_hetinputs([income, make_grids])
     ks_model = create_model([household, firm, mkt_clearing], name="Krusell-Smith")
     ks_model_ss = create_model([household, firm_ss, mkt_clearing], name="Krusell-Smith SS")
 

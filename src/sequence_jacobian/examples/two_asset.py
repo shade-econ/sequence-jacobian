@@ -1,10 +1,7 @@
 import numpy as np
 
-from .. import utilities as utils
-from ..blocks.simple_block import simple
-from ..blocks.solved_block import solved
-from ..blocks.combined_block import create_model, combine
-from .hetblocks import household_twoasset as hh
+from sequence_jacobian import simple, solved, combine, create_model, grids, hetblocks
+hh = hetblocks.hh_twoasset.hh
 
 
 '''Part 1: Blocks'''
@@ -138,10 +135,10 @@ def union_ss(tax, w, UCE, N, muw, frisch):
 '''Part 2: Embed HA block'''
 
 def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
-    b_grid = utils.discretize.agrid(amax=bmax, n=nB)
-    a_grid = utils.discretize.agrid(amax=amax, n=nA)
-    k_grid = utils.discretize.agrid(amax=kmax, n=nK)[::-1].copy()
-    e_grid, _, Pi = utils.discretize.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+    b_grid = grids.agrid(amax=bmax, n=nB)
+    a_grid = grids.agrid(amax=amax, n=nA)
+    k_grid = grids.agrid(amax=kmax, n=nK)[::-1].copy()
+    e_grid, _, Pi = grids.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
     return b_grid, a_grid, k_grid, e_grid, Pi
 
 
@@ -154,7 +151,7 @@ def income(e_grid, tax, w, N):
 
 def dag():
     # Combine Blocks
-    household = hh.household.add_hetinputs([income, make_grids])
+    household = hh.add_hetinputs([income, make_grids])
     production = combine([labor, investment])
     production_solved = production.solved(unknowns={'Q': 1., 'K': 10.},
                                           targets=['inv', 'val'], solver='broyden_custom')

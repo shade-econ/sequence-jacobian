@@ -1,12 +1,11 @@
 import numpy as np
 from numba import guvectorize
 
-from ...blocks.het_block import het
-from ...blocks.support.simple_displacement import apply_function
-from ... import utilities as utils
+from ..blocks.het_block import het
+from .. import interpolate
 
 
-def household_init(b_grid, a_grid, z_grid, eis):
+def hh_init(b_grid, a_grid, z_grid, eis):
     Va = (0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
     Vb = (0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis) * np.ones((z_grid.shape[0], 1, 1))
     return Va, Vb
@@ -26,8 +25,8 @@ def marginal_cost_grid(a_grid, ra, chi0, chi1, chi2):
 
 # policy and bacward order as in grid!
 @het(exogenous='Pi', policy=['b', 'a'], backward=['Vb', 'Va'],
-     hetinputs=[marginal_cost_grid], hetoutputs=[adjustment_costs], backward_init=household_init)  
-def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2, Psi1):
+     hetinputs=[marginal_cost_grid], hetoutputs=[adjustment_costs], backward_init=hh_init)  
+def hh(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1, chi2, Psi1):
     # === STEP 2: Wb(z, b', a') and Wa(z, b', a') ===
     # (take discounted expectation of tomorrow's value function)
     Wb = beta * Vb_p
@@ -41,8 +40,8 @@ def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb,
     i, pi = lhs_equals_rhs_interpolate(W_ratio, 1 + Psi1)
 
     # use same interpolation to get Wb and then c
-    a_endo_unc = utils.interpolate.apply_coord(i, pi, a_grid)
-    c_endo_unc = utils.interpolate.apply_coord(i, pi, Wb) ** (-eis)
+    a_endo_unc = interpolate.apply_coord(i, pi, a_grid)
+    c_endo_unc = interpolate.apply_coord(i, pi, Wb) ** (-eis)
 
     # === STEP 4: b'(z, b, a), a'(z, b, a) for UNCONSTRAINED ===
 
@@ -54,9 +53,9 @@ def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb,
     # and also use interpolation to get a'(z, b, a)
     # (note utils.interpolate.interpolate_coord and utils.interpolate.apply_coord work on last axis,
     #  so we need to swap 'b' to the last axis, then back when done)
-    i, pi = utils.interpolate.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
-    a_unc = utils.interpolate.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
-    b_unc = utils.interpolate.apply_coord(i, pi, b_grid).swapaxes(1, 2)
+    i, pi = interpolate.interpolate_coord(b_endo.swapaxes(1, 2), b_grid)
+    a_unc = interpolate.apply_coord(i, pi, a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
+    b_unc = interpolate.apply_coord(i, pi, b_grid).swapaxes(1, 2)
 
     # === STEP 5: a'(z, kappa, a) for CONSTRAINED ===
 
@@ -66,9 +65,9 @@ def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb,
     i, pi = lhs_equals_rhs_interpolate(lhs_con, 1 + Psi1)
 
     # use same interpolation to get Wb and then c
-    a_endo_con = utils.interpolate.apply_coord(i, pi, a_grid)
+    a_endo_con = interpolate.apply_coord(i, pi, a_grid)
     c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis]) ** (-eis)
-                  * utils.interpolate.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
+                  * interpolate.apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
 
     # === STEP 6: a'(z, b, a) for CONSTRAINED ===
 
@@ -81,8 +80,8 @@ def household(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb,
     # then use the interpolated kappa to get a', so we have a'(z, b, a)
     # (utils.interpolate.interpolate_y does this in one swoop, but since it works on last
     #  axis, we need to swap kappa to last axis, and then b back to middle when done)
-    a_con = utils.interpolate.interpolate_y(b_endo.swapaxes(1, 2), b_grid,
-                                            a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
+    a_con = interpolate.interpolate_y(b_endo.swapaxes(1, 2), b_grid,
+                                      a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
 
     # === STEP 7: obtain policy functions and update derivatives of value function ===
 

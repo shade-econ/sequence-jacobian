@@ -1,5 +1,4 @@
-from ..blocks.simple_block import simple
-from ..blocks.combined_block import create_model
+from sequence_jacobian import simple, create_model
 
 
 '''Part 1: Blocks'''
