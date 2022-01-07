@@ -1,6 +1,6 @@
 """Public-facing objects."""
 
-from . import estimation, utilities
+from . import estimation, utilities, grids, interpolate, misc
 
 from .blocks.simple_block import simple
 from .blocks.het_block import het
@@ -11,11 +11,6 @@ from .classes.steady_state_dict import SteadyStateDict
 from .classes.impulse_dict import ImpulseDict
 from .classes.jacobian_dict import JacobianDict
 
-# Useful utilities for setting up HetBlocks
-from .utilities.discretize import agrid, markov_rouwenhorst, markov_tauchen
-from .utilities.interpolate import interpolate_y
-from .utilities.optimized_routines import setmin
-
 # Ensure warning uniformity across package
 import warnings
 
@@ -23,3 +18,29 @@ import warnings
 formatwarning_orig = warnings.formatwarning
 warnings.formatwarning = lambda message, category, filename, lineno, line=None: \
     formatwarning_orig(message, category, filename, lineno, line='')
+
+# deprecation of old ways for calling things
+def agrid(*args, **kwargs):
+    warnings.warn("The function 'agrid' is deprecated and will be removed in a subsequent version.\n"
+                  "Please call sj.grids.asset_grid(<FILL IN HERE AFTER WRITING FUNCTION>) instead.")
+    return utilities.discretize.agrid(*args, **kwargs)
+
+def markov_rouwenhorst(*args, **kwargs):
+    warnings.warn("Calling sj.markov_rouwenhorst() is deprecated and will be disallowed in a subsequent version.\n"
+                  "Please call sj.grids.markov_rouwenhorst() instead.")
+    return grids.markov_rouwenhorst(*args, **kwargs)
+
+def markov_tauchen(*args, **kwargs):
+    warnings.warn("Calling sj.markov_tauchen() is deprecated and will be disallowed in a subsequent version.\n"
+                  "Please call sj.grids.markov_tauchen() instead.")
+    return grids.markov_tauchen(*args, **kwargs)
+
+def interpolate_y(*args, **kwargs):
+    warnings.warn("Calling sj.interpolate_y() is deprecated and will be disallowed in a subsequent version.\n"
+                  "Please call sj.interpolate.interpolate_y() instead.")
+    return interpolate.interpolate_y(*args, **kwargs)
+
+def setmin(*args, **kwargs):
+    warnings.warn("Calling sj.setmin() is deprecated and will be disallowed in a subsequent version.\n"
+                  "Please call sj.misc.setmin() instead.")
+    misc.setmin(*args, **kwargs)
