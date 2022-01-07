@@ -91,7 +91,8 @@ try:
         display(dot)
 
 except ImportError:
-    def draw_dag(*args, **kwargs):
-        warnings.warn("\nAttempted to use `draw_dag` when the package `graphviz` has not yet been installed. \n"
-                      "DAG visualization tools, i.e. draw_dag, will not produce any figures unless this dependency has been installed. \n"
-                      "Once installed, re-load sequence-jacobian to produce DAG figures.")
+    def drawdag(*args, **kwargs):
+        warnings.warn("\nAttempted to use `drawdag` when the package `graphviz` has not yet been installed. \n"
+                      "DAG visualization tools, i.e. drawdag, will not produce any figures unless this dependency has been installed. \n"
+                      "If you want to install, try typing 'conda install -c conda-forge python-graphviz' at the terminal,\n"
+                      "or see README for more instructions. Once installed, re-load sequence-jacobian to produce DAG figures.")
