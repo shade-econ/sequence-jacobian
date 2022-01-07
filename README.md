@@ -6,13 +6,13 @@ The conceptual framework is based on our paper Adrien Auclert, Bence Bardóczy, 
 
 ## Requirements
 
-SSJ runs on Python 3. We recommend that you install the latest [Python 3 Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. We test SSJ on Python 3.8. 
+SSJ runs on Python 3.7 or newer. We recommend that you install the latest [Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. 
 
 **Optional package**: SSJ provides an interface for plotting the directed acyclic graph (DAG) representation of models. This feature requires the [Graphviz](https://www.graphviz.org/) graph drawing software and the corresponding [Python package](https://pypi.org/project/graphviz/), you have to install both of these if you'd like to use it.
 
 ## Installation 
 
-Install from [PyPI](https://pypi.org/) by running:
+Open a terminal and type
 ```
 pip install sequence-jacobian
 ```
