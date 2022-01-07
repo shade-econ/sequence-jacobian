@@ -12,7 +12,7 @@ SSJ runs on Python 3. We recommend that you install the latest [Python 3 Anacond
 
 ## Installation 
 
-Install from [PyPI](https://pypi.org/)
+Install from [PyPI](https://pypi.org/) by running:
 ```
 pip install sequence-jacobian
 ```
@@ -21,10 +21,10 @@ pip install sequence-jacobian
 
 The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. [Click here](https://github.com/shade-econ/sequence-jacobian/raw/master/notebooks/notebooks.zip) to download all notebooks as a zip.
 
-- [RBC](notebooks/rbc.ipynb)
-- [Krusell-Smith](notebooks/krusell_smith.ipynb)
-- [One-asset HANK](notebooks/hank.ipynb) 
-- [Two-asset HANK](notebooks/two_asset.ipynb)
-- [Labor search](notebooks/labor_search.ipynb) 
+- [RBC](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/rbc.ipynb)
+- [Krusell-Smith](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/krusell_smith.ipynb)
+- [One-asset HANK](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/hank.ipynb) 
+- [Two-asset HANK](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/two_asset.ipynb)
+- [Labor search](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/labor_search.ipynb) 
 
 If you need help with running Jupyter notebooks, check out the [official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/). If you'd like to learn more about Python, the [QuantEcon](https://python-programming.quantecon.org/intro.html) lectures of Tom Sargent and John Stachurski are a great place to start.

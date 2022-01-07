@@ -12,3 +12,5 @@ notebooks/.ipynb_checkpoints/
 scripts/
 wiki/
 *.egg-info/
+
+dist/
