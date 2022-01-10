@@ -20,7 +20,7 @@ try:
     from graphviz import Digraph
     from IPython.display import display
 
-    def drawdag(model, exogenous=[], unknowns=[], targets=[], leftright=False):
+    def drawdag(model, exogenous=[], unknowns=[], targets=[], leftright=False, save=False, savepath=None):
         '''
         Routine that draws DAG
         :param model: combined block to be represented as dag
@@ -87,7 +87,10 @@ try:
                 # draw edge from j to i
                 dot.edge(str(j), str(i), label=str(edgelabel_str))
 
-        dot.render('dag/' + model.name, format='png', cleanup=True)
+        if save:
+            if savepath is None:
+                savepath = 'dag/' + model.name
+            dot.render(savepath, format='png', cleanup=True)
         display(dot)
 
 except ImportError:

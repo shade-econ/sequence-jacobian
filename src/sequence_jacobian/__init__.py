@@ -10,6 +10,7 @@ from .blocks.support.simple_displacement import apply_function
 from .classes.steady_state_dict import SteadyStateDict
 from .classes.impulse_dict import ImpulseDict
 from .classes.jacobian_dict import JacobianDict
+from .utilities.drawdag import drawdag
 
 # Ensure warning uniformity across package
 import warnings
