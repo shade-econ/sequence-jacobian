@@ -8,16 +8,12 @@ The conceptual framework is based on our paper Adrien Auclert, Bence Bardóczy, 
 
 SSJ runs on Python 3.7 or newer, and requires Python's core numerical libraries (NumPy, SciPy, Numba). We recommend that you first install the latest [Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. 
 
-To install SSJ, open a terminal and type *(COMING SOON)*
+To install SSJ, open a terminal and type
 ```
 pip install sequence-jacobian
 ```
-Install from source by running 
-```
-pip install git+https://github.com/shade-econ/sequence-jacobian@master
-```
 
-*Optional package*: SSJ also provides an interface for plotting the directed acyclic graph (DAG) representation of models. This feature requires both the [Graphviz](https://www.graphviz.org/) graph drawing software and the corresponding [Python package](https://pypi.org/project/graphviz/). If you have the Anaconda Python distribution, you can try installing both by typing `conda install -c conda-forge python-graphviz` at a terminal. 
+*Optional package*: There is an optional interface for plotting the directed acyclic graph (DAG) representation of models, which requires [Graphviz for Python](https://github.com/xflr6/graphviz#graphviz). With Anaconda, you can install this by typing `conda install -c conda-forge python-graphviz`.
 
 ## Using SSJ: introductory notebooks
 
