@@ -45,3 +45,13 @@ If you'd like to learn more about Python, its numerical libraries, and Jupyter n
 If you have questions or issues specific to this package, consider posting them on our [GitHub issue tracker](https://github.com/shade-econ/sequence-jacobian/issues).
 
 For those who used our pre-1.0 toolkit, which had a number of differences relative post-1.0, you can go back to our [early toolkit page](https://github.com/shade-econ/sequence-jacobian/tree/bcca2eff6041abc77d0a777e6c64f9ac6ff44305) if needed.
+
+## Team
+
+The current development team for SSJ is
+
+- Bence Bardóczy
+- Michael Cai
+- Matthew Rognlie
+
+with contributions also from Adrien Auclert, Martin Souchier, and Ludwig Straub.
