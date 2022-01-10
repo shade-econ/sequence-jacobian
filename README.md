@@ -12,9 +12,13 @@ SSJ runs on Python 3.7 or newer. We recommend that you install the latest [Anaco
 
 ## Installation 
 
-Open a terminal and type
+Open a terminal and type (COMING SOON)
 ```
 pip install sequence-jacobian
+```
+Install from source by running 
+```
+pip install git+https://github.com/shade-econ/sequence-jacobian@master
 ```
 
 ## Resources
