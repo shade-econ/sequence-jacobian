@@ -4,15 +4,11 @@ SSJ is a toolkit for analyzing dynamic macroeconomic models with (or without) ri
 
 The conceptual framework is based on our paper Adrien Auclert, Bence Bardóczy, Matthew Rognlie, Ludwig Straub (2021), [Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models](https://doi.org/10.3982/ECTA17434), Econometrica 89(5), pp. 2375–2408 [[ungated copy]](http://mattrognlie.com/sequence_space_jacobian.pdf).
 
-## Requirements
+## Requirements and installation
 
-SSJ runs on Python 3.7 or newer. We recommend that you install the latest [Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. 
+SSJ runs on Python 3.7 or newer, and requires Python's core numerical libraries (NumPy, SciPy, Numba). We recommend that you first install the latest [Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. 
 
-**Optional package**: SSJ provides an interface for plotting the directed acyclic graph (DAG) representation of models. This feature requires the [Graphviz](https://www.graphviz.org/) graph drawing software and the corresponding [Python package](https://pypi.org/project/graphviz/), you have to install both of these if you'd like to use it.
-
-## Installation 
-
-Open a terminal and type (COMING SOON)
+To install SSJ, open a terminal and type *(COMING SOON)*
 ```
 pip install sequence-jacobian
 ```
@@ -21,9 +17,11 @@ Install from source by running
 pip install git+https://github.com/shade-econ/sequence-jacobian@master
 ```
 
-## Resources
+*Optional package*: SSJ also provides an interface for plotting the directed acyclic graph (DAG) representation of models. This feature requires both the [Graphviz](https://www.graphviz.org/) graph drawing software and the corresponding [Python package](https://pypi.org/project/graphviz/). If you have the Anaconda Python distribution, you can try installing both by typing `conda install -c conda-forge python-graphviz` at a terminal. 
 
-The `notebooks` folder contains a number of examples. We recommend working through the notebooks in this order. [Click here](https://github.com/shade-econ/sequence-jacobian/raw/master/notebooks/notebooks.zip) to download all notebooks as a zip.
+## Using SSJ: introductory notebooks
+
+To learn how to use the toolkit, it's best to work through our introductory Jupyter notebooks, which show how SSJ can be used to represent and solve various models. We recommend working through the notebooks in the order listed below. [Click here to download all notebooks as a zip](https://github.com/shade-econ/sequence-jacobian/raw/master/notebooks/notebooks.zip).
 
 - [RBC](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/rbc.ipynb)
     - represent macro models as collections of blocks (DAG)
@@ -44,4 +42,10 @@ The `notebooks` folder contains a number of examples. We recommend working throu
     - example with multiple exogenous states
     - shocks to transition matrix of exogenous states
 
-If you need help with running Jupyter notebooks, check out the [official quick start guide](https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/). If you'd like to learn more about Python, the [QuantEcon](https://python-programming.quantecon.org/intro.html) lectures of Tom Sargent and John Stachurski are a great place to start.
+## Resources
+
+If you'd like to learn more about Python, its numerical libraries, and Jupyter notebooks, the [introductory lectures at QuantEcon](https://python-programming.quantecon.org/intro.html) are a terrific place to start. More advanced tutorials for numerical Python include the [SciPy Lecture Notes](http://scipy-lectures.org/intro/language/python_language.html) and the [Python Data Science Handbook](https://jakevdp.github.io/PythonDataScienceHandbook/). There are many other good options as well: thanks to Python's popularity, nearly limitless answers are available via Google, Stack Overflow, and YouTube.
+
+If you have questions or issues specific to this package, consider posting them on our [GitHub issue tracker](https://github.com/shade-econ/sequence-jacobian/issues).
+
+For those who used our pre-1.0 toolkit, which had a number of differences relative post-1.0, you can go back to our [early toolkit page](https://github.com/shade-econ/sequence-jacobian/tree/bcca2eff6041abc77d0a777e6c64f9ac6ff44305) if needed.
