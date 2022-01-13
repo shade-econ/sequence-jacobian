@@ -10,7 +10,6 @@ SIM model with labor force participation choice
 '''
 import numpy as np
 from numba import njit
-import sequence_jacobian
 
 from sequence_jacobian.blocks.stage_block import StageBlock
 from sequence_jacobian.blocks.support.stages import Continuous1D, ExogenousMaker, LogitChoice

@@ -329,7 +329,10 @@ class StageBlock(Block):
             # (effect of perturbed distribution is added separately below)
             for k in stage.report:
                 if k in output_list:
-                    curlyY[k] = np.vdot(D, dout[k])
+                    if k in dout.keys():
+                        curlyY[k] = np.vdot(D, dout[k])
+                    else:
+                        curlyY[k] = 0
 
         curlyV = dback
 
