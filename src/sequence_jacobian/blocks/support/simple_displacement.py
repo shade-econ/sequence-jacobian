@@ -311,7 +311,7 @@ class Displace(np.ndarray):
             return self
 
     def apply(self, f, **kwargs):
-        return Displace(f(numeric_primitive(self), **kwargs), ss=f(self.ss), ss_initial=f(self.ss_initial))
+        return Displace(f(numeric_primitive(self), **kwargs), ss=f(self.ss, **kwargs), ss_initial=f(self.ss_initial, **kwargs))
 
     def __pos__(self):
         return self
