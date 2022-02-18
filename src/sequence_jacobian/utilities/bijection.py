@@ -41,7 +41,15 @@ class Bijection:
                     M[w] = v
             return Bijection(M)
         elif isinstance(x, dict):
-            return {self[k]: v for k, v in x.items()}
+            d = {}
+            for k, v in x.items():
+                if k in self.map:
+                    d[self.map[k]] = v
+                elif k not in d:
+                    # don't overwrite if we already mapped to this
+                    # effectively this prioritizes the remapped names over others
+                    d[k] = v
+            return d
         elif isinstance(x, list):
             return [self[k] for k in x]
         elif isinstance(x, set):
@@ -57,7 +65,15 @@ class Bijection:
         if isinstance(x, str):
             return self[x]
         elif isinstance(x, dict):
-            return {self[k]: v for k, v in x.items()}
+            d = {}
+            for k, v in x.items():
+                if k in self.map:
+                    d[self.map[k]] = v
+                elif k not in d:
+                    # don't overwrite if we already mapped to this
+                    # effectively this prioritizes the remapped names over others
+                    d[k] = v
+            return d
         elif isinstance(x, list):
             return [self[k] for k in x]
         elif isinstance(x, set):
