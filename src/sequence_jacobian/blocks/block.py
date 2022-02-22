@@ -145,21 +145,21 @@ class Block:
         """Evaluate a general equilibrium steady state of Block given a `calibration`
         and a set of `unknowns` and `targets` corresponding to the endogenous variables to be solved for and
         the target conditions that must hold in general equilibrium"""
-        opts = self.get_options(options, kwargs, 'solve_steady_state')
+        options = self.get_options(options, kwargs, 'solve_steady_state')
 
         ss =  SteadyStateDict(calibration)
 
-        solver = opts['solver'] if opts['solver'] else provide_solver_default(unknowns)
+        solver = options['solver'] if options['solver'] else provide_solver_default(unknowns)
 
         def residual(unknown_values, unknowns_keys=unknowns.keys(), targets=targets):
             ss.update(misc.smart_zip(unknowns_keys, unknown_values))
             ss.update(self.steady_state(ss, dissolve=dissolve, options=options, **kwargs))
             return compute_target_values(targets, ss)
 
-        _ = solve_for_unknowns(residual, unknowns, solver, opts['solver_kwargs'],
-                               tol=opts['ttol'], verbose=opts['verbose'],
-                               constrained_method=opts['constrained_method'],
-                               constrained_kwargs=opts['constrained_kwargs'])
+        _ = solve_for_unknowns(residual, unknowns, solver, options['solver_kwargs'],
+                               tol=options['ttol'], verbose=options['verbose'],
+                               constrained_method=options['constrained_method'],
+                               constrained_kwargs=options['constrained_kwargs'])
 
         return ss
 
@@ -187,25 +187,25 @@ class Block:
             H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs)
             H_U_factored = FactoredJacobianDict(H_U, T)
 
-        opts = self.get_options(options, kwargs, 'solve_impulse_nonlinear')
+        options = self.get_options(options, kwargs, 'solve_impulse_nonlinear')
 
         # Newton's method
         U = ImpulseDict({k: np.zeros(T) for k in unknowns})
-        if opts['verbose']:
+        if options['verbose']:
             print(f'Solving {self.name} for {unknowns} to hit {targets}')
-        for it in range(opts['maxit']):
+        for it in range(options['maxit']):
             results = self.impulse_nonlinear(ss, inputs | U, actual_outputs | targets, internals, Js, options, ss_initial, **kwargs)
             errors = {k: np.max(np.abs(results[k])) for k in targets}
-            if opts['verbose']:
+            if options['verbose']:
                 print(f'On iteration {it}')
                 for k in errors:
                     print(f'   max error for {k} is {errors[k]:.2E}')
-            if all(v < opts['tol'] for v in errors.values()):
+            if all(v < options['tol'] for v in errors.values()):
                 break
             else:
                 U += H_U_factored.apply(results)
         else:
-            raise ValueError(f'No convergence after {opts["maxit"]} backward iterations!')
+            raise ValueError(f'No convergence after {options["maxit"]} backward iterations!')
 
         return (inputs | U)[inputs_as_outputs] | results
 
