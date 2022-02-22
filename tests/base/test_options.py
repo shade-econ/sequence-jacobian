@@ -45,6 +45,14 @@ def test_steady_state_solution(krusell_smith_dag):
     unknowns_ss = {'beta': (0.98 / 1.01, 0.999 / 1.01)}
     targets_ss = {'asset_mkt': 0.}
 
+    
+    # less accurate solution
     ss2 = dag_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, solver="brentq",
                                     ttol=1E-2, ctol=1E-2)
+    
     assert not np.isclose(ss['asset_mkt'], ss2['asset_mkt'])
+
+    # different solution method (Newton needs other inputs)
+    with pytest.raises(ValueError):
+        ss3 = dag_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, 
+                                        solver="newton")
