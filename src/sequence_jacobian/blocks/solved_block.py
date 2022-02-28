@@ -63,7 +63,7 @@ class SolvedBlock(Block, Parent):
             unknowns = {k: v for k, v in calibration.items() if k in self.unknowns}
         else:
             unknowns = self.unknowns
-            if 'solver' not in kwargs:
+            if not kwargs['solver']:
                 # TODO: replace this with default option
                 kwargs['solver'] = self.solver
 
