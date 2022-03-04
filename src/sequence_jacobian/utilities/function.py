@@ -40,7 +40,11 @@ def output_list(f):
     Important to write functions in this way when they will be scanned by output_list, for
     either SimpleBlock or HetBlock.
     """
-    return OrderedSet(re.findall('return (.*?)\n', inspect.getsource(f))[-1].replace(' ', '').split(','))
+    source = inspect.getsource(f)
+    source_no_comments = re.sub(r'(?m)^ *#.*\n?', '', source)
+    return_statements = re.findall('return (.*?)\n', source_no_comments)
+
+    return OrderedSet(return_statements[0].replace(' ', '').split(','))
 
 
 def metadata(f):
