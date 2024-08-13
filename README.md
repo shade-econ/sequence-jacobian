@@ -1,6 +1,6 @@
 # Sequence-Space Jacobian (SSJ)
 
-[![CI - Test](https://github.com/shade-econ/sequence-jacobian/.github/workflows/main.yml/badge.svg)](https://github.com/shade-econ/sequence-jacobian/.github/workflows/main.yml)
+[![CI - Test](https://github.com/shade-econ/sequence-jacobian/actions/main.yml/badge.svg)](https://github.com/shade-econ/sequence-jacobian/actions/workflows/main.yml)
 
 SSJ is a toolkit for analyzing dynamic macroeconomic models with (or without) rich microeconomic heterogeneity.
 
