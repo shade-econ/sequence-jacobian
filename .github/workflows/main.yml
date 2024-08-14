@@ -26,7 +26,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install pytest setuptools scipy numba numpy wheel
+        python -m pip install pytest setuptools wheel
         python -m pip install .
     - name: Test with pytest
       run: |
