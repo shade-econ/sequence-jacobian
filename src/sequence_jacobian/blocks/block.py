@@ -4,6 +4,7 @@ import numpy as np
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 from copy import deepcopy
+import warnings
 
 from .support.steady_state import provide_solver_default, solve_for_unknowns, compute_target_values
 from .support.parent import Parent
@@ -122,8 +123,13 @@ class Block:
         outputs, _ = self.process_outputs(ss, {}, self.make_ordered_set(outputs))
 
         # if you have a J for this block that has everything you need, use it
-        if (self.name in Js) and isinstance(Js[self.name], JacobianDict) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
-            return Js[self.name][outputs, inputs]
+        if (self.name in Js) and isinstance(Js[self.name], JacobianDict):
+            if (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
+                return Js[self.name][outputs, inputs]
+            else:
+                warnings.warn(
+                    "Jacobians are supplied but not used for %s" % self.name
+                )
         
         # if it's a leaf, call Jacobian method, don't supply Js
         if not isinstance(self, Parent):
@@ -362,3 +368,21 @@ class Block:
                 return self.internals
         else:
             return []
+
+    def simulate(self, ss: SteadyStateDict, shocks: Dict[str, dict], targets,
+                 unknowns, outputs, T_sim: int, T: Optional[int] = None,
+                 Js: Dict[str, JacobianDict] = {}) -> dict:
+        """
+        Simulate unit impulses using a dictionary containing the inputs and the
+        shock parameters in ARMA form
+        """
+        G = self.solve_jacobian(ss, unknowns, targets, shocks.keys(), outputs, T, Js=Js)
+
+        impulses = {}
+        for i in shocks.keys():
+            own_shock = misc.arma_irf(
+                shocks[i]["phi"], shocks[i]["theta"], shocks[i]["sigma"], T_sim
+            )
+            impulses[i] = G @ {i: own_shock}
+        
+        return impulses
