@@ -182,33 +182,3 @@ def nonconcave(Va, ilower, iupper):
 
     ilower[:] = ilower_
     iupper[:] = iupper_
-
-@njit
-def arma_irf(phi, theta, sigma, T):
-    """
-    Generates shocks for a given ARMA(p,q) process
-    """
-    x = np.empty((T,))
-    
-    n_ar = phi.size
-    n_ma = theta.size
-    
-    for t in range(T):
-        if t == 0:
-            x[t] = sigma
-        else:
-            ar_sum = 0
-            for i in range(min(n_ar, t)):
-                ar_sum += phi[i]*x[t-1-i]
-            ma_term = 0
-            if 0 < t <= n_ma:
-                ma_term = theta[t-1]
-            x[t] = ar_sum - ma_term
-
-    return x
-
-def arma_shock(phi, theta, sigma=1.0):
-    return {"phi": phi, "theta": theta, "sigma": sigma}
-
-def ar1_shock(rho, sigma=1.0):
-    return arma_shock(np.array([rho]), np.array([]), sigma)

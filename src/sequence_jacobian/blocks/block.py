@@ -13,6 +13,7 @@ from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
+from ..utilities.shocks import Shock
 
 Array = Any
 
@@ -369,20 +370,23 @@ class Block:
         else:
             return []
 
-    def simulate(self, ss: SteadyStateDict, shocks: Dict[str, dict], targets,
-                 unknowns, outputs, T_sim: int, T: Optional[int] = None,
-                 Js: Dict[str, JacobianDict] = {}) -> dict:
+    def simulate(self, ss: SteadyStateDict, shocks: Dict[str, Shock], targets,
+                 unknowns, outputs, T: Optional[int] = 300,
+                 Js: Optional[Dict[str, JacobianDict]] = {}) -> dict:
         """
         Simulate unit impulses using a dictionary containing the inputs and the
-        shock parameters in ARMA form
+        shock parameters
         """
-        G = self.solve_jacobian(ss, unknowns, targets, shocks.keys(), outputs, T, Js=Js)
-
-        impulses = {}
-        for i in shocks.keys():
-            own_shock = misc.arma_irf(
-                shocks[i]["phi"], shocks[i]["theta"], shocks[i]["sigma"], T_sim
-            )
-            impulses[i] = G @ {i: own_shock}
         
-        return impulses
+        # this should cache already calculated Jacobians
+        G = self.solve_jacobian(
+            ss, unknowns, targets, shocks.keys(), outputs, T, Js=Js
+        )
+
+        impulse_responses = {}
+        for i in shocks.keys():
+            # not sure if I need to call solve_impulse here or what
+            own_shock = shocks[i].simulate_impulse(T)
+            impulse_responses[i] = G @ {i: own_shock}
+        
+        return impulse_responses
