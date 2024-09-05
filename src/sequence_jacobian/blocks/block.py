@@ -13,7 +13,7 @@ from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
-from ..utilities.shocks import Shock
+from ..utilities.shocks import ShockDict
 
 Array = Any
 
@@ -370,7 +370,7 @@ class Block:
         else:
             return []
 
-    def simulate(self, ss: SteadyStateDict, shocks: Dict[str, Shock], targets,
+    def simulate(self, ss: SteadyStateDict, shocks: ShockDict, targets,
                  unknowns, outputs, T: Optional[int] = 300,
                  Js: Optional[Dict[str, JacobianDict]] = {}) -> dict:
         """
@@ -383,10 +383,6 @@ class Block:
             ss, unknowns, targets, shocks.keys(), outputs, T, Js=Js
         )
 
-        impulse_responses = {}
-        for i in shocks.keys():
-            # not sure if I need to call solve_impulse here or what
-            own_shock = shocks[i].simulate_impulse(T)
-            impulse_responses[i] = G @ {i: own_shock}
-        
-        return impulse_responses
+        # not sure how to use solve_impulse_linear here
+        impulses = shocks.generate_impulses(T)
+        return {G @ {i: impulses[i]} for i in shocks.keys()}
