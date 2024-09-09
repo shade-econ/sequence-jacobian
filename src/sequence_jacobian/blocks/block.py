@@ -369,20 +369,3 @@ class Block:
                 return self.internals
         else:
             return []
-
-    def simulate(self, ss: SteadyStateDict, shocks: ShockDict, targets,
-                 unknowns, outputs, T: Optional[int] = 300,
-                 Js: Optional[Dict[str, JacobianDict]] = {}) -> dict:
-        """
-        Simulate unit impulses using a dictionary containing the inputs and the
-        shock parameters
-        """
-        
-        # this should cache already calculated Jacobians
-        G = self.solve_jacobian(
-            ss, unknowns, targets, shocks.keys(), outputs, T, Js=Js
-        )
-
-        # not sure how to use solve_impulse_linear here
-        impulses = shocks.generate_impulses(T)
-        return {G @ {i: impulses[i]} for i in shocks.keys()}
