@@ -1,5 +1,7 @@
 # Sequence-Space Jacobian (SSJ)
 
+[![CI](https://github.com/shade-econ/sequence-jacobian/actions/workflows/main.yml/badge.svg)](https://github.com/shade-econ/sequence-jacobian/actions/workflows/main.yml)
+
 SSJ is a toolkit for analyzing dynamic macroeconomic models with (or without) rich microeconomic heterogeneity.
 
 The conceptual framework is based on our paper Adrien Auclert, Bence Bardóczy, Matthew Rognlie, Ludwig Straub (2021), [Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models](https://doi.org/10.3982/ECTA17434), Econometrica 89(5), pp. 2375–2408 [[ungated copy]](http://mattrognlie.com/sequence_space_jacobian.pdf).
