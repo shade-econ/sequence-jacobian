@@ -110,6 +110,7 @@ class ShockDict(ResultDict):
                 raise ValueError('ShockDicts are initialized with a `dict` of top-level shocks.')
             super().__init__(data)
 
+        # this is not a great solution either...
         self.parameters = {k: v.parameters for k,v in self.toplevel.items()}
 
     def generate_impulses(self, T: int):
@@ -123,6 +124,7 @@ class ShockDict(ResultDict):
         return impulses
     
     def reparameterize(self, parameters: dict[str: dict]):
+        # TODO: this does not change the parameters attr at the "top level"
         for k, v in self.toplevel.items():
             v.reparameterize(parameters[k])
             v.parameters = parameters[k]

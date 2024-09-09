@@ -12,6 +12,9 @@ from .classes.impulse_dict import ImpulseDict
 from .classes.jacobian_dict import JacobianDict
 from .utilities.drawdag import drawdag
 
+from .utilities.distributions import *
+from .utilities.shocks import AR, ARMA, MA, ShockDict
+
 # Ensure warning uniformity across package
 import warnings
 
