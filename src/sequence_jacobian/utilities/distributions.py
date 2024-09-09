@@ -23,6 +23,9 @@ class Distribution:
     
     def rand(self, size=None):
         return NotImplementedError
+    
+    def in_support(self, x):
+        return (x < self.support[0]) & (x > self.support[1])
 
 
 ## UNIVARIATE DISTRIBUTIONS ###################################################
@@ -33,6 +36,8 @@ class Normal(Distribution):
     Normal distribution class, parameterized by mean and squared deviation
     """
     def __init__(self, mu, sigma):
+        self.support = (-np.inf, np.inf)
+
         self.mu = mu
         self.sigma = sigma
 
@@ -56,6 +61,8 @@ class Gamma(Distribution):
     Gamma distribution class, parameterized by shape and scale
     """
     def __init__(self, alpha, theta):
+        self.support = (0.0, np.inf)
+
         self.alpha = alpha
         self.theta = theta
 
@@ -72,6 +79,30 @@ class Gamma(Distribution):
             scale = self.theta,
             size = size
         )
+    
+class InvGamma(Distribution):
+    """
+    Inverse Gamma distribution class, parameterized by shape and scale
+    """
+    def __init__(self, alpha, theta):
+        self.support = (0.0, np.inf)
+
+        self.alpha = alpha
+        self.theta = theta
+
+    def logpdf(self, x):
+        return stats.invgamma.logpdf(
+            x,
+            self.alpha,
+            scale = self.theta
+        )
+
+    def rand(self, size=None):
+        return random.invgamma(
+            self.alpha,
+            scale = self.theta,
+            size = size
+        )
 
     
 class Uniform(Distribution):
@@ -79,6 +110,8 @@ class Uniform(Distribution):
     Uniform distribution, parameterized by an upper and lower bound
     """
     def __init__(self, lb=0.0, ub=1.0):
+        self.support = (lb, ub)
+
         self.lb = lb
         self.ub = ub
 
@@ -105,6 +138,8 @@ class Product(Distribution):
     Product of univariate distributions
     """
     def __init__(self, *dists):
+        self.support = [dist.support for dist in dists]
+
         self.dists = dists
         self.dim = len(dists)
 
@@ -117,6 +152,11 @@ class Product(Distribution):
         return np.stack(
             [dist.rand(size=size) for dist in self.dists],
             axis = 1
+        )
+    
+    def in_support(self, x):
+        return all(
+            dist.in_support(x[..., i]) for i, dist in enumerate(self.dists)
         )
 
 
@@ -136,10 +176,9 @@ class Conditional(Distribution):
     """
     Conditional distribution based on Nicolas Chopin's python module
     """
-    def __init__(self, dist, dim=1, dtype="float64"):
-        self.dim = dim
+    def __init__(self, dist, dim=1):
         self.dist = dist
-        self.dtype = dtype
+        self.dim = dim
 
     def __call__(self, x):
         return self.dist(x)
@@ -158,7 +197,7 @@ class Prior(Distribution):
             )
         else:
             raise TypeError("must be recast as a dictionary")
-
+    
     def _rand(self):
         out = {}
         for param, dist in self.dists.items():
@@ -180,3 +219,11 @@ class Prior(Distribution):
             logprob += cond_dist.logpdf(x[param])
 
         return logprob
+    
+    def in_support(self, x):
+        out = []
+        for param, dist in self.dists.items():
+            cond_dist = dist(x) if callable(dist) else dist
+            out.append(cond_dist.in_support(x[param]))
+
+        return all(out)

@@ -1,6 +1,5 @@
 from numba import njit
 import numpy as np
-# import numpy.typing as npt
 
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
@@ -9,7 +8,7 @@ from ..classes.result_dict import ResultDict
 
 class Shock:
     def simulate_impulse(self, T: int):
-        return NotImplementedError
+        return NotImplementedError("Only ARMA shocks are supported.")
 
 
 class ARMA(Shock):
@@ -19,7 +18,7 @@ class ARMA(Shock):
 
     phi(p) * y = theta(q) * eps    where eps ~ N(0, sigma)
     """
-    def __init__(self, phi: list[Real], theta: list[Real], sigma: Optional[Real] = 1.0):
+    def __init__(self, phi: np.ndarray[float], theta: np.ndarray[float], sigma: Optional[float] = 1):
         self.phi = phi
         self.theta = theta
         self.sigma = sigma
@@ -27,6 +26,8 @@ class ARMA(Shock):
         # get dimensions
         self.p = phi.size
         self.q = theta.size
+
+        self.parameters = {"phi": phi, "theta": theta, "sigma": sigma}
 
     def simulate_impulse(self, T: int):
         return _simulate_impulse(self.phi, self.theta, self.sigma, T)
@@ -49,7 +50,8 @@ class AR(ARMA):
     phi(p) * y = eps    where eps ~ N(0, sigma)
     """
     def __init__(self, phi, sigma = 1.0):
-        return super().__init__(phi, np.array([]), sigma)
+        super().__init__(phi, np.array([]), sigma)
+        self.parameters = {"phi": phi, "sigma": sigma}
 
 
 class MA(ARMA):
@@ -60,7 +62,8 @@ class MA(ARMA):
     y = theta(q) * eps    where eps ~ N(0, sigma)
     """
     def __init__(self, theta, sigma = 1.0):
-        return super().__init__(np.array([]), theta, sigma)
+        super().__init__(np.array([]), theta, sigma)
+        self.parameters = {"theta": theta, "sigma": sigma}
 
 
 @njit
@@ -70,18 +73,18 @@ def _simulate_impulse(phi, theta, sigma, T: int):
     """
     x = np.empty((T,))
 
-    n_ar = phi.size
-    n_ma = theta.size
+    p = phi.size
+    q = theta.size
     
     for t in range(T):
         if t == 0:
             x[t] = sigma
         else:
             ar_sum = 0
-            for i in range(min(n_ar, t)):
+            for i in range(min(p, t)):
                 ar_sum += phi[i]*x[t-1-i]
             ma_term = 0
-            if 0 < t <= n_ma:
+            if 0 < t <= q:
                 ma_term = theta[t-1]
             x[t] = ar_sum - ma_term
 
@@ -90,6 +93,8 @@ def _simulate_impulse(phi, theta, sigma, T: int):
 # ensures that parameters are of the proper dimension
 def _alloc_ndarray(poly):
     if isinstance(poly, Real):
+        return np.array([poly])
+    elif isinstance(poly, list):
         return np.array(poly)
     else:
         return poly
@@ -105,17 +110,19 @@ class ShockDict(ResultDict):
                 raise ValueError('ShockDicts are initialized with a `dict` of top-level shocks.')
             super().__init__(data)
 
+        self.parameters = {k: v.parameters for k,v in self.toplevel.items()}
+
     def generate_impulses(self, T: int):
         impulses = {}
         for k, v in self.items():
             if isinstance(v, Shock):
                 impulses[k] = v.simulate_impulse(T)
             else:
-                raise('Multi-scenario shocks not yet supported.')
+                raise NotImplementedError('Multi-scenario shocks not yet supported.')
         
         return impulses
     
     def reparameterize(self, parameters: dict[str: dict]):
-        return ShockDict({
-            k: v.reparameterize(parameters[k]) for k, v in self.toplevel.items()
-        })
+        for k, v in self.toplevel.items():
+            v.reparameterize(parameters[k])
+            v.parameters = parameters[k]
