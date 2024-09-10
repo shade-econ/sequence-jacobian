@@ -1,4 +1,4 @@
-from numba import njit
+from numba import njit, prange
 import numpy as np
 
 from numbers import Real
@@ -66,7 +66,7 @@ class MA(ARMA):
         self.parameters = {"theta": theta, "sigma": sigma}
 
 
-@njit
+# @njit
 def _simulate_impulse(phi, theta, sigma, T: int):
     """
     Generates an impulse path for a given ARMA(p,q) process
@@ -128,3 +128,40 @@ class ShockDict(ResultDict):
         for k, v in self.toplevel.items():
             v.reparameterize(parameters[k])
             v.parameters = parameters[k]
+
+## DATA GENERATING PROCESS TOOLS ##############################################
+
+def simulate(impulses, outputs, T_sim):
+    """
+    impulses: list of ImpulseDicts, each an impulse to independent unit normal shock
+    outputs: list of outputs we want in simulation
+    T_sim: length of simulation
+
+    simulation: dict mapping each output to length-T_sim simulated series
+    """
+
+    simulation = {}
+    epsilons = [np.random.randn(T_sim+impulses[0].T-1) for _ in impulses]
+    for o in outputs:
+        simulation[o] = sum(
+            simul_shock(imp[o], eps) for imp, eps in zip(impulses, epsilons)
+        )
+        
+    return simulation
+
+
+@njit(parallel=True)
+def simul_shock(impulse, epsilons):
+    """
+    Take in any impulse response dX to epsilon shock, plus path of epsilons, and simulate
+    """
+
+    T = len(impulse)
+    T_eps = len(epsilons)
+    impulse_tilde = np.empty(T_eps - T + 1) 
+    
+    impulse_flipped = impulse[::-1].copy()
+    for t in prange(T_eps - T + 1):
+        impulse_tilde[t] = np.vdot(impulse_flipped, epsilons[t:t + T])
+
+    return impulse_tilde
