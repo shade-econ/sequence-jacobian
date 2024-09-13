@@ -53,6 +53,12 @@ class AR(ARMA):
         super().__init__(phi, np.array([]), sigma)
         self.parameters = {"phi": phi, "sigma": sigma}
 
+    def simulate_impulse(self, T: int):
+        if self.p == 1:
+            return self.sigma * self.phi[0] ** np.arange(T)
+        else:
+            return super().simulate_impulse(T)
+
 
 class MA(ARMA):
     """

@@ -3,6 +3,7 @@
 import numpy as np
 import scipy.linalg as linalg
 from numba import njit
+import warnings
 
 '''Part 1: compute covariances at all lags and log likelihood'''
 
@@ -84,3 +85,60 @@ def build_full_covariance_matrix(Sigma, sigma_measurement, Tobs):
                     # want exactly symmetric
                     V[t1, :, t2, :] = (np.diag(sigma_measurement**2) + (Sigma[0, :, :]+Sigma[0, :, :].T)/2)
     return V.reshape((Tobs*O, Tobs*O))
+
+
+try:
+    import pytensor
+    import pytensor.tensor as pt
+    from pytensor.graph import Apply, Op
+
+    # TODO: add dictionary handling into likelihood call
+    # TODO: improve shock parameterization
+    class DensityModel(Op):
+        """
+        Operation class for estimating a DSGE model in PyMC; specifically given a
+        model object, its steady state, some data, and a likelihood function which
+        can be customized to recompute a Jacobian only when necessary.
+        """
+        def __init__(
+                self, data, steady_state, model, likelihood_func, unknowns, targets, exogenous, **kwargs
+            ):
+            # save important model info
+            self.steady_state = steady_state
+            self.model = model
+            self.logpdf = likelihood_func
+
+            # check that all series are of equal length
+            T_data = [len(v) for v in data.values()]
+            assert all(x == T_data[0] for x in T_data)
+
+            # munge the data into a numpy array
+            self.data = np.empty((T_data[0], len(data.keys())))
+            for no, o in enumerate(data.keys()):
+                self.data[:, no] = data[o]
+
+            # record the initial Jacobian
+            outputs = list(data.keys())
+            self.jacobian = model.solve_jacobian(
+                steady_state, unknowns, targets, exogenous, outputs, **kwargs
+            )
+
+        def make_node(self, *args) -> Apply:
+            inputs = [pt.as_tensor(arg) for arg in args]
+            outputs = [pt.dscalar()]
+
+            return Apply(self, inputs, outputs)
+        
+        def perform(self, node: Apply, inputs: list[np.ndarray], outputs: list[list[None]]) -> None:
+            logposterior = self.logpdf(
+                *inputs, self.data, self.steady_state, self.model, self.jacobian
+            )
+
+            outputs[0][0] = np.asarray(logposterior)
+
+except ImportError:
+    class DensityModel:
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                "Attempted to call DensityModel when PyMC is not yet installed"
+            )

@@ -14,6 +14,7 @@ from .utilities.drawdag import drawdag
 
 from .utilities.distributions import *
 from .utilities.shocks import AR, ARMA, MA, ShockDict
+from .estimation import DensityModel
 
 # Ensure warning uniformity across package
 import warnings
