@@ -120,6 +120,7 @@ class IgnoreFloat(float):
         return self
 
     def apply(self, f, **kwargs):
+        kwargs.update({arg: kwargs[arg].f_value for arg in kwargs if isinstance(kwargs[arg], AccumulatedDerivative)})
         return ignore(f(numeric_primitive(self), **kwargs))
 
     def __pos__(self):
