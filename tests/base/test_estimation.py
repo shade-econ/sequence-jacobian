@@ -4,7 +4,16 @@ import pytest
 import numpy as np
 
 from sequence_jacobian import estimation
+import sequence_jacobian as sj
 
+# define the shock for the second test case
+def productivity_shocks(params):
+    return sj.ShockDict({
+        "Z": [
+            sj.AR(np.array([params["phi_Z"]]), params["sigma_Z1"]),
+            sj.News(scale=params["sigma_Z2"])
+        ]
+    })
 
 # See test_determinacy.py for the to-do describing this suppression
 @pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
@@ -42,5 +51,28 @@ def test_krusell_smith_estimation(krusell_smith_dag):
     sigma_measurement = np.full(4, 0.05)
 
     # calculate log-likelihood
-    ll = estimation.log_likelihood(Y, Sigma, sigma_measurement)
+    ll = estimation.gaussian_log_likelihood(Y, Sigma, sigma_measurement)
+    assert np.isclose(ll, -59921.410111251025)
+
+@pytest.mark.filterwarnings("ignore:.*cannot be safely interpreted as an integer.*:DeprecationWarning")
+def test_ks_estimation(krusell_smith_dag):
+    _, ss, ks_model, unknowns, targets, exogenous = krusell_smith_dag
+    np.random.seed(41234)
+
+    rho = 0.9
+    sigma_persist = 0.1
+    sigma_trans = 0.2
+
+    outputs = ["Z", "Y", "C", "K"]
+    Y = np.random.randn(100, 4)
+    data_simul = {outputs[i]: Y.T[i] for i in range(4)}
+
+    # construct a density model
+    est_model = estimation.DensityModel(
+        data_simul, ss, ks_model, productivity_shocks,
+        unknowns, targets, exogenous, T=50, sigmas=np.full(4, 0.05)
+    )
+
+    true_vals = {"phi_Z": rho, "sigma_Z1": sigma_persist, "sigma_Z2": sigma_trans}
+    ll = est_model.log_likelihood(true_vals)
     assert np.isclose(ll, -59921.410111251025)

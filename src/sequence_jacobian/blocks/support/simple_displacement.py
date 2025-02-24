@@ -519,10 +519,7 @@ class AccumulatedDerivative:
         return AccumulatedDerivative(elements=dict(zip(self._keys, -self._fp_values)), f_value=-self.f_value)
 
     def __add__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
-                                         f_value=self.f_value + numeric_primitive(other))
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             elements = self.elements.copy()
             for im, x in other.elements.items():
                 if im in elements:
@@ -534,14 +531,14 @@ class AccumulatedDerivative:
                     elements[im] = x
 
             return AccumulatedDerivative(elements=elements, f_value=self.f_value + other.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
+                                         f_value=self.f_value + numeric_primitive(other))
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __radd__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
-                                         f_value=numeric_primitive(other) + self.f_value)
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             elements = other.elements.copy()
             for im, x in self.elements.items():
                 if im in elements:
@@ -553,14 +550,14 @@ class AccumulatedDerivative:
                     elements[im] = x
 
             return AccumulatedDerivative(elements=elements, f_value=other.f_value + self.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
+                                         f_value=numeric_primitive(other) + self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __sub__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
-                                         f_value=self.f_value - numeric_primitive(other))
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             elements = self.elements.copy()
             for im, x in other.elements.items():
                 if im in elements:
@@ -572,14 +569,14 @@ class AccumulatedDerivative:
                     elements[im] = -x
 
             return AccumulatedDerivative(elements=elements, f_value=self.f_value - other.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values)),
+                                         f_value=self.f_value - numeric_primitive(other))
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rsub__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, -self._fp_values)),
-                                         f_value=numeric_primitive(other) - self.f_value)
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             elements = other.elements.copy()
             for im, x in self.elements.items():
                 if im in elements:
@@ -591,72 +588,75 @@ class AccumulatedDerivative:
                     elements[im] = -x
 
             return AccumulatedDerivative(elements=elements, f_value=other.f_value - self.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, -self._fp_values)),
+                                         f_value=numeric_primitive(other) - self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __mul__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values * numeric_primitive(other))),
-                                         f_value=self.f_value * numeric_primitive(other))
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             return AccumulatedDerivative(elements=(self * other.f_value + other * self.f_value).elements,
                                          f_value=self.f_value * other.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values * numeric_primitive(other))),
+                                         f_value=self.f_value * numeric_primitive(other))
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rmul__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, numeric_primitive(other) * self._fp_values)),
-                                         f_value=numeric_primitive(other) * self.f_value)
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             return AccumulatedDerivative(elements=(other * self.f_value + self * other.f_value).elements,
                                          f_value=other.f_value * self.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, numeric_primitive(other) * self._fp_values)),
+                                         f_value=numeric_primitive(other) * self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __truediv__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values / numeric_primitive(other))),
-                                         f_value=self.f_value / numeric_primitive(other))
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             return AccumulatedDerivative(elements=((other.f_value * self - self.f_value * other) /
                                                    (other.f_value ** 2)).elements,
                                          f_value=self.f_value / other.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, self._fp_values / numeric_primitive(other))),
+                                         f_value=self.f_value / numeric_primitive(other))
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rtruediv__(self, other):
-        if np.isscalar(other):
+        if isinstance(other, AccumulatedDerivative):
+            return AccumulatedDerivative(elements=((self.f_value * other - other.f_value * self) /
+                                                   (self.f_value ** 2)).elements, f_value=other.f_value / self.f_value)
+        elif np.ndim(other) == 0:
             return AccumulatedDerivative(elements=dict(zip(self._keys, -numeric_primitive(other) /
                                                            self.f_value ** 2 * self._fp_values)),
                                          f_value=numeric_primitive(other) / self.f_value)
-        elif isinstance(other, AccumulatedDerivative):
-            return AccumulatedDerivative(elements=((self.f_value * other - other.f_value * self) /
-                                                   (self.f_value ** 2)).elements, f_value=other.f_value / self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __pow__(self, power, modulo=None):
-        if np.isscalar(power):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, numeric_primitive(power) * self.f_value
-                                                           ** numeric_primitive(power - 1) * self._fp_values)),
-                                         f_value=self.f_value ** numeric_primitive(power))
-        elif isinstance(power, AccumulatedDerivative):
+        if isinstance(power, AccumulatedDerivative):
             return AccumulatedDerivative(elements=(self.f_value ** (power.f_value - 1) * (
                     power.f_value * self + power * self.f_value * np.log(self.f_value))).elements,
                                          f_value=self.f_value ** power.f_value)
+        elif np.ndim(power) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, numeric_primitive(power) * self.f_value
+                                                           ** numeric_primitive(power - 1) * self._fp_values)),
+                                         f_value=self.f_value ** numeric_primitive(power))
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 
     def __rpow__(self, other):
-        if np.isscalar(other):
-            return AccumulatedDerivative(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other) **
-                                                           self.f_value * self._fp_values)),
-                                         f_value=numeric_primitive(other) ** self.f_value)
-        elif isinstance(other, AccumulatedDerivative):
+        if isinstance(other, AccumulatedDerivative):
             return AccumulatedDerivative(elements=(other.f_value ** (self.f_value - 1) * (
                     self.f_value * other + self * other.f_value * np.log(other.f_value))).elements,
                                          f_value=other.f_value ** self.f_value)
+        elif np.ndim(other) == 0:
+            return AccumulatedDerivative(elements=dict(zip(self._keys, np.log(other) * numeric_primitive(other) **
+                                                           self.f_value * self._fp_values)),
+                                         f_value=numeric_primitive(other) ** self.f_value)
         else:
             raise NotImplementedError("This operation is not yet supported for non-scalar arguments")
 

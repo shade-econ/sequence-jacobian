@@ -4,6 +4,7 @@ import numpy as np
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
 from copy import deepcopy
+import warnings
 
 from .support.steady_state import provide_solver_default, solve_for_unknowns, compute_target_values
 from .support.parent import Parent
@@ -12,6 +13,7 @@ from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
+from ..utilities.shocks import ShockDict
 
 Array = Any
 
@@ -122,8 +124,13 @@ class Block:
         outputs, _ = self.process_outputs(ss, {}, self.make_ordered_set(outputs))
 
         # if you have a J for this block that has everything you need, use it
-        if (self.name in Js) and isinstance(Js[self.name], JacobianDict) and (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
-            return Js[self.name][outputs, inputs]
+        if (self.name in Js) and isinstance(Js[self.name], JacobianDict):
+            if (inputs <= Js[self.name].inputs) and (outputs <= Js[self.name].outputs):
+                return Js[self.name][outputs, inputs]
+            else:
+                warnings.warn(
+                    "Jacobians are supplied but not used for %s" % self.name
+                )
         
         # if it's a leaf, call Jacobian method, don't supply Js
         if not isinstance(self, Parent):
